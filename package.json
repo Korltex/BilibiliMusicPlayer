@@ -1,0 +1,34 @@
+{
+  "name": "bilibili-music-player",
+  "private": true,
+  "version": "0.1.0",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "test:e2e:real": "playwright test --config playwright.real.config.ts",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@preact/signals": "^2.10.0",
+    "lucide-preact": "^1.27.0",
+    "preact": "^10.29.7"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.0",
+    "@preact/preset-vite": "^2.10.6",
+    "@types/node": "^26.1.1",
+    "prettier": "^3.9.6",
+    "typescript": "^7.0.2",
+    "vite": "^8.1.5",
+    "vite-plugin-monkey": "^8.1.0",
+    "vitest": "^4.1.10"
+  }
+}
