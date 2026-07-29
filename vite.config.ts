@@ -24,7 +24,8 @@ export default defineConfig({
       userscript: {
         name: "Bilibili 音乐播放器",
         namespace: "bilibili-music-player",
-        description: "在 Bilibili 视频页面中控制原生播放器并管理音乐歌单",
+        description:
+          "在 Bilibili 视频页面中控制原生播放器、管理音乐歌单并可选纯音频模式",
         author: "Korltex",
         license: "MIT",
         match: ["https://www.bilibili.com/video/*"],

@@ -122,7 +122,7 @@ test("mounts, controls media, and saves a track", async ({
   await page.getByRole("button", { name: "将当前视频添加到歌单" }).click();
   await page.getByLabel("标题").fill("测试片段");
   await page.getByLabel("开始时间（秒）").fill("10");
-  await page.getByLabel("结束时间（秒，可选）").fill("90");
+  await page.getByLabel("结束时间（秒）").fill("90");
   await page.getByRole("button", { name: "保存", exact: true }).click();
 
   await expect(page.getByText("测试片段", { exact: true })).toBeVisible();

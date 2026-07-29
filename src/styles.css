@@ -163,6 +163,20 @@ button {
   color: var(--accent);
 }
 
+.audio-mode-button.detecting {
+  color: var(--accent);
+}
+
+.audio-mode-button.active {
+  color: var(--cyan);
+  background: rgb(54 197 183 / 12%);
+}
+
+.audio-mode-button.fallback {
+  color: var(--danger);
+  background: rgb(255 107 107 / 10%);
+}
+
 .danger:hover:not(:disabled) {
   color: var(--danger);
 }
@@ -287,6 +301,26 @@ button {
   border-color: var(--accent);
   color: var(--text);
   cursor: pointer;
+}
+
+.audio-only-status {
+  display: flex;
+  align-items: center;
+  cursor: default;
+}
+
+.audio-only-status.detecting {
+  border-color: var(--accent);
+}
+
+.audio-only-status.active {
+  border-color: var(--cyan);
+  color: var(--text);
+}
+
+.audio-only-status.fallback {
+  border-color: var(--danger);
+  color: var(--text);
 }
 
 .playlist-toolbar {

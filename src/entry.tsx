@@ -2,11 +2,14 @@ import { render } from "preact";
 import style from "./styles.css?style";
 import { App } from "./app/App";
 import { appStore } from "./app/store";
+import { audioOnlyController } from "./bili/audio-only-controller";
 import { PlayerEngine } from "./playback/player-engine";
 
 const HOST_ID = "bilibili-music-player-host";
 const BILIBILI_PLAYER_SELECTOR = ".bpx-player-container";
 const BILIBILI_WEB_FULLSCREEN_SELECTOR = `${BILIBILI_PLAYER_SELECTOR}[data-screen="web"]`;
+
+audioOnlyController.start();
 
 function containsBilibiliPlayer(node: Node): boolean {
   return (
@@ -65,7 +68,10 @@ function mount(): void {
 
   const engine = new PlayerEngine(appStore);
   engine.start();
-  render(<App store={appStore} engine={engine} />, mountPoint);
+  render(
+    <App store={appStore} engine={engine} audioOnly={audioOnlyController} />,
+    mountPoint,
+  );
 
   window.addEventListener(
     "pagehide",

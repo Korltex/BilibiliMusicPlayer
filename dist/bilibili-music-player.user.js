@@ -3,13 +3,14 @@
 // @namespace    bilibili-music-player
 // @version      0.1.0
 // @author       Korltex
-// @description  在 Bilibili 视频页面中控制原生播放器并管理音乐歌单
+// @description  在 Bilibili 视频页面中控制原生播放器、管理音乐歌单并可选纯音频模式
 // @license      MIT
 // @match        https://www.bilibili.com/video/*
 // @grant        GM_addValueChangeListener
 // @grant        GM_getValue
 // @grant        GM_removeValueChangeListener
 // @grant        GM_setValue
+// @grant        unsafeWindow
 // @run-at       document-start
 // @noframes
 // ==/UserScript==
@@ -318,7 +319,7 @@
 	}, C$1.prototype.render = S$1, i$3 = [], o$2 = "function" == typeof Promise ? Promise.prototype.then.bind(Promise.resolve()) : setTimeout, e$2 = function(n, l) {
 		return n.__v.__b - l.__v.__b;
 	}, H.__r = 0, f$3 = Math.random().toString(8), c$2 = "__d" + f$3, a$2 = "__a" + f$3, s$2 = /(PointerCapture)$|Capture$/i, h$3 = 0, p$3 = V(!1), v$2 = V(!0), y$3 = 0;
-	var styles_default = ":host{all:initial;--lightningcss-light: ;--lightningcss-dark:initial;color-scheme:dark}:host([data-web-fullscreen]){display:none!important}*,:before,:after{box-sizing:border-box}button,input,select{font:inherit;letter-spacing:0}button{color:inherit}#bilibili-music-player-root{--bg:#17181c;--surface:#22242a;--surface-hover:#2a2d34;--border:#383b44;--text:#f4f4f5;--muted:#a8abb4;--accent:#fb7299;--accent-hover:#ff8bad;--cyan:#36c5b7;--danger:#ff6b6b;z-index:2147483647;pointer-events:none;color:var(--text);font-family:Inter,Segoe UI,Microsoft YaHei,system-ui,-apple-system,sans-serif;font-size:14px;line-height:1.4;position:fixed;inset:0}.floating-button,.player-panel{pointer-events:auto}.floating-button{color:#fff;background:var(--accent);cursor:pointer;border:1px solid #ff9bb8;border-radius:50%;place-items:center;width:48px;height:48px;display:grid;position:fixed;bottom:76px;right:24px;box-shadow:0 10px 28px #0000004d}.player-panel{border:1px solid var(--border);background:var(--bg);border-radius:8px;flex-direction:column;width:min(400px,100vw - 24px);max-height:min(720px,100vh - 24px);display:flex;position:fixed;bottom:20px;right:20px;overflow:hidden;box-shadow:0 18px 60px #0000006b}.panel-header,.playlist-toolbar,.transport,.editor-heading,.inline-form{align-items:center;display:flex}.panel-header{border-bottom:1px solid var(--border);justify-content:space-between;min-height:48px;padding:0 12px 0 14px}.brand{align-items:center;gap:8px;min-width:0;display:flex}.brand-icon{color:#fff;background:var(--accent);border-radius:6px;place-items:center;width:26px;height:26px;display:grid}.brand strong{font-size:14px}.version{color:var(--muted);font-size:11px}.icon-button,.row-action{cursor:pointer;background:0 0;border:0;flex:none;place-items:center;display:inline-grid}.icon-button{width:34px;height:34px;color:var(--muted);border-radius:6px}.icon-button:hover:not(:disabled),.row-action:hover:not(:disabled){color:var(--text);background:var(--surface-hover)}.icon-button:disabled,.add-current-button:disabled,.current-time-button:disabled{cursor:not-allowed;opacity:.4}.icon-button.accent{color:var(--accent)}.danger:hover:not(:disabled){color:var(--danger)}.now-playing{align-items:center;gap:12px;min-height:82px;padding:12px 14px 8px;display:flex}.cover{border:1px solid var(--border);width:58px;height:58px;color:var(--cyan);background:var(--surface);border-radius:6px;flex:none;place-items:center;display:grid;overflow:hidden}.cover img{object-fit:cover;width:100%;height:100%}.now-playing-copy{flex-direction:column;gap:4px;min-width:0;display:flex}.now-playing-copy strong,.track-copy strong{text-overflow:ellipsis;white-space:nowrap;overflow:hidden}.now-playing-copy strong{font-size:15px}.now-playing-copy span,.track-copy span,.time-row,.track-duration{color:var(--muted);font-size:12px}.progress-area{padding:2px 14px 0}.range{width:100%;height:18px;accent-color:var(--accent);cursor:pointer;margin:0}.time-row{font-variant-numeric:tabular-nums;justify-content:space-between;margin-top:-2px;display:flex}.transport{justify-content:center;gap:7px;min-height:54px;padding:4px 12px 8px}.play-button{color:#fff;background:var(--accent);cursor:pointer;border:0;border-radius:50%;place-items:center;width:42px;height:42px;display:grid}.play-button:hover{background:var(--accent-hover)}.volume-control{align-items:center;width:92px;display:flex}.volume-range{width:56px}.status-message{border:1px solid var(--border);min-height:30px;color:var(--muted);background:var(--surface);text-align:left;border-radius:6px;margin:0 14px 8px;padding:5px 8px}.status-message.actionable{border-color:var(--accent);color:var(--text);cursor:pointer}.playlist-toolbar{border-top:1px solid var(--border);border-bottom:1px solid var(--border);gap:5px;min-height:44px;padding:6px 10px 6px 14px}.playlist-toolbar select{border:1px solid var(--border);min-width:0;height:32px;color:var(--text);background:var(--surface);border-radius:6px;flex:1;padding:0 30px 0 9px}.inline-form{gap:6px;padding:8px 14px 0}.inline-form input,.track-editor input{border:1px solid var(--border);min-width:0;height:34px;color:var(--text);background:var(--surface);border-radius:6px;outline:none;padding:0 9px}.inline-form input{flex:1}.inline-form input:focus,.track-editor input:focus,.playlist-toolbar select:focus{border-color:var(--accent)}.add-current-button,.save-track-button,.current-time-button{cursor:pointer;border:0;border-radius:6px;justify-content:center;align-items:center;display:flex}.add-current-button{color:#fff;background:var(--accent);gap:7px;min-height:36px;margin:10px 14px}.add-current-button:hover:not(:disabled),.save-track-button:hover{background:var(--accent-hover)}.track-editor{border-top:1px solid var(--border);border-bottom:1px solid var(--border);background:#1c1e23;flex-direction:column;gap:8px;padding:10px 14px 12px;display:flex}.editor-heading{justify-content:space-between;min-height:28px}.track-editor label{flex-direction:column;flex:1;gap:4px;min-width:0;display:flex}.track-editor label>span{color:var(--muted);font-size:12px}.time-fields{align-items:flex-end;gap:6px;display:flex}.current-time-button{width:66px;height:34px;color:var(--text);background:var(--surface);flex:none;gap:4px}.editor-error{color:var(--danger);font-size:12px}.save-track-button{color:#fff;background:var(--accent);gap:6px;height:34px}.track-list{overscroll-behavior:contain;min-height:110px;overflow:hidden auto}.track-row{border-bottom:1px solid #383b44a6;grid-template-columns:minmax(0,1fr) 32px 32px;align-items:stretch;min-height:54px;display:grid}.track-row:hover{background:var(--surface)}.track-row.active{box-shadow:inset 3px 0 var(--accent);background:#25242a}.track-main{min-width:0;color:var(--text);text-align:left;cursor:pointer;background:0 0;border:0;grid-template-columns:32px minmax(0,1fr) auto;align-items:center;gap:7px;padding:7px 5px 7px 11px;display:grid}.track-index{width:28px;color:var(--muted);font-variant-numeric:tabular-nums;place-items:center;font-size:11px;display:grid}.track-row.active .track-index{color:var(--accent)}.track-copy{flex-direction:column;gap:2px;min-width:0;display:flex}.track-copy strong{font-size:13px}.track-duration{font-variant-numeric:tabular-nums;padding-left:6px}.row-action{width:32px;min-height:32px;color:var(--muted);border-radius:5px;align-self:center}.empty-state{min-height:118px;color:var(--muted);flex-direction:column;justify-content:center;align-items:center;gap:7px;display:flex}@media (width<=520px){.player-panel{max-height:calc(100vh - 24px);bottom:12px;right:12px}.floating-button{bottom:64px;right:16px}.volume-control{width:76px}.volume-range{width:42px}}";
+	var styles_default = ":host{all:initial;--lightningcss-light: ;--lightningcss-dark:initial;color-scheme:dark}:host([data-web-fullscreen]){display:none!important}*,:before,:after{box-sizing:border-box}button,input,select{font:inherit;letter-spacing:0}button{color:inherit}#bilibili-music-player-root{--bg:#17181c;--surface:#22242a;--surface-hover:#2a2d34;--border:#383b44;--text:#f4f4f5;--muted:#a8abb4;--accent:#fb7299;--accent-hover:#ff8bad;--cyan:#36c5b7;--danger:#ff6b6b;z-index:2147483647;pointer-events:none;color:var(--text);font-family:Inter,Segoe UI,Microsoft YaHei,system-ui,-apple-system,sans-serif;font-size:14px;line-height:1.4;position:fixed;inset:0}.floating-button,.player-panel{pointer-events:auto}.floating-button{color:#fff;background:var(--accent);cursor:pointer;border:1px solid #ff9bb8;border-radius:50%;place-items:center;width:48px;height:48px;display:grid;position:fixed;bottom:76px;right:24px;box-shadow:0 10px 28px #0000004d}.player-panel{border:1px solid var(--border);background:var(--bg);border-radius:8px;flex-direction:column;width:min(400px,100vw - 24px);max-height:min(720px,100vh - 24px);display:flex;position:fixed;bottom:20px;right:20px;overflow:hidden;box-shadow:0 18px 60px #0000006b}.panel-header,.playlist-toolbar,.transport,.editor-heading,.inline-form{align-items:center;display:flex}.panel-header{border-bottom:1px solid var(--border);justify-content:space-between;min-height:48px;padding:0 12px 0 14px}.brand{align-items:center;gap:8px;min-width:0;display:flex}.brand-icon{color:#fff;background:var(--accent);border-radius:6px;place-items:center;width:26px;height:26px;display:grid}.brand strong{font-size:14px}.version{color:var(--muted);font-size:11px}.icon-button,.row-action{cursor:pointer;background:0 0;border:0;flex:none;place-items:center;display:inline-grid}.icon-button{width:34px;height:34px;color:var(--muted);border-radius:6px}.icon-button:hover:not(:disabled),.row-action:hover:not(:disabled){color:var(--text);background:var(--surface-hover)}.icon-button:disabled,.add-current-button:disabled,.current-time-button:disabled{cursor:not-allowed;opacity:.4}.icon-button.accent,.audio-mode-button.detecting{color:var(--accent)}.audio-mode-button.active{color:var(--cyan);background:#36c5b71f}.audio-mode-button.fallback{color:var(--danger);background:#ff6b6b1a}.danger:hover:not(:disabled){color:var(--danger)}.now-playing{align-items:center;gap:12px;min-height:82px;padding:12px 14px 8px;display:flex}.cover{border:1px solid var(--border);width:58px;height:58px;color:var(--cyan);background:var(--surface);border-radius:6px;flex:none;place-items:center;display:grid;overflow:hidden}.cover img{object-fit:cover;width:100%;height:100%}.now-playing-copy{flex-direction:column;gap:4px;min-width:0;display:flex}.now-playing-copy strong,.track-copy strong{text-overflow:ellipsis;white-space:nowrap;overflow:hidden}.now-playing-copy strong{font-size:15px}.now-playing-copy span,.track-copy span,.time-row,.track-duration{color:var(--muted);font-size:12px}.progress-area{padding:2px 14px 0}.range{width:100%;height:18px;accent-color:var(--accent);cursor:pointer;margin:0}.time-row{font-variant-numeric:tabular-nums;justify-content:space-between;margin-top:-2px;display:flex}.transport{justify-content:center;gap:7px;min-height:54px;padding:4px 12px 8px}.play-button{color:#fff;background:var(--accent);cursor:pointer;border:0;border-radius:50%;place-items:center;width:42px;height:42px;display:grid}.play-button:hover{background:var(--accent-hover)}.volume-control{align-items:center;width:92px;display:flex}.volume-range{width:56px}.status-message{border:1px solid var(--border);min-height:30px;color:var(--muted);background:var(--surface);text-align:left;border-radius:6px;margin:0 14px 8px;padding:5px 8px}.status-message.actionable{border-color:var(--accent);color:var(--text);cursor:pointer}.audio-only-status{cursor:default;align-items:center;display:flex}.audio-only-status.detecting{border-color:var(--accent)}.audio-only-status.active{border-color:var(--cyan);color:var(--text)}.audio-only-status.fallback{border-color:var(--danger);color:var(--text)}.playlist-toolbar{border-top:1px solid var(--border);border-bottom:1px solid var(--border);gap:5px;min-height:44px;padding:6px 10px 6px 14px}.playlist-toolbar select{border:1px solid var(--border);min-width:0;height:32px;color:var(--text);background:var(--surface);border-radius:6px;flex:1;padding:0 30px 0 9px}.inline-form{gap:6px;padding:8px 14px 0}.inline-form input,.track-editor input{border:1px solid var(--border);min-width:0;height:34px;color:var(--text);background:var(--surface);border-radius:6px;outline:none;padding:0 9px}.inline-form input{flex:1}.inline-form input:focus,.track-editor input:focus,.playlist-toolbar select:focus{border-color:var(--accent)}.add-current-button,.save-track-button,.current-time-button{cursor:pointer;border:0;border-radius:6px;justify-content:center;align-items:center;display:flex}.add-current-button{color:#fff;background:var(--accent);gap:7px;min-height:36px;margin:10px 14px}.add-current-button:hover:not(:disabled),.save-track-button:hover{background:var(--accent-hover)}.track-editor{border-top:1px solid var(--border);border-bottom:1px solid var(--border);background:#1c1e23;flex-direction:column;gap:8px;padding:10px 14px 12px;display:flex}.editor-heading{justify-content:space-between;min-height:28px}.track-editor label{flex-direction:column;flex:1;gap:4px;min-width:0;display:flex}.track-editor label>span{color:var(--muted);font-size:12px}.time-fields{align-items:flex-end;gap:6px;display:flex}.current-time-button{width:66px;height:34px;color:var(--text);background:var(--surface);flex:none;gap:4px}.editor-error{color:var(--danger);font-size:12px}.save-track-button{color:#fff;background:var(--accent);gap:6px;height:34px}.track-list{overscroll-behavior:contain;min-height:110px;overflow:hidden auto}.track-row{border-bottom:1px solid #383b44a6;grid-template-columns:minmax(0,1fr) 32px 32px;align-items:stretch;min-height:54px;display:grid}.track-row:hover{background:var(--surface)}.track-row.active{box-shadow:inset 3px 0 var(--accent);background:#25242a}.track-main{min-width:0;color:var(--text);text-align:left;cursor:pointer;background:0 0;border:0;grid-template-columns:32px minmax(0,1fr) auto;align-items:center;gap:7px;padding:7px 5px 7px 11px;display:grid}.track-index{width:28px;color:var(--muted);font-variant-numeric:tabular-nums;place-items:center;font-size:11px;display:grid}.track-row.active .track-index{color:var(--accent)}.track-copy{flex-direction:column;gap:2px;min-width:0;display:flex}.track-copy strong{font-size:13px}.track-duration{font-variant-numeric:tabular-nums;padding-left:6px}.row-action{width:32px;min-height:32px;color:var(--muted);border-radius:5px;align-self:center}.empty-state{min-height:118px;color:var(--muted);flex-direction:column;justify-content:center;align-items:center;gap:7px;display:flex}@media (width<=520px){.player-panel{max-height:calc(100vh - 24px);bottom:12px;right:12px}.floating-button{bottom:64px;right:16px}.volume-control{width:76px}.volume-range{width:42px}}";
 	var _style = (b, a = document.createElement("style")) => (a.append(b), a);
 	var styles_css_default = _style(styles_default);
 	var t$1;
@@ -525,6 +526,10 @@
 	}], ["path", {
 		d: "M12 6v6h4",
 		key: "135r8i"
+	}]]);
+	var Headphones = createLucideIcon("headphones", [["path", {
+		d: "M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3",
+		key: "1xhozi"
 	}]]);
 	var ListMusic = createLucideIcon("list-music", [
 		["path", {
@@ -841,13 +846,14 @@
 		"single-loop": "单曲循环",
 		shuffle: "随机播放"
 	};
-	function App({ store, engine }) {
+	function App({ store, engine, audioOnly }) {
 		const [panelOpen, setPanelOpen] = d$2(false);
 		const [creatingPlaylist, setCreatingPlaylist] = d$2(false);
 		const [newPlaylistName, setNewPlaylistName] = d$2("");
 		const [editorTrack, setEditorTrack] = d$2();
 		const data = store.data.value;
 		const runtime = engine.state.value;
+		const audioOnlyState = audioOnly.state.value;
 		const activePlaylist = data.playlists.find((playlist) => playlist.id === data.activePlaylistId) ?? data.playlists[0];
 		const nowPlaying = runtime.nowPlaying;
 		const progressMinimum = nowPlaying.startTime;
@@ -947,6 +953,18 @@
 					class: "transport",
 					children: [
 						u$1("button", {
+							class: `icon-button audio-mode-button ${audioOnlyState.status}`,
+							type: "button",
+							title: audioOnlyButtonLabel(audioOnlyState),
+							"aria-label": audioOnlyButtonLabel(audioOnlyState),
+							"aria-pressed": audioOnlyState.requested,
+							onClick: () => audioOnly.toggle(engine.currentMedia?.currentTime ?? runtime.currentTime),
+							children: u$1(Headphones, {
+								size: 19,
+								"aria-hidden": "true"
+							})
+						}),
+						u$1("button", {
 							class: "icon-button",
 							type: "button",
 							title: PLAY_MODE_LABELS[data.playMode],
@@ -1025,6 +1043,11 @@
 					type: "button",
 					onClick: () => runtime.requiresInteraction && void engine.togglePlayback(),
 					children: runtime.message
+				}),
+				audioOnlyState.requested && u$1("div", {
+					class: `status-message audio-only-status ${audioOnlyState.status}`,
+					role: "status",
+					children: audioOnlyStatusMessage(audioOnlyState)
 				}),
 				runtime.playbackContext === "playlist" && u$1("button", {
 					class: "status-message actionable playlist-context-message",
@@ -1308,6 +1331,37 @@
 				size: 19,
 				"aria-hidden": "true"
 			});
+		}
+	}
+	function audioOnlyButtonLabel(state) {
+		switch (state.status) {
+			case "detecting": return "纯音频模式正在检测播放流；点击关闭并重载";
+			case "active": return "纯音频模式已生效；点击关闭并重载";
+			case "fallback": return "纯音频模式未生效；点击关闭并重载";
+			default: return "开启纯音频模式并重载页面";
+		}
+	}
+	function audioOnlyStatusMessage(state) {
+		switch (state.status) {
+			case "detecting": return "纯音频模式：正在检测 DASH 播放流…";
+			case "active": return "纯音频模式已生效：视频流已被移除";
+			case "fallback": return `纯音频模式未生效，已回退正常视频：${audioOnlyReasonLabel(state.reason)}`;
+			default: return "";
+		}
+	}
+	function audioOnlyReasonLabel(reason) {
+		switch (reason) {
+			case "durl-only": return "当前视频只提供音视频混流";
+			case "missing-audio": return "DASH 清单没有可用音频";
+			case "missing-dash":
+			case "invalid-payload": return "未找到可改写的 DASH 清单";
+			case "invalid-json": return "播放清单不是有效 JSON";
+			case "unsupported-response-type": return "播放器使用了暂不支持的响应格式";
+			case "playinfo-nonconfigurable": return "首屏播放信息无法拦截";
+			case "playinfo-rewrite-failed":
+			case "fetch-rewrite-failed":
+			case "xhr-rewrite-failed": return "播放清单拦截失败";
+			default: return "当前播放格式不受支持";
 		}
 	}
 	var i = Symbol.for("preact-signals");
@@ -1950,7 +2004,8 @@
 	var _GM_getValue = (() => typeof GM_getValue != "undefined" ? GM_getValue : void 0)();
 	var _GM_removeValueChangeListener = (() => typeof GM_removeValueChangeListener != "undefined" ? GM_removeValueChangeListener : void 0)();
 	var _GM_setValue = (() => typeof GM_setValue != "undefined" ? GM_setValue : void 0)();
-	var STORAGE_KEY = "bilibili-music-player:data";
+	var _unsafeWindow = (() => typeof unsafeWindow != "undefined" ? unsafeWindow : void 0)();
+	var STORAGE_KEY$1 = "bilibili-music-player:data";
 	function createDefaultData(now = Date.now()) {
 		const playlist = {
 			id: createId("playlist"),
@@ -1998,13 +2053,13 @@
 	}
 	var AppRepository = class {
 		load() {
-			return migrateAppData(_GM_getValue(STORAGE_KEY));
+			return migrateAppData(_GM_getValue(STORAGE_KEY$1));
 		}
 		save(data) {
-			_GM_setValue(STORAGE_KEY, data);
+			_GM_setValue(STORAGE_KEY$1, data);
 		}
 		subscribe(listener) {
-			const listenerId = _GM_addValueChangeListener(STORAGE_KEY, (_key, _oldValue, newValue, remote) => {
+			const listenerId = _GM_addValueChangeListener(STORAGE_KEY$1, (_key, _oldValue, newValue, remote) => {
 				if (remote) listener(migrateAppData(newValue));
 			});
 			return () => _GM_removeValueChangeListener(listenerId);
@@ -2176,6 +2231,418 @@
 		}
 	};
 	var appStore = new AppStore();
+	var PLAYURL_PATH = /^\/x\/player\/(?:wbi\/)?playurl\/?$/;
+	function isPlayurlUrl(url) {
+		if (typeof url !== "string" || !url) return false;
+		try {
+			return PLAYURL_PATH.test(new URL(url, "https://www.bilibili.com").pathname);
+		} catch {
+			return false;
+		}
+	}
+	function rewritePlayurlText(url, text) {
+		if (!isPlayurlUrl(url)) return {
+			value: text,
+			changed: false,
+			supported: false,
+			reason: "not-playurl"
+		};
+		try {
+			const result = rewritePlayurlPayload(JSON.parse(text));
+			return {
+				...result,
+				value: result.changed ? JSON.stringify(result.value) : text
+			};
+		} catch {
+			return {
+				value: text,
+				changed: false,
+				supported: false,
+				reason: "invalid-json"
+			};
+		}
+	}
+	function rewritePlayurlPayload(payload) {
+		if (!isRecord(payload)) return unchanged(payload, "invalid-payload");
+		const dashPaths = [
+			["data", "dash"],
+			["result", "dash"],
+			[
+				"data",
+				"video_info",
+				"dash"
+			]
+		];
+		if (dashPaths.map((path) => getPath(payload, path)).filter(isRecord).length === 0) return unchanged(payload, containsDurl(payload) ? "durl-only" : "missing-dash");
+		let hasAudio = false;
+		let alreadyAudioOnly = false;
+		const clone = cloneValue(payload);
+		let changed = false;
+		for (const path of dashPaths) {
+			const sourceDash = getPath(payload, path);
+			const targetDash = getPath(clone, path);
+			if (!isRecord(sourceDash) || !isRecord(targetDash)) continue;
+			if (!Array.isArray(sourceDash.audio) || sourceDash.audio.length === 0) continue;
+			hasAudio = true;
+			if (!Array.isArray(sourceDash.video)) continue;
+			if (sourceDash.video.length === 0) {
+				alreadyAudioOnly = true;
+				continue;
+			}
+			targetDash.video = [];
+			changed = true;
+		}
+		if (changed) return {
+			value: clone,
+			changed: true,
+			supported: true,
+			reason: "rewritten"
+		};
+		if (alreadyAudioOnly) return {
+			value: payload,
+			changed: false,
+			supported: true,
+			reason: "already-audio-only"
+		};
+		return unchanged(payload, hasAudio ? "missing-dash" : "missing-audio");
+	}
+	function unchanged(value, reason) {
+		return {
+			value,
+			changed: false,
+			supported: false,
+			reason
+		};
+	}
+	function containsDurl(payload) {
+		return [
+			["data", "durl"],
+			["result", "durl"],
+			[
+				"data",
+				"video_info",
+				"durl"
+			]
+		].some((path) => Array.isArray(getPath(payload, path)));
+	}
+	function getPath(value, path) {
+		let current = value;
+		for (const key of path) {
+			if (!isRecord(current)) return;
+			current = current[key];
+		}
+		return current;
+	}
+	function isRecord(value) {
+		return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+	}
+	function cloneValue(value, seen = new WeakMap()) {
+		if (!value || typeof value !== "object") return value;
+		const cached = seen.get(value);
+		if (cached) return cached;
+		if (Array.isArray(value)) {
+			const clone = [];
+			seen.set(value, clone);
+			for (const item of value) clone.push(cloneValue(item, seen));
+			return clone;
+		}
+		const clone = {};
+		seen.set(value, clone);
+		for (const [key, item] of Object.entries(value)) clone[key] = cloneValue(item, seen);
+		return clone;
+	}
+	var INSTALL_KEY = Symbol.for("bilibili-music-player:audio-only-interceptors");
+	function installAudioOnlyInterceptors(pageWindow, onOutcome) {
+		const installTarget = pageWindow;
+		if (installTarget[INSTALL_KEY]) return;
+		Object.defineProperty(installTarget, INSTALL_KEY, {
+			configurable: false,
+			value: true
+		});
+		installPlayinfoInterceptor(pageWindow, onOutcome);
+		installFetchInterceptor(pageWindow, onOutcome);
+		installXhrInterceptor(pageWindow, onOutcome);
+	}
+	function installPlayinfoInterceptor(pageWindow, onOutcome) {
+		try {
+			const descriptor = Object.getOwnPropertyDescriptor(pageWindow, "__playinfo__");
+			if (descriptor && !descriptor.configurable) {
+				onOutcome({
+					supported: false,
+					reason: "playinfo-nonconfigurable"
+				});
+				return;
+			}
+			let playinfo = descriptor?.get ? descriptor.get.call(pageWindow) : descriptor?.value;
+			if (playinfo !== void 0) {
+				const result = rewritePlayurlPayload(playinfo);
+				playinfo = result.value;
+				reportRewriteResult(result, onOutcome);
+			}
+			Object.defineProperty(pageWindow, "__playinfo__", {
+				configurable: true,
+				enumerable: descriptor?.enumerable ?? true,
+				get: () => playinfo,
+				set: (value) => {
+					try {
+						const result = rewritePlayurlPayload(value);
+						playinfo = result.value;
+						reportRewriteResult(result, onOutcome);
+					} catch {
+						playinfo = value;
+						onOutcome({
+							supported: false,
+							reason: "playinfo-rewrite-failed"
+						});
+					}
+				}
+			});
+		} catch {
+			onOutcome({
+				supported: false,
+				reason: "playinfo-rewrite-failed"
+			});
+		}
+	}
+	function installFetchInterceptor(pageWindow, onOutcome) {
+		const rawFetch = pageWindow.fetch;
+		if (typeof rawFetch !== "function") return;
+		pageWindow.fetch = async function(input, init) {
+			const url = requestUrl(pageWindow, input);
+			const response = await Reflect.apply(rawFetch, this, [input, init]);
+			if (!isPlayurlUrl(url)) return response;
+			try {
+				const result = rewritePlayurlText(url, await response.clone().text());
+				reportRewriteResult(result, onOutcome);
+				if (!result.changed) return response;
+				return createRewrittenResponse(pageWindow, response, result.value);
+			} catch {
+				onOutcome({
+					supported: false,
+					reason: "fetch-rewrite-failed"
+				});
+				return response;
+			}
+		};
+	}
+	function installXhrInterceptor(pageWindow, onOutcome) {
+		const XHR = pageWindow.XMLHttpRequest;
+		if (!XHR) return;
+		const prototype = XHR.prototype;
+		const responseDescriptor = Object.getOwnPropertyDescriptor(prototype, "response");
+		const responseTextDescriptor = Object.getOwnPropertyDescriptor(prototype, "responseText");
+		if (!responseDescriptor?.configurable || !responseDescriptor.get || !responseTextDescriptor?.configurable || !responseTextDescriptor.get) {
+			onOutcome({
+				supported: false,
+				reason: "xhr-rewrite-failed"
+			});
+			return;
+		}
+		const states = new WeakMap();
+		const rawOpen = prototype.open;
+		const rawResponseGet = responseDescriptor.get;
+		const rawResponseTextGet = responseTextDescriptor.get;
+		try {
+			Object.defineProperty(prototype, "response", {
+				...responseDescriptor,
+				get() {
+					const original = rawResponseGet.call(this);
+					return rewriteXhrValue(pageWindow, this, original, states, onOutcome, "response");
+				}
+			});
+			Object.defineProperty(prototype, "responseText", {
+				...responseTextDescriptor,
+				get() {
+					const original = rawResponseTextGet.call(this);
+					return rewriteXhrValue(pageWindow, this, original, states, onOutcome, "text");
+				}
+			});
+			prototype.open = function(method, url, ...rest) {
+				states.set(this, {
+					url: String(url),
+					processed: false
+				});
+				return Reflect.apply(rawOpen, this, [
+					method,
+					url,
+					...rest
+				]);
+			};
+		} catch {
+			onOutcome({
+				supported: false,
+				reason: "xhr-rewrite-failed"
+			});
+		}
+	}
+	function rewriteXhrValue(pageWindow, xhr, original, states, onOutcome, requestedValue) {
+		const state = states.get(xhr);
+		if (!state || xhr.readyState !== pageWindow.XMLHttpRequest.DONE || !isPlayurlUrl(state.url)) return original;
+		if (!state.processed) {
+			state.processed = true;
+			try {
+				switch (xhr.responseType) {
+					case "":
+					case "text": {
+						const text = String(original ?? "");
+						const result = rewritePlayurlText(state.url, text);
+						reportRewriteResult(result, onOutcome);
+						state.text = result.value;
+						state.response = result.value;
+						break;
+					}
+					case "json": {
+						const result = rewritePlayurlPayload(original);
+						reportRewriteResult(result, onOutcome);
+						state.response = result.value;
+						break;
+					}
+					case "arraybuffer": {
+						if (!(original instanceof pageWindow.ArrayBuffer)) {
+							state.response = original;
+							onOutcome({
+								supported: false,
+								reason: "xhr-rewrite-failed"
+							});
+							break;
+						}
+						const text = new pageWindow.TextDecoder("utf-8").decode(original);
+						const result = rewritePlayurlText(state.url, text);
+						reportRewriteResult(result, onOutcome);
+						state.response = result.changed ? new pageWindow.TextEncoder().encode(result.value).buffer : original;
+						break;
+					}
+					default:
+						state.response = original;
+						onOutcome({
+							supported: false,
+							reason: "unsupported-response-type"
+						});
+				}
+			} catch {
+				state.response = original;
+				onOutcome({
+					supported: false,
+					reason: "xhr-rewrite-failed"
+				});
+			}
+		}
+		return requestedValue === "text" ? state.text : state.response;
+	}
+	function requestUrl(pageWindow, input) {
+		if (typeof input === "string") return input;
+		if (input instanceof pageWindow.URL) return input.href;
+		return input.url;
+	}
+	function createRewrittenResponse(pageWindow, original, text) {
+		const headers = new pageWindow.Headers(original.headers);
+		headers.delete("content-encoding");
+		headers.delete("content-length");
+		const rewritten = new pageWindow.Response(text, {
+			status: original.status,
+			statusText: original.statusText,
+			headers
+		});
+		for (const property of [
+			"url",
+			"redirected",
+			"type"
+		]) try {
+			Object.defineProperty(rewritten, property, {
+				configurable: true,
+				value: original[property]
+			});
+		} catch {}
+		return rewritten;
+	}
+	function reportRewriteResult(result, onOutcome) {
+		onOutcome({
+			supported: result.supported,
+			reason: result.reason
+		});
+	}
+	var STORAGE_KEY = "bilibili-music-player:audio-only";
+	var STYLE_ID = "bilibili-music-player-audio-only-style";
+	var ROOT_ATTRIBUTE = "data-bmp-audio-only";
+	var PAGE_STYLE = `
+html[${ROOT_ATTRIBUTE}="active"] .bpx-player-video-wrap video,
+html[${ROOT_ATTRIBUTE}="active"] #bilibili-player video,
+html[${ROOT_ATTRIBUTE}="active"] .bilibili-player-video video,
+html[${ROOT_ATTRIBUTE}="active"] video.bpx-player-video {
+  visibility: hidden !important;
+}
+`;
+	var AudioOnlyController = class {
+		state = y$1(createInitialState());
+		started = false;
+		diagnosticLogged = false;
+		start() {
+			if (this.started) return;
+			this.started = true;
+			if (!this.state.peek().requested) return;
+			installAudioOnlyInterceptors(_unsafeWindow, (outcome) => this.handleOutcome(outcome));
+		}
+		toggle(currentTime = 0) {
+			this.setEnabled(!this.state.peek().requested, currentTime);
+		}
+		setEnabled(enabled, currentTime = 0) {
+			_GM_setValue(STORAGE_KEY, enabled);
+			this.state.value = {
+				requested: enabled,
+				status: enabled ? "detecting" : "off"
+			};
+			this.applyPagePresentation(false);
+			const url = new URL(location.href);
+			const resumeTime = Number.isFinite(currentTime) ? Math.max(0, Math.floor(currentTime)) : 0;
+			if (resumeTime > 0) url.searchParams.set("t", String(resumeTime));
+			else url.searchParams.delete("t");
+			location.replace(url.href);
+		}
+		handleOutcome(outcome) {
+			if (outcome.reason === "not-playurl") return;
+			const active = outcome.supported;
+			this.state.value = {
+				requested: true,
+				status: active ? "active" : "fallback",
+				reason: outcome.reason
+			};
+			this.applyPagePresentation(active);
+			if (!this.diagnosticLogged) {
+				this.diagnosticLogged = true;
+				console.info("[Bilibili Music Player] audio-only", {
+					status: active ? "active" : "fallback",
+					reason: outcome.reason
+				});
+			}
+		}
+		applyPagePresentation(active) {
+			const root = document.documentElement;
+			if (!root) {
+				document.addEventListener("readystatechange", () => this.applyPagePresentation(this.state.peek().status === "active"), { once: true });
+				return;
+			}
+			if (active) {
+				ensurePageStyle(root);
+				root.setAttribute(ROOT_ATTRIBUTE, "active");
+			} else root.removeAttribute(ROOT_ATTRIBUTE);
+		}
+	};
+	function createInitialState() {
+		const stored = _GM_getValue(STORAGE_KEY, false);
+		const requested = stored === true || stored === 1 || stored === "1";
+		return {
+			requested,
+			status: requested ? "detecting" : "off"
+		};
+	}
+	function ensurePageStyle(root) {
+		if (document.getElementById(STYLE_ID)) return;
+		const style = document.createElement("style");
+		style.id = STYLE_ID;
+		style.textContent = PAGE_STYLE;
+		(document.head ?? root).append(style);
+	}
+	var audioOnlyController = new AudioOnlyController();
 	var MediaLocator = class {
 		listener;
 		current = null;
@@ -2612,6 +3079,7 @@
 	var HOST_ID = "bilibili-music-player-host";
 	var BILIBILI_PLAYER_SELECTOR = ".bpx-player-container";
 	var BILIBILI_WEB_FULLSCREEN_SELECTOR = `${BILIBILI_PLAYER_SELECTOR}[data-screen="web"]`;
+	audioOnlyController.start();
 	function containsBilibiliPlayer(node) {
 		return node instanceof Element && (node.matches(BILIBILI_PLAYER_SELECTOR) || node.querySelector(BILIBILI_PLAYER_SELECTOR) !== null);
 	}
@@ -2645,7 +3113,8 @@
 		engine.start();
 		R(u$1(App, {
 			store: appStore,
-			engine
+			engine,
+			audioOnly: audioOnlyController
 		}), mountPoint);
 		window.addEventListener("pagehide", () => {
 			stopObservingWebFullscreen();

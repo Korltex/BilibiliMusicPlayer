@@ -1,6 +1,7 @@
 import { useEffect, useState } from "preact/hooks";
 import {
   Clock3,
+  Headphones,
   ListMusic,
   Music2,
   Pause,
@@ -20,6 +21,11 @@ import {
 } from "lucide-preact";
 import type { AppStore } from "./store";
 import type { PlayerEngine } from "../playback/player-engine";
+import type {
+  AudioOnlyController,
+  AudioOnlyState,
+} from "../bili/audio-only-controller";
+import type { AudioOnlyInterceptionReason } from "../bili/audio-only-interceptor";
 import {
   createTrackFromCurrentPage,
   readCurrentVideoMetadata,
@@ -30,6 +36,7 @@ import type { PlayMode, Track } from "../core/types";
 interface AppProps {
   store: AppStore;
   engine: PlayerEngine;
+  audioOnly: AudioOnlyController;
 }
 
 const PLAY_MODES: PlayMode[] = [
@@ -46,7 +53,7 @@ const PLAY_MODE_LABELS: Record<PlayMode, string> = {
   shuffle: "随机播放",
 };
 
-export function App({ store, engine }: AppProps) {
+export function App({ store, engine, audioOnly }: AppProps) {
   const [panelOpen, setPanelOpen] = useState(false);
   const [creatingPlaylist, setCreatingPlaylist] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState("");
@@ -54,6 +61,7 @@ export function App({ store, engine }: AppProps) {
 
   const data = store.data.value;
   const runtime = engine.state.value;
+  const audioOnlyState = audioOnly.state.value;
   const activePlaylist =
     data.playlists.find((playlist) => playlist.id === data.activePlaylistId) ??
     data.playlists[0];
@@ -150,6 +158,20 @@ export function App({ store, engine }: AppProps) {
 
       <div class="transport">
         <button
+          class={`icon-button audio-mode-button ${audioOnlyState.status}`}
+          type="button"
+          title={audioOnlyButtonLabel(audioOnlyState)}
+          aria-label={audioOnlyButtonLabel(audioOnlyState)}
+          aria-pressed={audioOnlyState.requested}
+          onClick={() =>
+            audioOnly.toggle(
+              engine.currentMedia?.currentTime ?? runtime.currentTime,
+            )
+          }
+        >
+          <Headphones size={19} aria-hidden="true" />
+        </button>
+        <button
           class="icon-button"
           type="button"
           title={PLAY_MODE_LABELS[data.playMode]}
@@ -230,6 +252,15 @@ export function App({ store, engine }: AppProps) {
         >
           {runtime.message}
         </button>
+      )}
+
+      {audioOnlyState.requested && (
+        <div
+          class={`status-message audio-only-status ${audioOnlyState.status}`}
+          role="status"
+        >
+          {audioOnlyStatusMessage(audioOnlyState)}
+        </div>
       )}
 
       {runtime.playbackContext === "playlist" && (
@@ -527,5 +558,59 @@ function PlayModeIcon({ mode }: { mode: PlayMode }) {
       return <Shuffle size={19} aria-hidden="true" />;
     default:
       return <ListMusic size={19} aria-hidden="true" />;
+  }
+}
+
+function audioOnlyButtonLabel(state: AudioOnlyState): string {
+  switch (state.status) {
+    case "detecting":
+      return "纯音频模式正在检测播放流；点击关闭并重载";
+    case "active":
+      return "纯音频模式已生效；点击关闭并重载";
+    case "fallback":
+      return "纯音频模式未生效；点击关闭并重载";
+    default:
+      return "开启纯音频模式并重载页面";
+  }
+}
+
+function audioOnlyStatusMessage(state: AudioOnlyState): string {
+  switch (state.status) {
+    case "detecting":
+      return "纯音频模式：正在检测 DASH 播放流…";
+    case "active":
+      return "纯音频模式已生效：视频流已被移除";
+    case "fallback":
+      return `纯音频模式未生效，已回退正常视频：${audioOnlyReasonLabel(
+        state.reason,
+      )}`;
+    default:
+      return "";
+  }
+}
+
+function audioOnlyReasonLabel(
+  reason: AudioOnlyInterceptionReason | undefined,
+): string {
+  switch (reason) {
+    case "durl-only":
+      return "当前视频只提供音视频混流";
+    case "missing-audio":
+      return "DASH 清单没有可用音频";
+    case "missing-dash":
+    case "invalid-payload":
+      return "未找到可改写的 DASH 清单";
+    case "invalid-json":
+      return "播放清单不是有效 JSON";
+    case "unsupported-response-type":
+      return "播放器使用了暂不支持的响应格式";
+    case "playinfo-nonconfigurable":
+      return "首屏播放信息无法拦截";
+    case "playinfo-rewrite-failed":
+    case "fetch-rewrite-failed":
+    case "xhr-rewrite-failed":
+      return "播放清单拦截失败";
+    default:
+      return "当前播放格式不受支持";
   }
 }
