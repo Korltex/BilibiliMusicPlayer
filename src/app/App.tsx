@@ -105,7 +105,7 @@ export function App({ store, engine, audioOnly }: AppProps) {
             <Music2 size={18} aria-hidden="true" />
           </span>
           <strong>Bilibili 音乐播放器</strong>
-          <span class="version">0.1.0</span>
+          <span class="version">0.1.1</span>
         </div>
         <button
           class="icon-button"
