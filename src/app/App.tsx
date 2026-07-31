@@ -70,6 +70,17 @@ export function App({ store, engine, audioOnly }: AppProps) {
   const progressMaximum =
     nowPlaying.endTime ??
     (runtime.duration > 0 ? runtime.duration : nowPlaying.storedDuration);
+  const audioFallbackNotice =
+    audioOnlyState.status === "fallback"
+      ? `纯音频模式未生效，已回退正常视频：${audioOnlyReasonLabel(
+          audioOnlyState.reason,
+        )}`
+      : undefined;
+  const primaryNotice = runtime.message ?? audioFallbackNotice;
+  const noticeActionable = Boolean(
+    runtime.message && runtime.requiresInteraction,
+  );
+  const noticeFallback = !runtime.message && Boolean(audioFallbackNotice);
 
   const createPlaylist = (event: SubmitEvent) => {
     event.preventDefault();
@@ -132,6 +143,17 @@ export function App({ store, engine, audioOnly }: AppProps) {
             {nowPlaying.uploader ??
               (runtime.mediaReady ? "当前 Bilibili 视频" : "等待播放器")}
           </span>
+          {runtime.playbackContext === "playlist" && (
+            <button
+              class="playlist-context-chip"
+              type="button"
+              title="退出歌单播放并继续播放完整视频"
+              aria-label="退出歌单播放并继续播放完整视频"
+              onClick={() => engine.exitPlaylistPlayback()}
+            >
+              播放完整视频
+            </button>
+          )}
         </div>
       </div>
 
@@ -240,38 +262,25 @@ export function App({ store, engine, audioOnly }: AppProps) {
         </div>
       </div>
 
-      {runtime.message && (
-        <button
-          class={`status-message ${
-            runtime.requiresInteraction ? "actionable" : ""
-          }`}
-          type="button"
-          onClick={() =>
-            runtime.requiresInteraction && void engine.togglePlayback()
-          }
-        >
-          {runtime.message}
-        </button>
-      )}
-
-      {audioOnlyState.requested && (
-        <div
-          class={`status-message audio-only-status ${audioOnlyState.status}`}
-          role="status"
-        >
-          {audioOnlyStatusMessage(audioOnlyState)}
-        </div>
-      )}
-
-      {runtime.playbackContext === "playlist" && (
-        <button
-          class="status-message actionable playlist-context-message"
-          type="button"
-          onClick={() => engine.exitPlaylistPlayback()}
-        >
-          正在按歌单片段播放，点击退出并继续播放完整视频
-        </button>
-      )}
+      {primaryNotice &&
+        (noticeActionable ? (
+          <button
+            class="status-message actionable"
+            type="button"
+            title={primaryNotice}
+            onClick={() => void engine.togglePlayback()}
+          >
+            {primaryNotice}
+          </button>
+        ) : (
+          <div
+            class={`status-message ${noticeFallback ? "fallback" : ""}`}
+            role="status"
+            title={primaryNotice}
+          >
+            {primaryNotice}
+          </div>
+        ))}
 
       <div class="playlist-toolbar">
         <select
@@ -568,24 +577,11 @@ function audioOnlyButtonLabel(state: AudioOnlyState): string {
     case "active":
       return "纯音频模式已生效；点击关闭并重载";
     case "fallback":
-      return "纯音频模式未生效；点击关闭并重载";
-    default:
-      return "开启纯音频模式并重载页面";
-  }
-}
-
-function audioOnlyStatusMessage(state: AudioOnlyState): string {
-  switch (state.status) {
-    case "detecting":
-      return "纯音频模式：正在检测 DASH 播放流…";
-    case "active":
-      return "纯音频模式已生效：视频流已被移除";
-    case "fallback":
       return `纯音频模式未生效，已回退正常视频：${audioOnlyReasonLabel(
         state.reason,
-      )}`;
+      )}；点击关闭并重载`;
     default:
-      return "";
+      return "开启纯音频模式并重载页面";
   }
 }
 

@@ -63,9 +63,13 @@ test("rewrites initial __playinfo__ and hides only the video picture", async ({
   await expect(page.locator(".bpx-player-control-wrap")).toBeVisible();
 
   await openPlayerPanel(page);
-  await expect(
-    page.getByText("纯音频模式已生效：视频流已被移除"),
-  ).toBeVisible();
+  const audioModeButton = page.locator(".audio-mode-button");
+  await expect(audioModeButton).toHaveClass(/active/);
+  await expect(audioModeButton).toHaveAttribute(
+    "aria-label",
+    "纯音频模式已生效；点击关闭并重载",
+  );
+  await expect(page.locator(".status-message")).toHaveCount(0);
 });
 
 test("rewrites fetch playurl responses and preserves response URL", async ({
@@ -224,6 +228,15 @@ test("rewrites XHR text, json, and arraybuffer without changing native errors", 
 });
 
 test("falls back to visible video for durl-only playinfo", async ({ page }) => {
+  await page.addInitScript(
+    ({ storageKey, value }) => {
+      localStorage.setItem(storageKey, JSON.stringify(value));
+    },
+    {
+      storageKey: `${STORAGE_PREFIX}bilibili-music-player:data`,
+      value: playlistDataForAudioPage(),
+    },
+  );
   await installAtDocumentStart(page, true);
   await routeVideoPage(
     page,
@@ -235,10 +248,14 @@ test("falls back to visible video for durl-only playinfo", async ({ page }) => {
         };
       </script>
       ${playerMarkup()}
+      <script>
+        document.querySelector("video").play = () =>
+          Promise.reject(new DOMException("autoplay blocked", "NotAllowedError"));
+      </script>
     `,
   );
 
-  await page.goto(PAGE_URL);
+  await page.goto(`${PAGE_URL}?bili_music=1`);
 
   await expect(page.locator("html")).not.toHaveAttribute(
     "data-bmp-audio-only",
@@ -246,11 +263,31 @@ test("falls back to visible video for durl-only playinfo", async ({ page }) => {
   );
   await expect(page.locator("video")).toHaveCSS("visibility", "visible");
   await openPlayerPanel(page);
-  await expect(
-    page.getByText(
-      "纯音频模式未生效，已回退正常视频：当前视频只提供音视频混流",
-    ),
-  ).toBeVisible();
+  const fallbackMessage =
+    "纯音频模式未生效，已回退正常视频：当前视频只提供音视频混流";
+  await expect(page.locator(".status-message")).toHaveCount(1);
+  await expect(page.locator(".status-message")).toHaveText(fallbackMessage);
+  await expect(page.locator(".status-message")).toHaveAttribute(
+    "title",
+    fallbackMessage,
+  );
+  await expect(page.locator(".audio-mode-button")).toHaveClass(/fallback/);
+  await expect(page.locator(".audio-mode-button")).toHaveAttribute(
+    "aria-label",
+    `${fallbackMessage}；点击关闭并重载`,
+  );
+  await expect(page.locator(".playlist-context-chip")).toHaveText(
+    "播放完整视频",
+  );
+  await expect(page.locator(".playlist-context-chip svg")).toHaveCount(0);
+  await expect(page.locator(".status-message")).toHaveCount(1);
+
+  await page.locator(".play-button").click();
+  const autoplayMessage = "浏览器阻止了自动播放，请点击播放按钮继续";
+  await expect(page.locator(".status-message")).toHaveCount(1);
+  await expect(page.locator(".status-message")).toHaveText(autoplayMessage);
+  await expect(page.locator(".status-message")).toHaveClass(/actionable/);
+  await expect(page.locator(".playlist-context-chip")).toBeVisible();
 });
 
 test("persists both toggle directions and preserves navigation context", async ({
@@ -439,6 +476,46 @@ function dashPayload() {
         video: [{ id: 80, baseUrl: "video.m4s" }],
         audio: [{ id: 30280, baseUrl: "audio.m4s" }],
       },
+    },
+  };
+}
+
+function playlistDataForAudioPage() {
+  const now = Date.now();
+  const playlistId = "playlist-audio";
+  const trackId = "track-audio";
+  return {
+    version: 1,
+    playlists: [
+      {
+        id: playlistId,
+        name: "纯音频歌单",
+        tracks: [
+          {
+            id: trackId,
+            bvid: "BV1AudioOnly",
+            title: "纯音频片段",
+            uploader: "测试作者",
+            startTime: 0,
+            endTime: 30,
+            duration: 120,
+            addedAt: now,
+            source: "manual",
+          },
+        ],
+        createdAt: now,
+        updatedAt: now,
+      },
+    ],
+    activePlaylistId: playlistId,
+    playMode: "sequence",
+    volume: 1,
+    playback: {
+      playlistId,
+      trackId,
+      currentTime: 0,
+      resumeRequested: false,
+      updatedAt: now,
     },
   };
 }

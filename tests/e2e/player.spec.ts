@@ -119,6 +119,18 @@ test("mounts, controls media, and saves a track", async ({
   ).toBeVisible();
   await expect(page.getByText("测试歌曲").first()).toBeVisible();
 
+  const panel = page.locator(".player-panel");
+  const transportButtons = panel.locator(".transport > .icon-button");
+  await panel.locator(".play-button").click();
+  await transportButtons.nth(2).click();
+  await transportButtons.nth(3).click();
+  expect(
+    await page
+      .locator("video")
+      .evaluate((media) => (media as HTMLVideoElement).paused),
+  ).toBe(false);
+  await expect(panel.locator(".status-message")).toHaveCount(0);
+
   await page.getByRole("button", { name: "将当前视频添加到歌单" }).click();
   await page.getByLabel("标题").fill("测试片段");
   await page.getByLabel("开始时间（秒）").fill("10");
@@ -131,10 +143,46 @@ test("mounts, controls media, and saves a track", async ({
   await expect(
     page.getByRole("button", { name: "暂停", exact: true }),
   ).toBeVisible();
-  await expect(page.locator(".playlist-context-message")).toBeVisible();
-  await page.locator(".playlist-context-message").click();
+  await expect(panel.locator(".playlist-context-chip")).toHaveText(
+    "播放完整视频",
+  );
+  await expect(panel.locator(".playlist-context-chip svg")).toHaveCount(0);
+  await expect(panel.locator(".status-message")).toHaveCount(0);
+
+  const playModeButton = transportButtons.nth(1);
+  await playModeButton.click();
+  await playModeButton.click();
+  await playModeButton.click();
+  const beforeBoundaryClick = await page.locator("video").evaluate((media) => ({
+    currentTime: (media as HTMLVideoElement).currentTime,
+    paused: (media as HTMLVideoElement).paused,
+  }));
+  await transportButtons.nth(2).click();
+  await transportButtons.nth(3).click();
+  expect(
+    await page.locator("video").evaluate((media) => ({
+      currentTime: (media as HTMLVideoElement).currentTime,
+      paused: (media as HTMLVideoElement).paused,
+    })),
+  ).toEqual(beforeBoundaryClick);
+  await expect(panel.locator(".status-message")).toHaveCount(0);
+
+  await panel.locator(".playlist-context-chip").click();
   expect(new URL(page.url()).searchParams.has("bili_music")).toBe(false);
   await expect(page.locator(".track-row")).not.toHaveClass(/active/);
+
+  await page.locator(".track-main").click();
+  await page.evaluate(() => {
+    document.querySelector("video")!.currentTime = 90;
+  });
+  await expect(panel.locator(".playlist-context-chip")).toHaveCount(0);
+  expect(new URL(page.url()).searchParams.has("bili_music")).toBe(false);
+  expect(
+    await page
+      .locator("video")
+      .evaluate((media) => (media as HTMLVideoElement).paused),
+  ).toBe(true);
+  await expect(panel.locator(".status-message")).toHaveCount(0);
 
   await page.screenshot({
     path: testInfo.outputPath("player-panel.png"),

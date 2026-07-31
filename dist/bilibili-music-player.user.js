@@ -319,7 +319,7 @@
 	}, C$1.prototype.render = S$1, i$3 = [], o$2 = "function" == typeof Promise ? Promise.prototype.then.bind(Promise.resolve()) : setTimeout, e$2 = function(n, l) {
 		return n.__v.__b - l.__v.__b;
 	}, H.__r = 0, f$3 = Math.random().toString(8), c$2 = "__d" + f$3, a$2 = "__a" + f$3, s$2 = /(PointerCapture)$|Capture$/i, h$3 = 0, p$3 = V(!1), v$2 = V(!0), y$3 = 0;
-	var styles_default = ":host{all:initial;--lightningcss-light: ;--lightningcss-dark:initial;color-scheme:dark}:host([data-web-fullscreen]){display:none!important}*,:before,:after{box-sizing:border-box}button,input,select{font:inherit;letter-spacing:0}button{color:inherit}#bilibili-music-player-root{--bg:#17181c;--surface:#22242a;--surface-hover:#2a2d34;--border:#383b44;--text:#f4f4f5;--muted:#a8abb4;--accent:#fb7299;--accent-hover:#ff8bad;--cyan:#36c5b7;--danger:#ff6b6b;z-index:2147483647;pointer-events:none;color:var(--text);font-family:Inter,Segoe UI,Microsoft YaHei,system-ui,-apple-system,sans-serif;font-size:14px;line-height:1.4;position:fixed;inset:0}.floating-button,.player-panel{pointer-events:auto}.floating-button{color:#fff;background:var(--accent);cursor:pointer;border:1px solid #ff9bb8;border-radius:50%;place-items:center;width:48px;height:48px;display:grid;position:fixed;bottom:76px;right:24px;box-shadow:0 10px 28px #0000004d}.player-panel{border:1px solid var(--border);background:var(--bg);border-radius:8px;flex-direction:column;width:min(400px,100vw - 24px);max-height:min(720px,100vh - 24px);display:flex;position:fixed;bottom:20px;right:20px;overflow:hidden;box-shadow:0 18px 60px #0000006b}.panel-header,.playlist-toolbar,.transport,.editor-heading,.inline-form{align-items:center;display:flex}.panel-header{border-bottom:1px solid var(--border);justify-content:space-between;min-height:48px;padding:0 12px 0 14px}.brand{align-items:center;gap:8px;min-width:0;display:flex}.brand-icon{color:#fff;background:var(--accent);border-radius:6px;place-items:center;width:26px;height:26px;display:grid}.brand strong{font-size:14px}.version{color:var(--muted);font-size:11px}.icon-button,.row-action{cursor:pointer;background:0 0;border:0;flex:none;place-items:center;display:inline-grid}.icon-button{width:34px;height:34px;color:var(--muted);border-radius:6px}.icon-button:hover:not(:disabled),.row-action:hover:not(:disabled){color:var(--text);background:var(--surface-hover)}.icon-button:disabled,.add-current-button:disabled,.current-time-button:disabled{cursor:not-allowed;opacity:.4}.icon-button.accent,.audio-mode-button.detecting{color:var(--accent)}.audio-mode-button.active{color:var(--cyan);background:#36c5b71f}.audio-mode-button.fallback{color:var(--danger);background:#ff6b6b1a}.danger:hover:not(:disabled){color:var(--danger)}.now-playing{align-items:center;gap:12px;min-height:82px;padding:12px 14px 8px;display:flex}.cover{border:1px solid var(--border);width:58px;height:58px;color:var(--cyan);background:var(--surface);border-radius:6px;flex:none;place-items:center;display:grid;overflow:hidden}.cover img{object-fit:cover;width:100%;height:100%}.now-playing-copy{flex-direction:column;gap:4px;min-width:0;display:flex}.now-playing-copy strong,.track-copy strong{text-overflow:ellipsis;white-space:nowrap;overflow:hidden}.now-playing-copy strong{font-size:15px}.now-playing-copy span,.track-copy span,.time-row,.track-duration{color:var(--muted);font-size:12px}.progress-area{padding:2px 14px 0}.range{width:100%;height:18px;accent-color:var(--accent);cursor:pointer;margin:0}.time-row{font-variant-numeric:tabular-nums;justify-content:space-between;margin-top:-2px;display:flex}.transport{justify-content:center;gap:7px;min-height:54px;padding:4px 12px 8px}.play-button{color:#fff;background:var(--accent);cursor:pointer;border:0;border-radius:50%;place-items:center;width:42px;height:42px;display:grid}.play-button:hover{background:var(--accent-hover)}.volume-control{align-items:center;width:92px;display:flex}.volume-range{width:56px}.status-message{border:1px solid var(--border);min-height:30px;color:var(--muted);background:var(--surface);text-align:left;border-radius:6px;margin:0 14px 8px;padding:5px 8px}.status-message.actionable{border-color:var(--accent);color:var(--text);cursor:pointer}.audio-only-status{cursor:default;align-items:center;display:flex}.audio-only-status.detecting{border-color:var(--accent)}.audio-only-status.active{border-color:var(--cyan);color:var(--text)}.audio-only-status.fallback{border-color:var(--danger);color:var(--text)}.playlist-toolbar{border-top:1px solid var(--border);border-bottom:1px solid var(--border);gap:5px;min-height:44px;padding:6px 10px 6px 14px}.playlist-toolbar select{border:1px solid var(--border);min-width:0;height:32px;color:var(--text);background:var(--surface);border-radius:6px;flex:1;padding:0 30px 0 9px}.inline-form{gap:6px;padding:8px 14px 0}.inline-form input,.track-editor input{border:1px solid var(--border);min-width:0;height:34px;color:var(--text);background:var(--surface);border-radius:6px;outline:none;padding:0 9px}.inline-form input{flex:1}.inline-form input:focus,.track-editor input:focus,.playlist-toolbar select:focus{border-color:var(--accent)}.add-current-button,.save-track-button,.current-time-button{cursor:pointer;border:0;border-radius:6px;justify-content:center;align-items:center;display:flex}.add-current-button{color:#fff;background:var(--accent);gap:7px;min-height:36px;margin:10px 14px}.add-current-button:hover:not(:disabled),.save-track-button:hover{background:var(--accent-hover)}.track-editor{border-top:1px solid var(--border);border-bottom:1px solid var(--border);background:#1c1e23;flex-direction:column;gap:8px;padding:10px 14px 12px;display:flex}.editor-heading{justify-content:space-between;min-height:28px}.track-editor label{flex-direction:column;flex:1;gap:4px;min-width:0;display:flex}.track-editor label>span{color:var(--muted);font-size:12px}.time-fields{align-items:flex-end;gap:6px;display:flex}.current-time-button{width:66px;height:34px;color:var(--text);background:var(--surface);flex:none;gap:4px}.editor-error{color:var(--danger);font-size:12px}.save-track-button{color:#fff;background:var(--accent);gap:6px;height:34px}.track-list{overscroll-behavior:contain;min-height:110px;overflow:hidden auto}.track-row{border-bottom:1px solid #383b44a6;grid-template-columns:minmax(0,1fr) 32px 32px;align-items:stretch;min-height:54px;display:grid}.track-row:hover{background:var(--surface)}.track-row.active{box-shadow:inset 3px 0 var(--accent);background:#25242a}.track-main{min-width:0;color:var(--text);text-align:left;cursor:pointer;background:0 0;border:0;grid-template-columns:32px minmax(0,1fr) auto;align-items:center;gap:7px;padding:7px 5px 7px 11px;display:grid}.track-index{width:28px;color:var(--muted);font-variant-numeric:tabular-nums;place-items:center;font-size:11px;display:grid}.track-row.active .track-index{color:var(--accent)}.track-copy{flex-direction:column;gap:2px;min-width:0;display:flex}.track-copy strong{font-size:13px}.track-duration{font-variant-numeric:tabular-nums;padding-left:6px}.row-action{width:32px;min-height:32px;color:var(--muted);border-radius:5px;align-self:center}.empty-state{min-height:118px;color:var(--muted);flex-direction:column;justify-content:center;align-items:center;gap:7px;display:flex}@media (width<=520px){.player-panel{max-height:calc(100vh - 24px);bottom:12px;right:12px}.floating-button{bottom:64px;right:16px}.volume-control{width:76px}.volume-range{width:42px}}";
+	var styles_default = ":host{all:initial;--lightningcss-light: ;--lightningcss-dark:initial;color-scheme:dark}:host([data-web-fullscreen]){display:none!important}*,:before,:after{box-sizing:border-box}button,input,select{font:inherit;letter-spacing:0}button{color:inherit}#bilibili-music-player-root{--bg:#17181c;--surface:#22242a;--surface-hover:#2a2d34;--border:#383b44;--text:#f4f4f5;--muted:#a8abb4;--accent:#fb7299;--accent-hover:#ff8bad;--cyan:#36c5b7;--danger:#ff6b6b;z-index:2147483647;pointer-events:none;color:var(--text);font-family:Inter,Segoe UI,Microsoft YaHei,system-ui,-apple-system,sans-serif;font-size:14px;line-height:1.4;position:fixed;inset:0}.floating-button,.player-panel{pointer-events:auto}.floating-button{color:#fff;background:var(--accent);cursor:pointer;border:1px solid #ff9bb8;border-radius:50%;place-items:center;width:48px;height:48px;display:grid;position:fixed;bottom:76px;right:24px;box-shadow:0 10px 28px #0000004d}.player-panel{border:1px solid var(--border);background:var(--bg);border-radius:8px;flex-direction:column;width:min(400px,100vw - 24px);max-height:min(720px,100vh - 24px);display:flex;position:fixed;bottom:20px;right:20px;overflow:hidden;box-shadow:0 18px 60px #0000006b}.panel-header,.playlist-toolbar,.transport,.editor-heading,.inline-form{align-items:center;display:flex}.panel-header{border-bottom:1px solid var(--border);justify-content:space-between;min-height:48px;padding:0 12px 0 14px}.brand{align-items:center;gap:8px;min-width:0;display:flex}.brand-icon{color:#fff;background:var(--accent);border-radius:6px;place-items:center;width:26px;height:26px;display:grid}.brand strong{font-size:14px}.version{color:var(--muted);font-size:11px}.icon-button,.row-action{cursor:pointer;background:0 0;border:0;flex:none;place-items:center;display:inline-grid}.icon-button{width:34px;height:34px;color:var(--muted);border-radius:6px}.icon-button:hover:not(:disabled),.row-action:hover:not(:disabled){color:var(--text);background:var(--surface-hover)}.icon-button:disabled,.add-current-button:disabled,.current-time-button:disabled{cursor:not-allowed;opacity:.4}.icon-button.accent{color:var(--accent)}.audio-mode-button.detecting{color:var(--accent);animation:1.4s ease-in-out infinite audio-mode-pulse}.audio-mode-button.active{color:var(--cyan);background:#36c5b71f}.audio-mode-button.fallback{color:var(--danger);background:#ff6b6b1a}@keyframes audio-mode-pulse{50%{color:var(--cyan);background:#36c5b71a}}@media (prefers-reduced-motion:reduce){.audio-mode-button.detecting{animation:none}}.danger:hover:not(:disabled){color:var(--danger)}.now-playing{align-items:center;gap:12px;min-height:82px;padding:12px 14px 8px;display:flex}.cover{border:1px solid var(--border);width:58px;height:58px;color:var(--cyan);background:var(--surface);border-radius:6px;flex:none;place-items:center;display:grid;overflow:hidden}.cover img{object-fit:cover;width:100%;height:100%}.now-playing-copy{flex-direction:column;flex:1;gap:2px;min-width:0;display:flex}.now-playing-copy strong,.track-copy strong{text-overflow:ellipsis;white-space:nowrap;overflow:hidden}.now-playing-copy strong{font-size:15px}.now-playing-copy>span,.track-copy span,.time-row,.track-duration{color:var(--muted);font-size:12px}.playlist-context-chip{width:fit-content;max-width:100%;height:18px;color:var(--accent);white-space:nowrap;cursor:pointer;background:#fb729914;border:1px solid #fb72998c;border-radius:999px;align-items:center;padding:0 6px;font-size:11px;line-height:16px;display:inline-flex}.playlist-context-chip:hover{color:var(--text);background:#fb729929}.progress-area{padding:2px 14px 0}.range{width:100%;height:18px;accent-color:var(--accent);cursor:pointer;margin:0}.time-row{font-variant-numeric:tabular-nums;justify-content:space-between;margin-top:-2px;display:flex}.transport{justify-content:center;gap:7px;min-height:54px;padding:4px 12px 8px}.play-button{color:#fff;background:var(--accent);cursor:pointer;border:0;border-radius:50%;place-items:center;width:42px;height:42px;display:grid}.play-button:hover{background:var(--accent-hover)}.volume-control{align-items:center;width:92px;display:flex}.volume-range{width:56px}.status-message{border:1px solid var(--border);width:calc(100% - 28px);min-height:30px;color:var(--muted);background:var(--surface);text-align:left;text-overflow:ellipsis;white-space:nowrap;border-radius:6px;margin:0 14px 8px;padding:5px 8px;display:block;overflow:hidden}.status-message.actionable{border-color:var(--accent);color:var(--text);cursor:pointer}.status-message.fallback{border-color:var(--danger);color:var(--text)}.playlist-toolbar{border-top:1px solid var(--border);border-bottom:1px solid var(--border);gap:5px;min-height:44px;padding:6px 10px 6px 14px}.playlist-toolbar select{border:1px solid var(--border);min-width:0;height:32px;color:var(--text);background:var(--surface);border-radius:6px;flex:1;padding:0 30px 0 9px}.inline-form{gap:6px;padding:8px 14px 0}.inline-form input,.track-editor input{border:1px solid var(--border);min-width:0;height:34px;color:var(--text);background:var(--surface);border-radius:6px;outline:none;padding:0 9px}.inline-form input{flex:1}.inline-form input:focus,.track-editor input:focus,.playlist-toolbar select:focus{border-color:var(--accent)}.add-current-button,.save-track-button,.current-time-button{cursor:pointer;border:0;border-radius:6px;justify-content:center;align-items:center;display:flex}.add-current-button{color:#fff;background:var(--accent);gap:7px;min-height:36px;margin:10px 14px}.add-current-button:hover:not(:disabled),.save-track-button:hover{background:var(--accent-hover)}.track-editor{border-top:1px solid var(--border);border-bottom:1px solid var(--border);background:#1c1e23;flex-direction:column;gap:8px;padding:10px 14px 12px;display:flex}.editor-heading{justify-content:space-between;min-height:28px}.track-editor label{flex-direction:column;flex:1;gap:4px;min-width:0;display:flex}.track-editor label>span{color:var(--muted);font-size:12px}.time-fields{align-items:flex-end;gap:6px;display:flex}.current-time-button{width:66px;height:34px;color:var(--text);background:var(--surface);flex:none;gap:4px}.editor-error{color:var(--danger);font-size:12px}.save-track-button{color:#fff;background:var(--accent);gap:6px;height:34px}.track-list{overscroll-behavior:contain;min-height:110px;overflow:hidden auto}.track-row{border-bottom:1px solid #383b44a6;grid-template-columns:minmax(0,1fr) 32px 32px;align-items:stretch;min-height:54px;display:grid}.track-row:hover{background:var(--surface)}.track-row.active{box-shadow:inset 3px 0 var(--accent);background:#25242a}.track-main{min-width:0;color:var(--text);text-align:left;cursor:pointer;background:0 0;border:0;grid-template-columns:32px minmax(0,1fr) auto;align-items:center;gap:7px;padding:7px 5px 7px 11px;display:grid}.track-index{width:28px;color:var(--muted);font-variant-numeric:tabular-nums;place-items:center;font-size:11px;display:grid}.track-row.active .track-index{color:var(--accent)}.track-copy{flex-direction:column;gap:2px;min-width:0;display:flex}.track-copy strong{font-size:13px}.track-duration{font-variant-numeric:tabular-nums;padding-left:6px}.row-action{width:32px;min-height:32px;color:var(--muted);border-radius:5px;align-self:center}.empty-state{min-height:118px;color:var(--muted);flex-direction:column;justify-content:center;align-items:center;gap:7px;display:flex}@media (width<=520px){.player-panel{max-height:calc(100vh - 24px);bottom:12px;right:12px}.floating-button{bottom:64px;right:16px}.volume-control{width:76px}.volume-range{width:42px}}";
 	var _style = (b, a = document.createElement("style")) => (a.append(b), a);
 	var styles_css_default = _style(styles_default);
 	var t$1;
@@ -858,6 +858,10 @@
 		const nowPlaying = runtime.nowPlaying;
 		const progressMinimum = nowPlaying.startTime;
 		const progressMaximum = nowPlaying.endTime ?? (runtime.duration > 0 ? runtime.duration : nowPlaying.storedDuration);
+		const audioFallbackNotice = audioOnlyState.status === "fallback" ? `纯音频模式未生效，已回退正常视频：${audioOnlyReasonLabel(audioOnlyState.reason)}` : void 0;
+		const primaryNotice = runtime.message ?? audioFallbackNotice;
+		const noticeActionable = Boolean(runtime.message && runtime.requiresInteraction);
+		const noticeFallback = !runtime.message && Boolean(audioFallbackNotice);
 		const createPlaylist = (event) => {
 			event.preventDefault();
 			store.createPlaylist(newPlaylistName);
@@ -926,10 +930,21 @@
 						})
 					}), u$1("div", {
 						class: "now-playing-copy",
-						children: [u$1("strong", {
-							title: nowPlaying.title,
-							children: nowPlaying.title
-						}), u$1("span", { children: nowPlaying.uploader ?? (runtime.mediaReady ? "当前 Bilibili 视频" : "等待播放器") })]
+						children: [
+							u$1("strong", {
+								title: nowPlaying.title,
+								children: nowPlaying.title
+							}),
+							u$1("span", { children: nowPlaying.uploader ?? (runtime.mediaReady ? "当前 Bilibili 视频" : "等待播放器") }),
+							runtime.playbackContext === "playlist" && u$1("button", {
+								class: "playlist-context-chip",
+								type: "button",
+								title: "退出歌单播放并继续播放完整视频",
+								"aria-label": "退出歌单播放并继续播放完整视频",
+								onClick: () => engine.exitPlaylistPlayback(),
+								children: "播放完整视频"
+							})
+						]
 					})]
 				}),
 				u$1("div", {
@@ -1038,23 +1053,18 @@
 						})
 					]
 				}),
-				runtime.message && u$1("button", {
-					class: `status-message ${runtime.requiresInteraction ? "actionable" : ""}`,
+				primaryNotice && (noticeActionable ? u$1("button", {
+					class: "status-message actionable",
 					type: "button",
-					onClick: () => runtime.requiresInteraction && void engine.togglePlayback(),
-					children: runtime.message
-				}),
-				audioOnlyState.requested && u$1("div", {
-					class: `status-message audio-only-status ${audioOnlyState.status}`,
+					title: primaryNotice,
+					onClick: () => void engine.togglePlayback(),
+					children: primaryNotice
+				}) : u$1("div", {
+					class: `status-message ${noticeFallback ? "fallback" : ""}`,
 					role: "status",
-					children: audioOnlyStatusMessage(audioOnlyState)
-				}),
-				runtime.playbackContext === "playlist" && u$1("button", {
-					class: "status-message actionable playlist-context-message",
-					type: "button",
-					onClick: () => engine.exitPlaylistPlayback(),
-					children: "正在按歌单片段播放，点击退出并继续播放完整视频"
-				}),
+					title: primaryNotice,
+					children: primaryNotice
+				})),
 				u$1("div", {
 					class: "playlist-toolbar",
 					children: [
@@ -1337,16 +1347,8 @@
 		switch (state.status) {
 			case "detecting": return "纯音频模式正在检测播放流；点击关闭并重载";
 			case "active": return "纯音频模式已生效；点击关闭并重载";
-			case "fallback": return "纯音频模式未生效；点击关闭并重载";
+			case "fallback": return `纯音频模式未生效，已回退正常视频：${audioOnlyReasonLabel(state.reason)}；点击关闭并重载`;
 			default: return "开启纯音频模式并重载页面";
-		}
-	}
-	function audioOnlyStatusMessage(state) {
-		switch (state.status) {
-			case "detecting": return "纯音频模式：正在检测 DASH 播放流…";
-			case "active": return "纯音频模式已生效：视频流已被移除";
-			case "fallback": return `纯音频模式未生效，已回退正常视频：${audioOnlyReasonLabel(state.reason)}`;
-			default: return "";
 		}
 	}
 	function audioOnlyReasonLabel(reason) {
@@ -2841,9 +2843,10 @@ html[${ROOT_ATTRIBUTE}="active"] video.bpx-player-video {
 				automatic
 			});
 			if (!track) {
-				this.media?.pause();
-				this.exitPlaylistContext();
-				this.setMessage("播放列表已结束");
+				if (automatic) {
+					this.media?.pause();
+					this.exitPlaylistContext();
+				}
 				return;
 			}
 			this.playTrack(track);

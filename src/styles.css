@@ -165,6 +165,7 @@ button {
 
 .audio-mode-button.detecting {
   color: var(--accent);
+  animation: audio-mode-pulse 1.4s ease-in-out infinite;
 }
 
 .audio-mode-button.active {
@@ -175,6 +176,19 @@ button {
 .audio-mode-button.fallback {
   color: var(--danger);
   background: rgb(255 107 107 / 10%);
+}
+
+@keyframes audio-mode-pulse {
+  50% {
+    color: var(--cyan);
+    background: rgb(54 197 183 / 10%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .audio-mode-button.detecting {
+    animation: none;
+  }
 }
 
 .danger:hover:not(:disabled) {
@@ -211,8 +225,9 @@ button {
 .now-playing-copy {
   display: flex;
   min-width: 0;
+  flex: 1;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
 .now-playing-copy strong,
@@ -226,12 +241,34 @@ button {
   font-size: 15px;
 }
 
-.now-playing-copy span,
+.now-playing-copy > span,
 .track-copy span,
 .time-row,
 .track-duration {
   color: var(--muted);
   font-size: 12px;
+}
+
+.playlist-context-chip {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  height: 18px;
+  align-items: center;
+  border: 1px solid rgb(251 114 153 / 55%);
+  border-radius: 999px;
+  padding: 0 6px;
+  color: var(--accent);
+  background: rgb(251 114 153 / 8%);
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.playlist-context-chip:hover {
+  color: var(--text);
+  background: rgb(251 114 153 / 16%);
 }
 
 .progress-area {
@@ -287,14 +324,19 @@ button {
 }
 
 .status-message {
+  display: block;
+  width: calc(100% - 28px);
   min-height: 30px;
   margin: 0 14px 8px;
+  overflow: hidden;
   padding: 5px 8px;
   border: 1px solid var(--border);
   border-radius: 6px;
   color: var(--muted);
   background: var(--surface);
   text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .status-message.actionable {
@@ -303,22 +345,7 @@ button {
   cursor: pointer;
 }
 
-.audio-only-status {
-  display: flex;
-  align-items: center;
-  cursor: default;
-}
-
-.audio-only-status.detecting {
-  border-color: var(--accent);
-}
-
-.audio-only-status.active {
-  border-color: var(--cyan);
-  color: var(--text);
-}
-
-.audio-only-status.fallback {
+.status-message.fallback {
   border-color: var(--danger);
   color: var(--text);
 }

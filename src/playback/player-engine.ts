@@ -168,9 +168,10 @@ export class PlayerEngine {
     );
 
     if (!track) {
-      this.media?.pause();
-      this.exitPlaylistContext();
-      this.setMessage("播放列表已结束");
+      if (automatic) {
+        this.media?.pause();
+        this.exitPlaylistContext();
+      }
       return;
     }
 
