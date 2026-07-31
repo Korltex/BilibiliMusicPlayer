@@ -30,7 +30,7 @@ import {
   createTrackFromCurrentPage,
   readCurrentVideoMetadata,
 } from "../bili/metadata";
-import { formatTime } from "../core/time";
+import { formatTime, toEndSecond, toStartSecond } from "../core/time";
 import type { PlayMode, Track } from "../core/types";
 
 interface AppProps {
@@ -388,11 +388,9 @@ export function App({ store, engine, audioOnly }: AppProps) {
                   <strong>{track.title}</strong>
                   <span>
                     {track.uploader ?? track.bvid}
-                    {track.startTime > 0 || track.endTime !== undefined
-                      ? ` · ${formatTime(track.startTime)}–${formatTime(
-                          track.endTime ?? track.duration,
-                        )}`
-                      : ""}
+                    {` · ${formatTime(track.startTime)}–${formatTime(
+                      track.endTime ?? track.duration,
+                    )}`}
                   </span>
                 </span>
                 <span class="track-duration">
@@ -437,9 +435,11 @@ interface TrackEditorProps {
 function TrackEditor({ media, track, onCancel, onSave }: TrackEditorProps) {
   const metadata = readCurrentVideoMetadata();
   const [title, setTitle] = useState(track?.title ?? metadata?.title ?? "");
-  const [startTime, setStartTime] = useState(String(track?.startTime ?? 0));
+  const [startTime, setStartTime] = useState(
+    String(toStartSecond(track?.startTime ?? 0)),
+  );
   const [endTime, setEndTime] = useState(
-    track?.endTime === undefined ? "" : String(track.endTime),
+    track?.endTime === undefined ? "" : String(toEndSecond(track.endTime)),
   );
   const [error, setError] = useState("");
 
@@ -456,7 +456,19 @@ function TrackEditor({ media, track, onCancel, onSave }: TrackEditorProps) {
       setError("开始时间无效");
       return;
     }
-    if (end !== undefined && (!Number.isFinite(end) || end <= start)) {
+    if (!Number.isInteger(start)) {
+      setError("开始时间必须是整数秒");
+      return;
+    }
+    if (end !== undefined && !Number.isFinite(end)) {
+      setError("结束时间无效");
+      return;
+    }
+    if (end !== undefined && !Number.isInteger(end)) {
+      setError("结束时间必须是整数秒");
+      return;
+    }
+    if (end !== undefined && end <= start) {
       setError("结束时间必须晚于开始时间");
       return;
     }
@@ -512,16 +524,24 @@ function TrackEditor({ media, track, onCancel, onSave }: TrackEditorProps) {
           <input
             type="number"
             min="0"
-            step="0.1"
+            step="1"
             value={startTime}
             onInput={(event) => setStartTime(event.currentTarget.value)}
+            onInvalid={(event) => {
+              if (event.currentTarget.validity.stepMismatch) {
+                event.preventDefault();
+                setError("开始时间必须是整数秒");
+              }
+            }}
           />
         </label>
         <button
           class="current-time-button"
           type="button"
           disabled={!media}
-          onClick={() => setStartTime(String(media?.currentTime ?? 0))}
+          onClick={() =>
+            setStartTime(String(toStartSecond(media?.currentTime ?? 0)))
+          }
         >
           <Clock3 size={15} aria-hidden="true" />
           当前
@@ -533,16 +553,24 @@ function TrackEditor({ media, track, onCancel, onSave }: TrackEditorProps) {
           <input
             type="number"
             min="0"
-            step="0.1"
+            step="1"
             value={endTime}
             onInput={(event) => setEndTime(event.currentTarget.value)}
+            onInvalid={(event) => {
+              if (event.currentTarget.validity.stepMismatch) {
+                event.preventDefault();
+                setError("结束时间必须是整数秒");
+              }
+            }}
           />
         </label>
         <button
           class="current-time-button"
           type="button"
           disabled={!media}
-          onClick={() => setEndTime(String(media?.currentTime ?? ""))}
+          onClick={() =>
+            setEndTime(media ? String(toEndSecond(media.currentTime)) : "")
+          }
         >
           <Clock3 size={15} aria-hidden="true" />
           当前

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bilibili 音乐播放器
 // @namespace    bilibili-music-player
-// @version      0.1.1
+// @version      0.1.2
 // @author       Korltex
 // @description  在 Bilibili 视频页面中控制原生播放器、管理音乐歌单并可选纯音频模式
 // @license      MIT
@@ -795,6 +795,12 @@
 	function clamp(value, minimum, maximum) {
 		return Math.min(maximum, Math.max(minimum, value));
 	}
+	function toStartSecond(value) {
+		return Math.floor(value);
+	}
+	function toEndSecond(value) {
+		return Math.ceil(value);
+	}
 	function formatTime(value) {
 		if (!Number.isFinite(value) || value < 0) return "00:00";
 		const totalSeconds = Math.floor(value);
@@ -902,7 +908,7 @@
 							u$1("strong", { children: "Bilibili 音乐播放器" }),
 							u$1("span", {
 								class: "version",
-								children: "0.1.1"
+								children: "0.1.2"
 							})
 						]
 					}), u$1("button", {
@@ -1170,7 +1176,7 @@
 									}),
 									u$1("span", {
 										class: "track-copy",
-										children: [u$1("strong", { children: track.title }), u$1("span", { children: [track.uploader ?? track.bvid, track.startTime > 0 || track.endTime !== void 0 ? ` · ${formatTime(track.startTime)}–${formatTime(track.endTime ?? track.duration)}` : ""] })]
+										children: [u$1("strong", { children: track.title }), u$1("span", { children: [track.uploader ?? track.bvid, ` · ${formatTime(track.startTime)}–${formatTime(track.endTime ?? track.duration)}`] })]
 									}),
 									u$1("span", {
 										class: "track-duration",
@@ -1209,8 +1215,8 @@
 	function TrackEditor({ media, track, onCancel, onSave }) {
 		const metadata = readCurrentVideoMetadata();
 		const [title, setTitle] = d$2(track?.title ?? metadata?.title ?? "");
-		const [startTime, setStartTime] = d$2(String(track?.startTime ?? 0));
-		const [endTime, setEndTime] = d$2(track?.endTime === void 0 ? "" : String(track.endTime));
+		const [startTime, setStartTime] = d$2(String(toStartSecond(track?.startTime ?? 0)));
+		const [endTime, setEndTime] = d$2(track?.endTime === void 0 ? "" : String(toEndSecond(track.endTime)));
 		const [error, setError] = d$2("");
 		h$2(() => {
 			setError("");
@@ -1223,7 +1229,19 @@
 				setError("开始时间无效");
 				return;
 			}
-			if (end !== void 0 && (!Number.isFinite(end) || end <= start)) {
+			if (!Number.isInteger(start)) {
+				setError("开始时间必须是整数秒");
+				return;
+			}
+			if (end !== void 0 && !Number.isFinite(end)) {
+				setError("结束时间无效");
+				return;
+			}
+			if (end !== void 0 && !Number.isInteger(end)) {
+				setError("结束时间必须是整数秒");
+				return;
+			}
+			if (end !== void 0 && end <= start) {
 				setError("结束时间必须晚于开始时间");
 				return;
 			}
@@ -1275,14 +1293,20 @@
 					children: [u$1("label", { children: [u$1("span", { children: "开始时间（秒）" }), u$1("input", {
 						type: "number",
 						min: "0",
-						step: "0.1",
+						step: "1",
 						value: startTime,
-						onInput: (event) => setStartTime(event.currentTarget.value)
+						onInput: (event) => setStartTime(event.currentTarget.value),
+						onInvalid: (event) => {
+							if (event.currentTarget.validity.stepMismatch) {
+								event.preventDefault();
+								setError("开始时间必须是整数秒");
+							}
+						}
 					})] }), u$1("button", {
 						class: "current-time-button",
 						type: "button",
 						disabled: !media,
-						onClick: () => setStartTime(String(media?.currentTime ?? 0)),
+						onClick: () => setStartTime(String(toStartSecond(media?.currentTime ?? 0))),
 						children: [u$1(Clock3, {
 							size: 15,
 							"aria-hidden": "true"
@@ -1294,14 +1318,20 @@
 					children: [u$1("label", { children: [u$1("span", { children: "结束时间（秒）" }), u$1("input", {
 						type: "number",
 						min: "0",
-						step: "0.1",
+						step: "1",
 						value: endTime,
-						onInput: (event) => setEndTime(event.currentTarget.value)
+						onInput: (event) => setEndTime(event.currentTarget.value),
+						onInvalid: (event) => {
+							if (event.currentTarget.validity.stepMismatch) {
+								event.preventDefault();
+								setError("结束时间必须是整数秒");
+							}
+						}
 					})] }), u$1("button", {
 						class: "current-time-button",
 						type: "button",
 						disabled: !media,
-						onClick: () => setEndTime(String(media?.currentTime ?? "")),
+						onClick: () => setEndTime(media ? String(toEndSecond(media.currentTime)) : ""),
 						children: [u$1(Clock3, {
 							size: 15,
 							"aria-hidden": "true"

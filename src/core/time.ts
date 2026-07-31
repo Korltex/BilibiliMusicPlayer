@@ -2,6 +2,14 @@ export function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value));
 }
 
+export function toStartSecond(value: number): number {
+  return Math.floor(value);
+}
+
+export function toEndSecond(value: number): number {
+  return Math.ceil(value);
+}
+
 export function formatTime(value: number): string {
   if (!Number.isFinite(value) || value < 0) {
     return "00:00";
