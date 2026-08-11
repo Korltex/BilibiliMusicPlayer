@@ -55,12 +55,29 @@ npm run test:e2e
 npm run format:check
 ```
 
+发布前可联网复核 CDN 文件与本地 SRI：
+
+```powershell
+npm run verify:cdn
+```
+
 构建产物：
 
 ```text
 dist/bilibili-music-player.user.js
 dist/bilibili-music-player.meta.js
 ```
+
+`npm run build` 会在生成产物后执行 Greasy Fork 合规审计，检查固定版本依赖、SHA-256、许可证声明、文件大小、可读性、动态代码以及意外打包的框架运行时。
+
+## Greasy Fork 发布说明
+
+- 主脚本和内嵌 CSS 均关闭压缩，保留可读的业务函数名和格式。
+- Preact、Hooks、JSX Runtime、Signals Core 和 Signals 通过五条固定版本的 jsDelivr `@require` 加载，不进入主脚本。
+- 每条 `@require` 的 `#sha256=` 都在构建时根据本地锁定版本的 UMD 文件生成；哈希不匹配时脚本管理器会拒绝加载，不提供内联回退。
+- E2E 测试按照相同顺序从本地 `node_modules` 注入五个运行时，因此测试不依赖 CDN 网络。
+- 图标使用仓库内可读的 SVG 组件，不再打包 `lucide-preact` 运行时。
+- 发布产物顶部包含 Preact、Signals、Lucide 和 Feather 的完整许可证声明；项目本身继续采用 MIT。详情见 [THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt)。
 
 ## 使用
 
@@ -76,7 +93,7 @@ dist/bilibili-music-player.meta.js
 
 - 当前只匹配普通 `/video/` 页面。
 - 暂未接入收藏夹、合集和分P批量导入。
-- 纯音频模式只改写 Bilibili 已取得的 DASH 清单，不解析、下载或保存 CDN 地址。
+- 纯音频模式在 `document-start` 拦截页面的 `fetch`、XHR 和初始 `window.__playinfo__`，只改写 Bilibili 已取得的 DASH 清单，不解析、下载或保存 CDN 地址。
 - 纯音频是 best-effort 功能；只有混流 `durl`、缺少 DASH 音频或拦截失败时会回退正常视频并显示原因。
 - 跨 BV 切歌需要页面导航，可能出现短暂停顿。
 - 浏览器拒绝自动播放时，需要点击一次播放按钮。

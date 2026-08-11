@@ -1,4 +1,5 @@
 import { useEffect, useState } from "preact/hooks";
+import { version } from "../../package.json";
 import {
   Clock3,
   Headphones,
@@ -18,7 +19,7 @@ import {
   Volume2,
   VolumeX,
   X,
-} from "lucide-preact";
+} from "./icons";
 import type { AppStore } from "./store";
 import type { PlayerEngine } from "../playback/player-engine";
 import type {
@@ -116,7 +117,7 @@ export function App({ store, engine, audioOnly }: AppProps) {
             <Music2 size={18} aria-hidden="true" />
           </span>
           <strong>Bilibili 音乐播放器</strong>
-          <span class="version">0.1.1</span>
+          <span class="version">{version}</span>
         </div>
         <button
           class="icon-button"

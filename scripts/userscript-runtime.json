@@ -1,0 +1,42 @@
+[
+  {
+    "module": "preact",
+    "global": "preact",
+    "url": "https://cdn.jsdelivr.net/npm/preact@10.29.7/dist/preact.min.umd.js",
+    "file": "node_modules/preact/dist/preact.min.umd.js",
+    "package": "preact",
+    "version": "10.29.7"
+  },
+  {
+    "module": "preact/hooks",
+    "global": "preactHooks",
+    "url": "https://cdn.jsdelivr.net/npm/preact@10.29.7/hooks/dist/hooks.umd.js",
+    "file": "node_modules/preact/hooks/dist/hooks.umd.js",
+    "package": "preact",
+    "version": "10.29.7"
+  },
+  {
+    "module": "preact/jsx-runtime",
+    "global": "jsxRuntime",
+    "url": "https://cdn.jsdelivr.net/npm/preact@10.29.7/jsx-runtime/dist/jsxRuntime.umd.js",
+    "file": "node_modules/preact/jsx-runtime/dist/jsxRuntime.umd.js",
+    "package": "preact",
+    "version": "10.29.7"
+  },
+  {
+    "module": "@preact/signals-core",
+    "global": "preactSignalsCore",
+    "url": "https://cdn.jsdelivr.net/npm/@preact/signals-core@1.14.4/dist/signals-core.min.js",
+    "file": "node_modules/@preact/signals-core/dist/signals-core.min.js",
+    "package": "@preact/signals-core",
+    "version": "1.14.4"
+  },
+  {
+    "module": "@preact/signals",
+    "global": "preactSignals",
+    "url": "https://cdn.jsdelivr.net/npm/@preact/signals@2.10.0/dist/signals.min.js",
+    "file": "node_modules/@preact/signals/dist/signals.min.js",
+    "package": "@preact/signals",
+    "version": "2.10.0"
+  }
+]

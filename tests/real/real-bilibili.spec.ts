@@ -1,12 +1,7 @@
-import { readFileSync } from "node:fs";
-import path from "node:path";
 import { expect, test } from "@playwright/test";
+import { BUILT_USERSCRIPT, injectBuiltUserscript } from "../helpers/userscript";
 
 const VIDEO_URL = "https://www.bilibili.com/video/BV1xQ4y157Qi/";
-const USER_SCRIPT = readFileSync(
-  path.resolve("dist/bilibili-music-player.user.js"),
-  "utf8",
-);
 
 test("mounts on a real public Bilibili video page", async ({
   page,
@@ -32,9 +27,7 @@ test("mounts on a real public Bilibili video page", async ({
     timeout: 30_000,
   });
 
-  await page.addScriptTag({
-    path: path.resolve("dist/bilibili-music-player.user.js"),
-  });
+  await injectBuiltUserscript(page);
 
   const openButton = page.getByRole("button", {
     name: "打开 Bilibili 音乐播放器",
@@ -187,7 +180,7 @@ test("requests audio but not advertised video media in audio-only mode", async (
           }
         })();
 
-        ${USER_SCRIPT}
+        ${BUILT_USERSCRIPT}
 
         (() => {
           const descriptor = Object.getOwnPropertyDescriptor(

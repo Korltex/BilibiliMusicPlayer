@@ -1,5 +1,5 @@
-import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
+import { injectBuiltUserscript } from "../helpers/userscript";
 
 const VIDEO_URL = "https://www.bilibili.com/video/BV1TestMusic/";
 const CURRENT_VIDEO_URL = "https://www.bilibili.com/video/BV1CurrentMusic/";
@@ -146,15 +146,16 @@ test("mounts, controls media, and saves a track", async ({
     };
   });
 
-  await page.addScriptTag({
-    path: path.resolve("dist/bilibili-music-player.user.js"),
-  });
+  await injectBuiltUserscript(page);
 
-  await page
-    .getByRole("button", {
-      name: "打开 Bilibili 音乐播放器",
-    })
-    .click();
+  const launcher = page.getByRole("button", {
+    name: "打开 Bilibili 音乐播放器",
+  });
+  const launcherIcon = launcher.locator("svg");
+  await expect(launcherIcon).toHaveAttribute("stroke-width", "2");
+  await expect(launcherIcon).toHaveAttribute("stroke-linecap", "round");
+  await expect(launcherIcon).toHaveAttribute("stroke-linejoin", "round");
+  await launcher.click();
   await expect(
     page.getByRole("region", { name: "Bilibili 音乐播放器" }),
   ).toBeVisible();
@@ -386,9 +387,7 @@ test("uses the actual page metadata when the queue cursor points elsewhere", asy
     };
   });
 
-  await page.addScriptTag({
-    path: path.resolve("dist/bilibili-music-player.user.js"),
-  });
+  await injectBuiltUserscript(page);
   await page
     .getByRole("button", {
       name: "打开 Bilibili 音乐播放器",
@@ -557,9 +556,7 @@ test("plays the full video on a normal visit even when the same BV is the queue 
     };
   });
 
-  await page.addScriptTag({
-    path: path.resolve("dist/bilibili-music-player.user.js"),
-  });
+  await injectBuiltUserscript(page);
   await page.locator(".floating-button").click();
 
   const panel = page.locator(".player-panel");
@@ -629,9 +626,7 @@ test("hides the player UI in web fullscreen and restores its previous state", as
   });
 
   await page.goto(WEB_FULLSCREEN_URL);
-  await page.addScriptTag({
-    path: path.resolve("dist/bilibili-music-player.user.js"),
-  });
+  await injectBuiltUserscript(page);
 
   const host = page.locator("#bilibili-music-player-host");
   const launcher = page.locator(".floating-button");
@@ -713,9 +708,7 @@ test("uses whole seconds for new track boundaries", async ({ page }) => {
       muted: { get: () => false, set: () => {} },
     });
   });
-  await page.addScriptTag({
-    path: path.resolve("dist/bilibili-music-player.user.js"),
-  });
+  await injectBuiltUserscript(page);
 
   await page.locator(".floating-button").click();
   await page.locator(".add-current-button").click();
@@ -818,9 +811,7 @@ test("normalizes legacy fractional boundaries only when an edit is saved", async
   await installLocalStorageGm(page, legacyData);
 
   await page.goto(LEGACY_TIME_URL);
-  await page.addScriptTag({
-    path: path.resolve("dist/bilibili-music-player.user.js"),
-  });
+  await injectBuiltUserscript(page);
   await page.locator(".floating-button").click();
 
   const editButton = page.locator(".track-row .row-action").first();
@@ -939,9 +930,7 @@ test("shows the effective full-video range without storing an end time", async (
       muted: { get: () => false, set: () => {} },
     });
   });
-  await page.addScriptTag({
-    path: path.resolve("dist/bilibili-music-player.user.js"),
-  });
+  await injectBuiltUserscript(page);
   await page.locator(".floating-button").click();
 
   const rows = page.locator(".track-row");

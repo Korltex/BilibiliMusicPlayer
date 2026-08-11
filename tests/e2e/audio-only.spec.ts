@@ -1,16 +1,11 @@
-import { readFileSync } from "node:fs";
-import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
+import { BUILT_USERSCRIPT } from "../helpers/userscript";
 
 const PAGE_URL = "https://www.bilibili.com/video/BV1AudioOnly/";
 const API_URL = "https://www.bilibili.com/x/player/playurl";
 const BINARY_URL = "https://www.bilibili.com/test-binary";
 const STORAGE_PREFIX = "__bili_music_e2e__:";
 const AUDIO_ONLY_KEY = "bilibili-music-player:audio-only";
-const USER_SCRIPT = readFileSync(
-  path.resolve("dist/bilibili-music-player.user.js"),
-  "utf8",
-);
 
 test("rewrites initial __playinfo__ and hides only the video picture", async ({
   page,
@@ -414,7 +409,7 @@ async function installAtDocumentStart(
           },
         });
       })();
-      ${USER_SCRIPT}
+      ${BUILT_USERSCRIPT}
     `,
   });
 }
