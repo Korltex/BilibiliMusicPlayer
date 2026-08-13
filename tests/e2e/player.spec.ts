@@ -104,6 +104,16 @@ test("mounts, controls media, and saves a track", async ({
 
   await page.goto(VIDEO_URL);
   await page.evaluate(() => {
+    const pageState = window as Window & { spaceShortcutCount?: number };
+    pageState.spaceShortcutCount = 0;
+    document.addEventListener("keydown", (event) => {
+      if (event.code === "Space") {
+        pageState.spaceShortcutCount = (pageState.spaceShortcutCount ?? 0) + 1;
+        event.preventDefault();
+      }
+    });
+  });
+  await page.evaluate(() => {
     const media = document.querySelector("video")!;
     let paused = true;
     let currentTime = 12;
@@ -175,7 +185,18 @@ test("mounts, controls media, and saves a track", async ({
   await expect(panel.locator(".status-message")).toHaveCount(0);
 
   await page.getByRole("button", { name: "将当前视频添加到歌单" }).click();
-  await page.getByLabel("标题").fill("测试片段");
+  const titleInput = page.getByLabel("标题");
+  await titleInput.fill("测试");
+  await titleInput.press("End");
+  await titleInput.press("Space");
+  await expect(titleInput).toHaveValue("测试 ");
+  expect(
+    await page.evaluate(
+      () =>
+        (window as Window & { spaceShortcutCount?: number }).spaceShortcutCount,
+    ),
+  ).toBe(0);
+  await titleInput.fill("测试片段");
   await page.getByLabel("开始时间（秒）").fill("10");
   await page.getByLabel("结束时间（秒）").fill("90");
   await page.getByRole("button", { name: "保存", exact: true }).click();

@@ -52,6 +52,20 @@ function observeWebFullscreen(host: HTMLElement): () => void {
   return () => observer.disconnect();
 }
 
+function isolateKeyboardEvents(mountPoint: HTMLElement): () => void {
+  const stopPropagation = (event: KeyboardEvent) => {
+    event.stopPropagation();
+  };
+
+  mountPoint.addEventListener("keydown", stopPropagation);
+  mountPoint.addEventListener("keyup", stopPropagation);
+
+  return () => {
+    mountPoint.removeEventListener("keydown", stopPropagation);
+    mountPoint.removeEventListener("keyup", stopPropagation);
+  };
+}
+
 function mount(): void {
   if (document.getElementById(HOST_ID)) {
     return;
@@ -65,6 +79,7 @@ function mount(): void {
   shadowRoot.append(style, mountPoint);
   document.documentElement.append(host);
   const stopObservingWebFullscreen = observeWebFullscreen(host);
+  const stopIsolatingKeyboardEvents = isolateKeyboardEvents(mountPoint);
 
   const engine = new PlayerEngine(appStore);
   engine.start();
@@ -77,6 +92,7 @@ function mount(): void {
     "pagehide",
     () => {
       stopObservingWebFullscreen();
+      stopIsolatingKeyboardEvents();
       engine.stop();
       render(null, mountPoint);
     },

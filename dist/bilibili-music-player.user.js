@@ -2847,6 +2847,17 @@ html[${ROOT_ATTRIBUTE}="active"] video.bpx-player-video {
 		syncVisibility();
 		return () => observer.disconnect();
 	}
+	function isolateKeyboardEvents(mountPoint) {
+		const stopPropagation = (event) => {
+			event.stopPropagation();
+		};
+		mountPoint.addEventListener("keydown", stopPropagation);
+		mountPoint.addEventListener("keyup", stopPropagation);
+		return () => {
+			mountPoint.removeEventListener("keydown", stopPropagation);
+			mountPoint.removeEventListener("keyup", stopPropagation);
+		};
+	}
 	function mount() {
 		if (document.getElementById(HOST_ID)) return;
 		const host = document.createElement("div");
@@ -2857,6 +2868,7 @@ html[${ROOT_ATTRIBUTE}="active"] video.bpx-player-video {
 		shadowRoot.append(styles_css_default, mountPoint);
 		document.documentElement.append(host);
 		const stopObservingWebFullscreen = observeWebFullscreen(host);
+		const stopIsolatingKeyboardEvents = isolateKeyboardEvents(mountPoint);
 		const engine = new PlayerEngine(appStore);
 		engine.start();
 		(0, preact.render)((0, preact_jsx_runtime.jsx)(App, {
@@ -2866,6 +2878,7 @@ html[${ROOT_ATTRIBUTE}="active"] video.bpx-player-video {
 		}), mountPoint);
 		window.addEventListener("pagehide", () => {
 			stopObservingWebFullscreen();
+			stopIsolatingKeyboardEvents();
 			engine.stop();
 			(0, preact.render)(null, mountPoint);
 		}, { once: true });
