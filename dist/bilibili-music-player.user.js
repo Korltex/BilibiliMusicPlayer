@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bilibili 音乐播放器
 // @namespace    bilibili-music-player
-// @version      0.1.3
+// @version      0.1.4
 // @author       Korltex
 // @description  在 Bilibili 视频页面中控制原生播放器、管理音乐歌单并可选纯音频模式
 // @license      MIT
@@ -190,6 +190,8 @@
 		"  background: var(--accent);",
 		"  box-shadow: 0 10px 28px rgb(0 0 0 / 30%);",
 		"  cursor: pointer;",
+		"  touch-action: none;",
+		"  user-select: none;",
 		"}",
 		"",
 		".player-panel {",
@@ -221,6 +223,9 @@
 		"  justify-content: space-between;",
 		"  padding: 0 12px 0 14px;",
 		"  border-bottom: 1px solid var(--border);",
+		"  cursor: move;",
+		"  touch-action: none;",
+		"  user-select: none;",
 		"}",
 		"",
 		".brand {",
@@ -228,6 +233,13 @@
 		"  min-width: 0;",
 		"  align-items: center;",
 		"  gap: 8px;",
+		"}",
+		"",
+		".header-actions {",
+		"  display: flex;",
+		"  flex: 0 0 auto;",
+		"  align-items: center;",
+		"  gap: 2px;",
 		"}",
 		"",
 		".brand-icon {",
@@ -704,7 +716,7 @@
 	].join("\n");
 	var _style = (b, a = document.createElement("style")) => (a.append(b), a);
 	var styles_css_default = _style(styles_default);
-	var version = "0.1.3";
+	var version = "0.1.4";
 	function SvgIcon({ size = 24, strokeWidth = 2, children, ...props }) {
 		return (0, preact_jsx_runtime.jsx)("svg", {
 			xmlns: "http://www.w3.org/2000/svg",
@@ -820,6 +832,12 @@
 				(0, preact_jsx_runtime.jsx)("path", { d: "M21 13v1a4 4 0 0 1-4 4H3" }),
 				(0, preact_jsx_runtime.jsx)("path", { d: "M11 10h1v4" })
 			]
+		});
+	}
+	function RotateCcw(props) {
+		return (0, preact_jsx_runtime.jsxs)(SvgIcon, {
+			...props,
+			children: [(0, preact_jsx_runtime.jsx)("path", { d: "M3 12a9 9 0 1 0 3-6.7L3 8" }), (0, preact_jsx_runtime.jsx)("path", { d: "M3 3v5h5" })]
 		});
 	}
 	function Save(props) {
@@ -968,6 +986,177 @@
 		].map((part) => String(part).padStart(2, "0")).join(":");
 		return [minutes, seconds].map((part) => String(part).padStart(2, "0")).join(":");
 	}
+	var _GM_addValueChangeListener = (() => typeof GM_addValueChangeListener != "undefined" ? GM_addValueChangeListener : void 0)();
+	var _GM_getValue = (() => typeof GM_getValue != "undefined" ? GM_getValue : void 0)();
+	var _GM_removeValueChangeListener = (() => typeof GM_removeValueChangeListener != "undefined" ? GM_removeValueChangeListener : void 0)();
+	var _GM_setValue = (() => typeof GM_setValue != "undefined" ? GM_setValue : void 0)();
+	var _unsafeWindow = (() => typeof unsafeWindow != "undefined" ? unsafeWindow : void 0)();
+	var LAYOUT_STORAGE_KEY = "bilibili-music-player:layout";
+	var DEFAULT_LAYOUT = { version: 1 };
+	function readPosition(value) {
+		if (!value || typeof value !== "object") return;
+		const candidate = value;
+		if (typeof candidate.x !== "number" || !Number.isFinite(candidate.x) || typeof candidate.y !== "number" || !Number.isFinite(candidate.y)) return;
+		return {
+			x: candidate.x,
+			y: candidate.y
+		};
+	}
+	function migrateLayoutData(raw) {
+		if (!raw || typeof raw !== "object") return DEFAULT_LAYOUT;
+		const candidate = raw;
+		if (candidate.version !== 1) return DEFAULT_LAYOUT;
+		return {
+			version: 1,
+			launcher: readPosition(candidate.launcher),
+			panel: readPosition(candidate.panel)
+		};
+	}
+	var LayoutRepository = class {
+		load() {
+			return migrateLayoutData(_GM_getValue(LAYOUT_STORAGE_KEY));
+		}
+		savePosition(target, position) {
+			_GM_setValue(LAYOUT_STORAGE_KEY, {
+				...this.load(),
+				[target]: position
+			});
+		}
+		clearPosition(target) {
+			const layout = this.load();
+			delete layout[target];
+			_GM_setValue(LAYOUT_STORAGE_KEY, layout);
+		}
+	};
+	function clampPosition(position, elementSize, viewportSize) {
+		const maximumX = Math.max(0, viewportSize.width - elementSize.width);
+		const maximumY = Math.max(0, viewportSize.height - elementSize.height);
+		return {
+			x: Math.min(maximumX, Math.max(0, position.x)),
+			y: Math.min(maximumY, Math.max(0, position.y))
+		};
+	}
+	function positionsEqual(first, second) {
+		return first.x === second.x && first.y === second.y;
+	}
+	var DRAG_THRESHOLD = 4;
+	var layoutRepository = new LayoutRepository();
+	function viewportSize() {
+		return {
+			width: window.innerWidth,
+			height: window.innerHeight
+		};
+	}
+	function useDraggablePosition(target) {
+		const [element, setElement] = (0, preact_hooks.useState)(null);
+		const [position, setPosition] = (0, preact_hooks.useState)(() => layoutRepository.load()[target]);
+		const activeDrag = (0, preact_hooks.useRef)();
+		const suppressClick = (0, preact_hooks.useRef)(false);
+		const ref = (0, preact_hooks.useCallback)((nextElement) => {
+			setElement((currentElement) => currentElement === nextElement ? currentElement : nextElement);
+		}, []);
+		const clampCurrentPosition = (0, preact_hooks.useCallback)(() => {
+			if (!element) return;
+			setPosition((currentPosition) => {
+				if (!currentPosition) return currentPosition;
+				const bounds = element.getBoundingClientRect();
+				const nextPosition = clampPosition(currentPosition, {
+					width: bounds.width,
+					height: bounds.height
+				}, viewportSize());
+				return positionsEqual(currentPosition, nextPosition) ? currentPosition : nextPosition;
+			});
+		}, [element]);
+		(0, preact_hooks.useLayoutEffect)(clampCurrentPosition, [clampCurrentPosition]);
+		(0, preact_hooks.useEffect)(() => {
+			if (!element) return;
+			window.addEventListener("resize", clampCurrentPosition);
+			const resizeObserver = new ResizeObserver(clampCurrentPosition);
+			resizeObserver.observe(element);
+			return () => {
+				window.removeEventListener("resize", clampCurrentPosition);
+				resizeObserver.disconnect();
+			};
+		}, [clampCurrentPosition, element]);
+		const onPointerDown = (0, preact_hooks.useCallback)((event) => {
+			if (!element || !event.isPrimary || event.pointerType === "mouse" && event.button !== 0) return;
+			const bounds = element.getBoundingClientRect();
+			const originPosition = {
+				x: bounds.left,
+				y: bounds.top
+			};
+			suppressClick.current = false;
+			activeDrag.current = {
+				pointerId: event.pointerId,
+				captureElement: event.currentTarget,
+				movedElement: element,
+				originPointerX: event.clientX,
+				originPointerY: event.clientY,
+				originPosition,
+				lastPosition: originPosition,
+				dragged: false
+			};
+			event.currentTarget.setPointerCapture(event.pointerId);
+		}, [element]);
+		const onPointerMove = (0, preact_hooks.useCallback)((event) => {
+			const drag = activeDrag.current;
+			if (!drag || drag.pointerId !== event.pointerId) return;
+			const deltaX = event.clientX - drag.originPointerX;
+			const deltaY = event.clientY - drag.originPointerY;
+			if (!drag.dragged && Math.hypot(deltaX, deltaY) < DRAG_THRESHOLD) return;
+			drag.dragged = true;
+			const bounds = drag.movedElement.getBoundingClientRect();
+			const nextPosition = clampPosition({
+				x: drag.originPosition.x + deltaX,
+				y: drag.originPosition.y + deltaY
+			}, {
+				width: bounds.width,
+				height: bounds.height
+			}, viewportSize());
+			drag.lastPosition = nextPosition;
+			setPosition(nextPosition);
+			event.preventDefault();
+		}, []);
+		const finishDrag = (0, preact_hooks.useCallback)((event, cancelled) => {
+			const drag = activeDrag.current;
+			if (!drag || drag.pointerId !== event.pointerId) return;
+			if (drag.dragged) {
+				setPosition(drag.lastPosition);
+				layoutRepository.savePosition(target, drag.lastPosition);
+				suppressClick.current = !cancelled;
+			}
+			activeDrag.current = void 0;
+			if (drag.captureElement.hasPointerCapture(event.pointerId)) drag.captureElement.releasePointerCapture(event.pointerId);
+		}, [target]);
+		const onPointerUp = (0, preact_hooks.useCallback)((event) => finishDrag(event, false), [finishDrag]);
+		const onPointerCancel = (0, preact_hooks.useCallback)((event) => finishDrag(event, true), [finishDrag]);
+		const consumeSuppressedClick = (0, preact_hooks.useCallback)(() => {
+			if (!suppressClick.current) return false;
+			suppressClick.current = false;
+			return true;
+		}, []);
+		const resetPosition = (0, preact_hooks.useCallback)(() => {
+			activeDrag.current = void 0;
+			suppressClick.current = false;
+			setPosition(void 0);
+			layoutRepository.clearPosition(target);
+		}, [target]);
+		return {
+			ref,
+			style: position ? {
+				left: position.x,
+				top: position.y,
+				right: "auto",
+				bottom: "auto"
+			} : void 0,
+			onPointerDown,
+			onPointerMove,
+			onPointerUp,
+			onPointerCancel,
+			consumeSuppressedClick,
+			resetPosition
+		};
+	}
 	var PLAY_MODES = [
 		"sequence",
 		"list-loop",
@@ -985,6 +1174,8 @@
 		const [creatingPlaylist, setCreatingPlaylist] = (0, preact_hooks.useState)(false);
 		const [newPlaylistName, setNewPlaylistName] = (0, preact_hooks.useState)("");
 		const [editorTrack, setEditorTrack] = (0, preact_hooks.useState)();
+		const launcherDrag = useDraggablePosition("launcher");
+		const panelDrag = useDraggablePosition("panel");
 		const data = store.data.value;
 		const runtime = engine.state.value;
 		const audioOnlyState = audioOnly.state.value;
@@ -1007,22 +1198,43 @@
 			engine.setPlayMode(PLAY_MODES[(currentIndex + 1) % PLAY_MODES.length]);
 		};
 		if (!panelOpen) return (0, preact_jsx_runtime.jsx)("button", {
+			ref: launcherDrag.ref,
 			class: "floating-button",
 			type: "button",
+			style: launcherDrag.style,
 			title: "打开 Bilibili 音乐播放器",
 			"aria-label": "打开 Bilibili 音乐播放器",
-			onClick: () => setPanelOpen(true),
+			onPointerDown: launcherDrag.onPointerDown,
+			onPointerMove: launcherDrag.onPointerMove,
+			onPointerUp: launcherDrag.onPointerUp,
+			onPointerCancel: launcherDrag.onPointerCancel,
+			onClick: (event) => {
+				if (launcherDrag.consumeSuppressedClick()) {
+					event.preventDefault();
+					return;
+				}
+				setPanelOpen(true);
+			},
 			children: (0, preact_jsx_runtime.jsx)(Music2, {
 				size: 22,
 				"aria-hidden": "true"
 			})
 		});
 		return (0, preact_jsx_runtime.jsxs)("section", {
+			ref: panelDrag.ref,
 			class: "player-panel",
+			style: panelDrag.style,
 			"aria-label": "Bilibili 音乐播放器",
 			children: [
 				(0, preact_jsx_runtime.jsxs)("header", {
 					class: "panel-header",
+					onPointerDown: (event) => {
+						if (event.target instanceof Element && event.target.closest("button, input, select, textarea, a")) return;
+						panelDrag.onPointerDown(event);
+					},
+					onPointerMove: panelDrag.onPointerMove,
+					onPointerUp: panelDrag.onPointerUp,
+					onPointerCancel: panelDrag.onPointerCancel,
 					children: [(0, preact_jsx_runtime.jsxs)("div", {
 						class: "brand",
 						children: [
@@ -1039,16 +1251,32 @@
 								children: version
 							})
 						]
-					}), (0, preact_jsx_runtime.jsx)("button", {
-						class: "icon-button",
-						type: "button",
-						title: "收起播放器",
-						"aria-label": "收起播放器",
-						onClick: () => setPanelOpen(false),
-						children: (0, preact_jsx_runtime.jsx)(X, {
-							size: 18,
-							"aria-hidden": "true"
-						})
+					}), (0, preact_jsx_runtime.jsxs)("div", {
+						class: "header-actions",
+						children: [(0, preact_jsx_runtime.jsx)("button", {
+							class: "icon-button reset-position-button",
+							type: "button",
+							title: "重置图标和播放器位置",
+							"aria-label": "重置图标和播放器位置",
+							onClick: () => {
+								launcherDrag.resetPosition();
+								panelDrag.resetPosition();
+							},
+							children: (0, preact_jsx_runtime.jsx)(RotateCcw, {
+								size: 18,
+								"aria-hidden": "true"
+							})
+						}), (0, preact_jsx_runtime.jsx)("button", {
+							class: "icon-button close-panel-button",
+							type: "button",
+							title: "收起播放器",
+							"aria-label": "收起播放器",
+							onClick: () => setPanelOpen(false),
+							children: (0, preact_jsx_runtime.jsx)(X, {
+								size: 18,
+								"aria-hidden": "true"
+							})
+						})]
 					})]
 				}),
 				(0, preact_jsx_runtime.jsxs)("div", {
@@ -1524,11 +1752,6 @@
 			default: return "当前播放格式不受支持";
 		}
 	}
-	var _GM_addValueChangeListener = (() => typeof GM_addValueChangeListener != "undefined" ? GM_addValueChangeListener : void 0)();
-	var _GM_getValue = (() => typeof GM_getValue != "undefined" ? GM_getValue : void 0)();
-	var _GM_removeValueChangeListener = (() => typeof GM_removeValueChangeListener != "undefined" ? GM_removeValueChangeListener : void 0)();
-	var _GM_setValue = (() => typeof GM_setValue != "undefined" ? GM_setValue : void 0)();
-	var _unsafeWindow = (() => typeof unsafeWindow != "undefined" ? unsafeWindow : void 0)();
 	var STORAGE_KEY$1 = "bilibili-music-player:data";
 	function createDefaultData(now = Date.now()) {
 		const playlist = {

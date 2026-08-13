@@ -70,6 +70,8 @@ button {
   background: var(--accent);
   box-shadow: 0 10px 28px rgb(0 0 0 / 30%);
   cursor: pointer;
+  touch-action: none;
+  user-select: none;
 }
 
 .player-panel {
@@ -101,6 +103,9 @@ button {
   justify-content: space-between;
   padding: 0 12px 0 14px;
   border-bottom: 1px solid var(--border);
+  cursor: move;
+  touch-action: none;
+  user-select: none;
 }
 
 .brand {
@@ -108,6 +113,13 @@ button {
   min-width: 0;
   align-items: center;
   gap: 8px;
+}
+
+.header-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
 }
 
 .brand-icon {

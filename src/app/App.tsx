@@ -11,6 +11,7 @@ import {
   Plus,
   Repeat,
   Repeat1,
+  RotateCcw,
   Save,
   Shuffle,
   SkipBack,
@@ -33,6 +34,7 @@ import {
 } from "../bili/metadata";
 import { formatTime, toEndSecond, toStartSecond } from "../core/time";
 import type { PlayMode, Track } from "../core/types";
+import { useDraggablePosition } from "./use-draggable-position";
 
 interface AppProps {
   store: AppStore;
@@ -59,6 +61,8 @@ export function App({ store, engine, audioOnly }: AppProps) {
   const [creatingPlaylist, setCreatingPlaylist] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState("");
   const [editorTrack, setEditorTrack] = useState<Track | "new">();
+  const launcherDrag = useDraggablePosition("launcher");
+  const panelDrag = useDraggablePosition("panel");
 
   const data = store.data.value;
   const runtime = engine.state.value;
@@ -98,11 +102,24 @@ export function App({ store, engine, audioOnly }: AppProps) {
   if (!panelOpen) {
     return (
       <button
+        ref={launcherDrag.ref}
         class="floating-button"
         type="button"
+        style={launcherDrag.style}
         title="打开 Bilibili 音乐播放器"
         aria-label="打开 Bilibili 音乐播放器"
-        onClick={() => setPanelOpen(true)}
+        onPointerDown={launcherDrag.onPointerDown}
+        onPointerMove={launcherDrag.onPointerMove}
+        onPointerUp={launcherDrag.onPointerUp}
+        onPointerCancel={launcherDrag.onPointerCancel}
+        onClick={(event) => {
+          if (launcherDrag.consumeSuppressedClick()) {
+            event.preventDefault();
+            return;
+          }
+
+          setPanelOpen(true);
+        }}
       >
         <Music2 size={22} aria-hidden="true" />
       </button>
@@ -110,8 +127,28 @@ export function App({ store, engine, audioOnly }: AppProps) {
   }
 
   return (
-    <section class="player-panel" aria-label="Bilibili 音乐播放器">
-      <header class="panel-header">
+    <section
+      ref={panelDrag.ref}
+      class="player-panel"
+      style={panelDrag.style}
+      aria-label="Bilibili 音乐播放器"
+    >
+      <header
+        class="panel-header"
+        onPointerDown={(event) => {
+          if (
+            event.target instanceof Element &&
+            event.target.closest("button, input, select, textarea, a")
+          ) {
+            return;
+          }
+
+          panelDrag.onPointerDown(event);
+        }}
+        onPointerMove={panelDrag.onPointerMove}
+        onPointerUp={panelDrag.onPointerUp}
+        onPointerCancel={panelDrag.onPointerCancel}
+      >
         <div class="brand">
           <span class="brand-icon">
             <Music2 size={18} aria-hidden="true" />
@@ -119,15 +156,29 @@ export function App({ store, engine, audioOnly }: AppProps) {
           <strong>Bilibili 音乐播放器</strong>
           <span class="version">{version}</span>
         </div>
-        <button
-          class="icon-button"
-          type="button"
-          title="收起播放器"
-          aria-label="收起播放器"
-          onClick={() => setPanelOpen(false)}
-        >
-          <X size={18} aria-hidden="true" />
-        </button>
+        <div class="header-actions">
+          <button
+            class="icon-button reset-position-button"
+            type="button"
+            title="重置图标和播放器位置"
+            aria-label="重置图标和播放器位置"
+            onClick={() => {
+              launcherDrag.resetPosition();
+              panelDrag.resetPosition();
+            }}
+          >
+            <RotateCcw size={18} aria-hidden="true" />
+          </button>
+          <button
+            class="icon-button close-panel-button"
+            type="button"
+            title="收起播放器"
+            aria-label="收起播放器"
+            onClick={() => setPanelOpen(false)}
+          >
+            <X size={18} aria-hidden="true" />
+          </button>
+        </div>
       </header>
 
       <div class="now-playing">

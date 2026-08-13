@@ -6,6 +6,7 @@ const CURRENT_VIDEO_URL = "https://www.bilibili.com/video/BV1CurrentMusic/";
 const STALE_VIDEO_URL = "https://www.bilibili.com/video/BV1StaleMusic/";
 const NORMAL_PLAYBACK_URL = "https://www.bilibili.com/video/BV1NormalPlayback/";
 const WEB_FULLSCREEN_URL = "https://www.bilibili.com/video/BV1WebFullscreen/";
+const DRAGGABLE_UI_URL = "https://www.bilibili.com/video/BV1DraggableUi/";
 const INTEGER_TIME_URL = "https://www.bilibili.com/video/BV1IntegerTime/";
 const LEGACY_TIME_URL = "https://www.bilibili.com/video/BV1LegacyTime/";
 const FULL_VIDEO_RANGE_URL =
@@ -666,6 +667,150 @@ test("hides the player UI in web fullscreen and restores its previous state", as
       .setAttribute("data-screen", "normal");
   });
   await expect(panel).toBeVisible();
+});
+
+test("drags and persists the launcher and player panel", async ({ page }) => {
+  await page.route(DRAGGABLE_UI_URL, async (route) => {
+    await route.fulfill({
+      contentType: "text/html; charset=utf-8",
+      body: `
+        <!doctype html>
+        <html>
+          <head><title>Draggable UI test_bilibili</title></head>
+          <body><video></video></body>
+        </html>
+      `,
+    });
+  });
+  await installLocalStorageGm(page);
+
+  await page.goto(DRAGGABLE_UI_URL);
+  await injectBuiltUserscript(page);
+
+  let launcher = page.locator(".floating-button");
+  let panel = page.locator(".player-panel");
+  const launcherBefore = (await launcher.boundingBox())!;
+  const launcherStart = {
+    x: launcherBefore.x + launcherBefore.width / 2,
+    y: launcherBefore.y + launcherBefore.height / 2,
+  };
+
+  await page.mouse.move(launcherStart.x, launcherStart.y);
+  await page.mouse.down();
+  await page.mouse.move(launcherStart.x - 400, launcherStart.y - 250, {
+    steps: 8,
+  });
+  await page.mouse.up();
+
+  await expect(panel).toHaveCount(0);
+  const launcherMoved = (await launcher.boundingBox())!;
+  expect(launcherMoved.x).toBeCloseTo(launcherBefore.x - 400, 0);
+  expect(launcherMoved.y).toBeCloseTo(launcherBefore.y - 250, 0);
+
+  await launcher.click();
+  await expect(panel).toBeVisible();
+  const panelBefore = (await panel.boundingBox())!;
+  const panelHeader = panel.locator(".panel-header");
+  const headerBounds = (await panelHeader.boundingBox())!;
+  const panelDragStart = {
+    x: headerBounds.x + 100,
+    y: headerBounds.y + headerBounds.height / 2,
+  };
+
+  await page.mouse.move(panelDragStart.x, panelDragStart.y);
+  await page.mouse.down();
+  await page.mouse.move(panelDragStart.x - 300, panelDragStart.y - 140, {
+    steps: 8,
+  });
+  await page.mouse.up();
+
+  const panelMoved = (await panel.boundingBox())!;
+  expect(panelMoved.x).toBeCloseTo(panelBefore.x - 300, 0);
+  expect(panelMoved.y).toBeCloseTo(panelBefore.y - 140, 0);
+
+  await panel.locator(".close-panel-button").click();
+  await expect(launcher).toBeVisible();
+  const launcherAfterPanelDrag = (await launcher.boundingBox())!;
+  expect(launcherAfterPanelDrag.x).toBeCloseTo(launcherMoved.x, 0);
+  expect(launcherAfterPanelDrag.y).toBeCloseTo(launcherMoved.y, 0);
+
+  await page.reload();
+  await injectBuiltUserscript(page);
+  launcher = page.locator(".floating-button");
+  panel = page.locator(".player-panel");
+
+  const restoredLauncher = (await launcher.boundingBox())!;
+  expect(restoredLauncher.x).toBeCloseTo(launcherMoved.x, 0);
+  expect(restoredLauncher.y).toBeCloseTo(launcherMoved.y, 0);
+
+  await launcher.click();
+  const restoredPanel = (await panel.boundingBox())!;
+  expect(restoredPanel.x).toBeCloseTo(panelMoved.x, 0);
+  expect(restoredPanel.y).toBeCloseTo(panelMoved.y, 0);
+
+  await page.setViewportSize({ width: 360, height: 480 });
+  await expect
+    .poll(async () => {
+      const bounds = await panel.boundingBox();
+      return Boolean(
+        bounds &&
+        bounds.x >= 0 &&
+        bounds.y >= 0 &&
+        bounds.x + bounds.width <= 360.5 &&
+        bounds.y + bounds.height <= 480.5,
+      );
+    })
+    .toBe(true);
+
+  await panel.locator(".close-panel-button").click();
+  await expect
+    .poll(async () => {
+      const bounds = await launcher.boundingBox();
+      return Boolean(
+        bounds &&
+        bounds.x >= 0 &&
+        bounds.y >= 0 &&
+        bounds.x + bounds.width <= 360.5 &&
+        bounds.y + bounds.height <= 480.5,
+      );
+    })
+    .toBe(true);
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await launcher.click();
+  const resetButton = panel.getByRole("button", {
+    name: "重置图标和播放器位置",
+  });
+  const closeButton = panel.getByRole("button", { name: "收起播放器" });
+  const resetBounds = (await resetButton.boundingBox())!;
+  const closeBounds = (await closeButton.boundingBox())!;
+  expect(resetBounds.width).toBe(closeBounds.width);
+  expect(resetBounds.height).toBe(closeBounds.height);
+
+  await resetButton.click();
+  await expect
+    .poll(async () => {
+      const bounds = await panel.boundingBox();
+      return Boolean(
+        bounds &&
+        Math.abs(1440 - bounds.x - bounds.width - 20) <= 0.5 &&
+        Math.abs(900 - bounds.y - bounds.height - 20) <= 0.5,
+      );
+    })
+    .toBe(true);
+
+  const storedLayout = await page.evaluate(() => {
+    const raw = localStorage.getItem(
+      "__bili_music__:bilibili-music-player:layout",
+    );
+    return raw ? JSON.parse(raw) : null;
+  });
+  expect(storedLayout).toEqual({ version: 1 });
+
+  await closeButton.click();
+  const resetLauncher = (await launcher.boundingBox())!;
+  expect(1440 - resetLauncher.x - resetLauncher.width).toBeCloseTo(24, 0);
+  expect(900 - resetLauncher.y - resetLauncher.height).toBeCloseTo(76, 0);
 });
 
 test("uses whole seconds for new track boundaries", async ({ page }) => {
