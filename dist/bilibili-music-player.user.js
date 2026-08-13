@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bilibili 音乐播放器
 // @namespace    bilibili-music-player
-// @version      0.1.4
+// @version      0.1.5
 // @author       Korltex
 // @description  在 Bilibili 视频页面中控制原生播放器、管理音乐歌单并可选纯音频模式
 // @license      MIT
@@ -567,6 +567,110 @@
 		"  justify-content: space-between;",
 		"}",
 		"",
+		".chapter-field {",
+		"  position: relative;",
+		"  z-index: 1;",
+		"}",
+		"",
+		".chapter-combobox {",
+		"  position: relative;",
+		"  display: flex;",
+		"  min-width: 0;",
+		"  height: 34px;",
+		"  border: 1px solid var(--border);",
+		"  border-radius: 6px;",
+		"  background: var(--surface);",
+		"}",
+		"",
+		".chapter-combobox:focus-within {",
+		"  border-color: var(--accent);",
+		"}",
+		"",
+		".track-editor .chapter-combobox input {",
+		"  height: 32px;",
+		"  flex: 1;",
+		"  border: 0;",
+		"  padding-right: 2px;",
+		"  background: transparent;",
+		"}",
+		"",
+		".chapter-toggle {",
+		"  display: grid;",
+		"  width: 32px;",
+		"  height: 32px;",
+		"  flex: 0 0 auto;",
+		"  place-items: center;",
+		"  border: 0;",
+		"  border-radius: 0 5px 5px 0;",
+		"  color: var(--muted);",
+		"  background: transparent;",
+		"  cursor: pointer;",
+		"}",
+		"",
+		".chapter-toggle:hover {",
+		"  color: var(--text);",
+		"  background: var(--surface-hover);",
+		"}",
+		"",
+		".chapter-toggle svg {",
+		"  transition: transform 120ms ease;",
+		"}",
+		"",
+		".chapter-toggle svg.expanded {",
+		"  transform: rotate(180deg);",
+		"}",
+		"",
+		".chapter-listbox {",
+		"  position: absolute;",
+		"  z-index: 2;",
+		"  top: calc(100% + 4px);",
+		"  right: 0;",
+		"  left: 0;",
+		"  max-height: 176px;",
+		"  overflow-y: auto;",
+		"  border: 1px solid var(--border);",
+		"  border-radius: 6px;",
+		"  padding: 3px;",
+		"  background: var(--surface);",
+		"  box-shadow: 0 10px 24px rgb(0 0 0 / 38%);",
+		"}",
+		"",
+		".chapter-option {",
+		"  display: flex;",
+		"  width: 100%;",
+		"  min-width: 0;",
+		"  min-height: 32px;",
+		"  align-items: center;",
+		"  justify-content: space-between;",
+		"  gap: 12px;",
+		"  border: 0;",
+		"  border-radius: 4px;",
+		"  padding: 6px 7px;",
+		"  color: var(--text);",
+		"  background: transparent;",
+		"  text-align: left;",
+		"  cursor: pointer;",
+		"}",
+		"",
+		".chapter-option:hover,",
+		".chapter-option.active {",
+		"  background: var(--surface-hover);",
+		"}",
+		"",
+		".chapter-option span:first-child {",
+		"  overflow: hidden;",
+		"  text-overflow: ellipsis;",
+		"  white-space: nowrap;",
+		"}",
+		"",
+		".chapter-option span:last-child {",
+		"  flex: 0 0 auto;",
+		"  color: var(--muted);",
+		"  font-size: 12px;",
+		"  font-variant-numeric: tabular-nums;",
+		"  white-space: nowrap;",
+		"}",
+		"",
 		".track-editor label {",
 		"  display: flex;",
 		"  min-width: 0;",
@@ -716,7 +820,7 @@
 	].join("\n");
 	var _style = (b, a = document.createElement("style")) => (a.append(b), a);
 	var styles_css_default = _style(styles_default);
-	var version = "0.1.4";
+	var version = "0.1.5";
 	function SvgIcon({ size = 24, strokeWidth = 2, children, ...props }) {
 		return (0, preact_jsx_runtime.jsx)("svg", {
 			xmlns: "http://www.w3.org/2000/svg",
@@ -731,6 +835,12 @@
 			focusable: "false",
 			...props,
 			children
+		});
+	}
+	function ChevronDown(props) {
+		return (0, preact_jsx_runtime.jsx)(SvgIcon, {
+			...props,
+			children: (0, preact_jsx_runtime.jsx)("path", { d: "m6 9 6 6 6-6" })
 		});
 	}
 	function Clock3(props) {
@@ -947,12 +1057,13 @@
 			cover
 		};
 	}
-	function createTrackFromCurrentPage(media, title, startTime, endTime) {
+	function createTrackFromCurrentPage(media, title, startTime, endTime, cid) {
 		const metadata = readCurrentVideoMetadata();
 		if (!metadata) return;
 		return {
 			id: createId("track"),
 			...metadata,
+			...cid === void 0 ? {} : { cid },
 			title: title.trim() || metadata.title,
 			startTime,
 			endTime,
@@ -963,6 +1074,82 @@
 	}
 	function cleanPageTitle(title) {
 		return title.replace(/_哔哩哔哩_bilibili$/i, "").replace(/\s*-\s*哔哩哔哩.*$/i, "").trim();
+	}
+	var BILIBILI_API_ORIGIN = "https://api.bilibili.com";
+	async function readVideoChapters(reference, options = {}) {
+		const request = options.fetch ?? fetch;
+		let cid = validPositiveInteger(reference.cid);
+		if (cid === void 0) try {
+			cid = await readPageCid(reference, request, options.signal);
+		} catch {
+			return { chapters: [] };
+		}
+		if (cid === void 0) return { chapters: [] };
+		try {
+			const url = new URL("/x/player/wbi/v2", BILIBILI_API_ORIGIN);
+			url.searchParams.set("bvid", reference.bvid);
+			url.searchParams.set("cid", String(cid));
+			const response = await request(url, {
+				credentials: "include",
+				signal: options.signal
+			});
+			if (!response.ok) return {
+				cid,
+				chapters: []
+			};
+			return {
+				cid,
+				chapters: parseVideoChapters(await response.json())
+			};
+		} catch {
+			return {
+				cid,
+				chapters: []
+			};
+		}
+	}
+	function parseVideoChapters(payload) {
+		if (!isRecord$1(payload) || payload.code !== 0 || !isRecord$1(payload.data)) return [];
+		const viewPoints = payload.data.view_points;
+		if (!Array.isArray(viewPoints)) return [];
+		return viewPoints.flatMap((viewPoint) => {
+			if (!isRecord$1(viewPoint)) return [];
+			const title = typeof viewPoint.content === "string" ? viewPoint.content.trim() : "";
+			const rawStart = viewPoint.from;
+			const rawEnd = viewPoint.to;
+			if (!title || typeof rawStart !== "number" || !Number.isFinite(rawStart) || rawStart < 0 || typeof rawEnd !== "number" || !Number.isFinite(rawEnd) || rawEnd <= rawStart) return [];
+			const startTime = Math.floor(rawStart);
+			const endTime = Math.ceil(rawEnd);
+			if (endTime <= startTime) return [];
+			return [{
+				title,
+				startTime,
+				endTime,
+				cover: typeof viewPoint.imgUrl === "string" && viewPoint.imgUrl.trim() ? viewPoint.imgUrl.trim() : void 0
+			}];
+		});
+	}
+	async function readPageCid(reference, request, signal) {
+		const url = new URL("/x/web-interface/view", BILIBILI_API_ORIGIN);
+		url.searchParams.set("bvid", reference.bvid);
+		const response = await request(url, {
+			credentials: "include",
+			signal
+		});
+		if (!response.ok) return;
+		const payload = await response.json();
+		if (!isRecord$1(payload) || payload.code !== 0 || !isRecord$1(payload.data)) return;
+		const pages = payload.data.pages;
+		if (!Array.isArray(pages)) return;
+		const requestedPage = validPositiveInteger(reference.page) ?? 1;
+		const matchingPage = pages.find((page) => isRecord$1(page) && page.page === requestedPage);
+		return isRecord$1(matchingPage) ? validPositiveInteger(matchingPage.cid) : void 0;
+	}
+	function validPositiveInteger(value) {
+		return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : void 0;
+	}
+	function isRecord$1(value) {
+		return typeof value === "object" && value !== null;
 	}
 	function clamp(value, minimum, maximum) {
 		return Math.min(maximum, Math.max(minimum, value));
@@ -1502,7 +1689,7 @@
 						else store.updateTrack(track);
 						setEditorTrack(void 0);
 					}
-				}),
+				}, editorTrack === "new" ? "new" : editorTrack.id),
 				(0, preact_jsx_runtime.jsx)("div", {
 					class: "track-list",
 					role: "list",
@@ -1570,10 +1757,29 @@
 	}
 	function TrackEditor({ media, track, onCancel, onSave }) {
 		const metadata = readCurrentVideoMetadata();
+		const chapterReference = track ?? metadata;
 		const [title, setTitle] = (0, preact_hooks.useState)(track?.title ?? metadata?.title ?? "");
 		const [startTime, setStartTime] = (0, preact_hooks.useState)(String(toStartSecond(track?.startTime ?? 0)));
 		const [endTime, setEndTime] = (0, preact_hooks.useState)(track?.endTime === void 0 ? "" : String(toEndSecond(track.endTime)));
 		const [error, setError] = (0, preact_hooks.useState)("");
+		const [chapters, setChapters] = (0, preact_hooks.useState)([]);
+		const [resolvedCid, setResolvedCid] = (0, preact_hooks.useState)(track?.cid);
+		(0, preact_hooks.useEffect)(() => {
+			setChapters([]);
+			setResolvedCid(track?.cid);
+			if (!chapterReference) return;
+			const controller = new AbortController();
+			readVideoChapters(chapterReference, { signal: controller.signal }).then((result) => {
+				if (controller.signal.aborted) return;
+				setResolvedCid(result.cid);
+				setChapters(result.chapters);
+			});
+			return () => controller.abort();
+		}, [
+			chapterReference?.bvid,
+			chapterReference?.page,
+			track?.cid
+		]);
 		(0, preact_hooks.useEffect)(() => {
 			setError("");
 		}, [startTime, endTime]);
@@ -1604,6 +1810,7 @@
 			if (track) {
 				onSave({
 					...track,
+					...resolvedCid === void 0 ? {} : { cid: resolvedCid },
 					title: title.trim() || track.title,
 					startTime: start,
 					endTime: end
@@ -1614,7 +1821,7 @@
 				setError("尚未找到 Bilibili 播放器");
 				return;
 			}
-			const nextTrack = createTrackFromCurrentPage(media, title, start, end);
+			const nextTrack = createTrackFromCurrentPage(media, title, start, end, resolvedCid);
 			if (!nextTrack) {
 				setError("无法读取当前视频信息");
 				return;
@@ -1639,11 +1846,19 @@
 						})
 					})]
 				}),
-				(0, preact_jsx_runtime.jsxs)("label", { children: [(0, preact_jsx_runtime.jsx)("span", { children: "标题" }), (0, preact_jsx_runtime.jsx)("input", {
-					value: title,
-					required: true,
-					onInput: (event) => setTitle(event.currentTarget.value)
-				})] }),
+				(0, preact_jsx_runtime.jsxs)("label", {
+					class: "chapter-field",
+					children: [(0, preact_jsx_runtime.jsx)("span", { children: "标题" }), (0, preact_jsx_runtime.jsx)(ChapterCombobox, {
+						value: title,
+						chapters,
+						onInput: setTitle,
+						onSelect: (chapter) => {
+							setTitle(chapter.title);
+							setStartTime(String(chapter.startTime));
+							setEndTime(String(chapter.endTime));
+						}
+					})]
+				}),
 				(0, preact_jsx_runtime.jsxs)("div", {
 					class: "time-fields",
 					children: [(0, preact_jsx_runtime.jsxs)("label", { children: [(0, preact_jsx_runtime.jsx)("span", { children: "开始时间（秒）" }), (0, preact_jsx_runtime.jsx)("input", {
@@ -1705,6 +1920,124 @@
 						size: 16,
 						"aria-hidden": "true"
 					}), "保存"]
+				})
+			]
+		});
+	}
+	function ChapterCombobox({ value, chapters, onInput, onSelect }) {
+		const rootRef = (0, preact_hooks.useRef)(null);
+		const [open, setOpen] = (0, preact_hooks.useState)(false);
+		const [activeIndex, setActiveIndex] = (0, preact_hooks.useState)(-1);
+		const listboxId = (0, preact_hooks.useRef)(`chapter-listbox-${Math.random().toString(36).slice(2)}`).current;
+		(0, preact_hooks.useEffect)(() => {
+			if (!open) return;
+			const closeOnOutsidePointer = (event) => {
+				if (!event.composedPath().includes(rootRef.current)) {
+					setOpen(false);
+					setActiveIndex(-1);
+				}
+			};
+			document.addEventListener("pointerdown", closeOnOutsidePointer);
+			return () => document.removeEventListener("pointerdown", closeOnOutsidePointer);
+		}, [open]);
+		(0, preact_hooks.useEffect)(() => {
+			if (chapters.length === 0) {
+				setOpen(false);
+				setActiveIndex(-1);
+			} else if (activeIndex >= chapters.length) setActiveIndex(chapters.length - 1);
+		}, [chapters, activeIndex]);
+		const close = () => {
+			setOpen(false);
+			setActiveIndex(-1);
+		};
+		const choose = (index) => {
+			const chapter = chapters[index];
+			if (!chapter) return;
+			onSelect(chapter);
+			close();
+		};
+		const moveActive = (direction) => {
+			if (chapters.length === 0) return;
+			setOpen(true);
+			setActiveIndex((current) => {
+				if (current < 0) return direction === 1 ? 0 : chapters.length - 1;
+				return (current + direction + chapters.length) % chapters.length;
+			});
+		};
+		return (0, preact_jsx_runtime.jsxs)("div", {
+			class: "chapter-combobox",
+			ref: rootRef,
+			children: [
+				(0, preact_jsx_runtime.jsx)("input", {
+					value,
+					required: true,
+					role: "combobox",
+					"aria-label": "标题",
+					"aria-autocomplete": "none",
+					"aria-expanded": open,
+					"aria-controls": listboxId,
+					"aria-activedescendant": open && activeIndex >= 0 ? `${listboxId}-option-${activeIndex}` : void 0,
+					onInput: (event) => onInput(event.currentTarget.value),
+					onKeyDown: (event) => {
+						switch (event.key) {
+							case "ArrowDown":
+								event.preventDefault();
+								moveActive(1);
+								break;
+							case "ArrowUp":
+								event.preventDefault();
+								moveActive(-1);
+								break;
+							case "Enter":
+								if (open && activeIndex >= 0) {
+									event.preventDefault();
+									choose(activeIndex);
+								}
+								break;
+							case "Escape":
+								if (open) {
+									event.preventDefault();
+									close();
+								}
+								break;
+						}
+					}
+				}),
+				(0, preact_jsx_runtime.jsx)("button", {
+					class: "chapter-toggle",
+					type: "button",
+					"aria-label": open ? "收起章节列表" : "展开章节列表",
+					"aria-expanded": open,
+					"aria-controls": listboxId,
+					onClick: () => {
+						if (chapters.length === 0) return;
+						setOpen((current) => !current);
+						setActiveIndex(-1);
+					},
+					children: (0, preact_jsx_runtime.jsx)(ChevronDown, {
+						class: open ? "expanded" : void 0,
+						size: 17,
+						"aria-hidden": "true"
+					})
+				}),
+				open && chapters.length > 0 && (0, preact_jsx_runtime.jsx)("div", {
+					class: "chapter-listbox",
+					id: listboxId,
+					role: "listbox",
+					children: chapters.map((chapter, index) => (0, preact_jsx_runtime.jsxs)("button", {
+						class: `chapter-option ${index === activeIndex ? "active" : ""}`,
+						id: `${listboxId}-option-${index}`,
+						type: "button",
+						role: "option",
+						"aria-selected": index === activeIndex,
+						onPointerEnter: () => setActiveIndex(index),
+						onClick: () => choose(index),
+						children: [(0, preact_jsx_runtime.jsx)("span", { children: chapter.title }), (0, preact_jsx_runtime.jsxs)("span", { children: [
+							formatTime(chapter.startTime),
+							"–",
+							formatTime(chapter.endTime)
+						] })]
+					}, `${chapter.startTime}-${chapter.endTime}-${chapter.title}`))
 				})
 			]
 		});

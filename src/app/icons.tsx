@@ -36,6 +36,14 @@ function SvgIcon({
   return <svg {...svgAttributes}>{children}</svg>;
 }
 
+export function ChevronDown(props: IconProps) {
+  return (
+    <SvgIcon {...props}>
+      <path d="m6 9 6 6 6-6" />
+    </SvgIcon>
+  );
+}
+
 export function Clock3(props: IconProps) {
   return (
     <SvgIcon {...props}>

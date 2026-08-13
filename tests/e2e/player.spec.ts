@@ -11,6 +11,65 @@ const INTEGER_TIME_URL = "https://www.bilibili.com/video/BV1IntegerTime/";
 const LEGACY_TIME_URL = "https://www.bilibili.com/video/BV1LegacyTime/";
 const FULL_VIDEO_RANGE_URL =
   "https://www.bilibili.com/video/BV1FullVideoRange/";
+const CHAPTER_VIDEO_URL = "https://www.bilibili.com/video/BV1ChapterMusic/?p=2";
+const CHAPTER_FAILURE_URL = "https://www.bilibili.com/video/BV1ChapterFailure/";
+
+const apiHeaders = {
+  "access-control-allow-origin": "https://www.bilibili.com",
+  "access-control-allow-credentials": "true",
+};
+
+test.beforeEach(async ({ page }) => {
+  await page.route(
+    "https://api.bilibili.com/x/web-interface/view**",
+    async (route) => {
+      const bvid = new URL(route.request().url()).searchParams.get("bvid");
+      const pages =
+        bvid === "BV1ChapterMusic"
+          ? [
+              { page: 1, cid: 111 },
+              { page: 2, cid: 222 },
+            ]
+          : bvid === "BV1ChapterFailure"
+            ? [{ page: 1, cid: 333 }]
+            : [];
+      await route.fulfill({
+        contentType: "application/json",
+        headers: apiHeaders,
+        body: JSON.stringify({ code: 0, data: { pages } }),
+      });
+    },
+  );
+  await page.route(
+    "https://api.bilibili.com/x/player/wbi/v2**",
+    async (route) => {
+      const url = new URL(route.request().url());
+      const bvid = url.searchParams.get("bvid");
+      if (bvid === "BV1ChapterFailure") {
+        await route.abort("failed");
+        return;
+      }
+
+      const viewPoints =
+        bvid === "BV1ChapterMusic" && url.searchParams.get("cid") === "222"
+          ? [
+              { content: "intro", from: 0.2, to: 363.2 },
+              {
+                content: "ceremony",
+                from: 364.8,
+                to: 558.1,
+                imgUrl: "https://example.com/ceremony.jpg",
+              },
+            ]
+          : [];
+      await route.fulfill({
+        contentType: "application/json",
+        headers: apiHeaders,
+        body: JSON.stringify({ code: 0, data: { view_points: viewPoints } }),
+      });
+    },
+  );
+});
 
 async function installLocalStorageGm(
   page: Page,
@@ -919,6 +978,161 @@ test("uses whole seconds for new track boundaries", async ({ page }) => {
     return { startTime: track.startTime, endTime: track.endTime };
   });
   expect(savedBoundary).toEqual({ startTime: 12, endTime: 21 });
+});
+
+test("selects chapters for new and existing tracks with mouse and keyboard", async ({
+  page,
+}) => {
+  await page.route(CHAPTER_VIDEO_URL, async (route) => {
+    await route.fulfill({
+      contentType: "text/html; charset=utf-8",
+      body: `
+        <!doctype html>
+        <html>
+          <head>
+            <title>章节测试_哔哩哔哩_bilibili</title>
+            <meta property="og:title" content="章节测试">
+          </head>
+          <body>
+            <h1 class="video-title" title="章节测试">章节测试</h1>
+            <video style="display:block;width:900px;height:506px"></video>
+          </body>
+        </html>
+      `,
+    });
+  });
+  await installLocalStorageGm(page);
+  const apiRequests: string[] = [];
+  page.on("request", (request) => {
+    if (request.url().startsWith("https://api.bilibili.com/")) {
+      apiRequests.push(request.url());
+    }
+  });
+
+  await page.goto(CHAPTER_VIDEO_URL);
+  await page.evaluate(() => {
+    const media = document.querySelector("video")!;
+    Object.defineProperties(media, {
+      paused: { get: () => true },
+      currentTime: { get: () => 0, set: () => {} },
+      duration: { get: () => 600 },
+      readyState: { get: () => 4 },
+      volume: { get: () => 1, set: () => {} },
+      muted: { get: () => false, set: () => {} },
+    });
+  });
+  await injectBuiltUserscript(page);
+  await page.locator(".floating-button").click();
+  await page.locator(".add-current-button").click();
+
+  let editor = page.locator(".track-editor");
+  let titleInput = page.getByRole("combobox", { name: "标题" });
+  const startInput = page.getByLabel("开始时间（秒）");
+  const endInput = page.getByLabel("结束时间（秒）");
+  await expect(titleInput).toHaveValue("章节测试");
+
+  await page.getByRole("button", { name: "展开章节列表" }).click();
+  const ceremony = page.getByRole("option", {
+    name: "ceremony 06:04–09:19",
+  });
+  await expect(ceremony).toBeVisible();
+  await ceremony.click();
+  await expect(titleInput).toHaveValue("ceremony");
+  await expect(startInput).toHaveValue("364");
+  await expect(endInput).toHaveValue("559");
+  await expect(page.locator(".track-row")).toHaveCount(0);
+
+  await titleInput.fill("ceremony 手动版");
+  await expect(startInput).toHaveValue("364");
+  await expect(endInput).toHaveValue("559");
+  await editor.locator(".save-track-button").click();
+
+  const savedTrack = await page.evaluate(() => {
+    const raw = localStorage.getItem(
+      "__bili_music__:bilibili-music-player:data",
+    );
+    return JSON.parse(raw!).playlists[0].tracks[0];
+  });
+  expect(savedTrack).toMatchObject({
+    bvid: "BV1ChapterMusic",
+    page: 2,
+    cid: 222,
+    title: "ceremony 手动版",
+    startTime: 364,
+    endTime: 559,
+  });
+
+  await page.getByRole("button", { name: "编辑 ceremony 手动版" }).click();
+  editor = page.locator(".track-editor");
+  titleInput = page.getByRole("combobox", { name: "标题" });
+  await page.getByRole("button", { name: "展开章节列表" }).click();
+  await expect(page.getByRole("listbox")).toBeVisible();
+  await titleInput.press("Escape");
+  await expect(page.getByRole("listbox")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "展开章节列表" }).click();
+  await editor.locator(".editor-heading").click();
+  await expect(page.getByRole("listbox")).toHaveCount(0);
+
+  await titleInput.press("ArrowDown");
+  await titleInput.press("Enter");
+  await expect(titleInput).toHaveValue("intro");
+  await expect(page.getByLabel("开始时间（秒）")).toHaveValue("0");
+  await expect(page.getByLabel("结束时间（秒）")).toHaveValue("364");
+  await editor.locator(".save-track-button").click();
+
+  const viewRequests = apiRequests.filter((url) =>
+    url.includes("/x/web-interface/view"),
+  );
+  const chapterRequests = apiRequests.filter((url) =>
+    url.includes("/x/player/wbi/v2"),
+  );
+  expect(viewRequests).toHaveLength(1);
+  expect(chapterRequests).toHaveLength(2);
+  expect(chapterRequests[1]).toContain("cid=222");
+});
+
+test("keeps manual track editing available when the chapter request fails", async ({
+  page,
+}) => {
+  await page.route(CHAPTER_FAILURE_URL, async (route) => {
+    await route.fulfill({
+      contentType: "text/html; charset=utf-8",
+      body: `
+        <!doctype html>
+        <html>
+          <head><title>无章节测试_哔哩哔哩_bilibili</title></head>
+          <body>
+            <h1 class="video-title" title="无章节测试">无章节测试</h1>
+            <video></video>
+          </body>
+        </html>
+      `,
+    });
+  });
+  await installLocalStorageGm(page);
+  await page.goto(CHAPTER_FAILURE_URL);
+  await page.evaluate(() => {
+    const media = document.querySelector("video")!;
+    Object.defineProperties(media, {
+      currentTime: { get: () => 0, set: () => {} },
+      duration: { get: () => 120 },
+      readyState: { get: () => 4 },
+    });
+  });
+  await injectBuiltUserscript(page);
+  await page.locator(".floating-button").click();
+  await page.locator(".add-current-button").click();
+
+  const titleInput = page.getByRole("combobox", { name: "标题" });
+  await titleInput.fill("手动歌曲");
+  await page.getByRole("button", { name: "展开章节列表" }).click();
+  await expect(page.getByRole("listbox")).toHaveCount(0);
+  await page.getByLabel("开始时间（秒）").fill("10");
+  await page.getByLabel("结束时间（秒）").fill("20");
+  await page.locator(".track-editor .save-track-button").click();
+  await expect(page.getByText("手动歌曲", { exact: true })).toBeVisible();
+  await expect(page.locator(".status-message")).toHaveCount(0);
 });
 
 test("normalizes legacy fractional boundaries only when an edit is saved", async ({

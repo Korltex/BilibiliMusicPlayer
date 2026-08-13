@@ -1,6 +1,7 @@
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { version } from "../../package.json";
 import {
+  ChevronDown,
   Clock3,
   Headphones,
   ListMusic,
@@ -32,6 +33,7 @@ import {
   createTrackFromCurrentPage,
   readCurrentVideoMetadata,
 } from "../bili/metadata";
+import { readVideoChapters, type VideoChapter } from "../bili/chapters";
 import { formatTime, toEndSecond, toStartSecond } from "../core/time";
 import type { PlayMode, Track } from "../core/types";
 import { useDraggablePosition } from "./use-draggable-position";
@@ -394,6 +396,7 @@ export function App({ store, engine, audioOnly }: AppProps) {
 
       {editorTrack && (
         <TrackEditor
+          key={editorTrack === "new" ? "new" : editorTrack.id}
           media={engine.currentMedia}
           track={editorTrack === "new" ? undefined : editorTrack}
           onCancel={() => setEditorTrack(undefined)}
@@ -486,6 +489,7 @@ interface TrackEditorProps {
 
 function TrackEditor({ media, track, onCancel, onSave }: TrackEditorProps) {
   const metadata = readCurrentVideoMetadata();
+  const chapterReference = track ?? metadata;
   const [title, setTitle] = useState(track?.title ?? metadata?.title ?? "");
   const [startTime, setStartTime] = useState(
     String(toStartSecond(track?.startTime ?? 0)),
@@ -494,6 +498,30 @@ function TrackEditor({ media, track, onCancel, onSave }: TrackEditorProps) {
     track?.endTime === undefined ? "" : String(toEndSecond(track.endTime)),
   );
   const [error, setError] = useState("");
+  const [chapters, setChapters] = useState<VideoChapter[]>([]);
+  const [resolvedCid, setResolvedCid] = useState(track?.cid);
+
+  useEffect(() => {
+    setChapters([]);
+    setResolvedCid(track?.cid);
+    if (!chapterReference) {
+      return;
+    }
+
+    const controller = new AbortController();
+    void readVideoChapters(chapterReference, {
+      signal: controller.signal,
+    }).then((result) => {
+      if (controller.signal.aborted) {
+        return;
+      }
+
+      setResolvedCid(result.cid);
+      setChapters(result.chapters);
+    });
+
+    return () => controller.abort();
+  }, [chapterReference?.bvid, chapterReference?.page, track?.cid]);
 
   useEffect(() => {
     setError("");
@@ -528,6 +556,7 @@ function TrackEditor({ media, track, onCancel, onSave }: TrackEditorProps) {
     if (track) {
       onSave({
         ...track,
+        ...(resolvedCid === undefined ? {} : { cid: resolvedCid }),
         title: title.trim() || track.title,
         startTime: start,
         endTime: end,
@@ -540,7 +569,13 @@ function TrackEditor({ media, track, onCancel, onSave }: TrackEditorProps) {
       return;
     }
 
-    const nextTrack = createTrackFromCurrentPage(media, title, start, end);
+    const nextTrack = createTrackFromCurrentPage(
+      media,
+      title,
+      start,
+      end,
+      resolvedCid,
+    );
     if (!nextTrack) {
       setError("无法读取当前视频信息");
       return;
@@ -562,12 +597,17 @@ function TrackEditor({ media, track, onCancel, onSave }: TrackEditorProps) {
           <X size={16} aria-hidden="true" />
         </button>
       </div>
-      <label>
+      <label class="chapter-field">
         <span>标题</span>
-        <input
+        <ChapterCombobox
           value={title}
-          required
-          onInput={(event) => setTitle(event.currentTarget.value)}
+          chapters={chapters}
+          onInput={setTitle}
+          onSelect={(chapter) => {
+            setTitle(chapter.title);
+            setStartTime(String(chapter.startTime));
+            setEndTime(String(chapter.endTime));
+          }}
         />
       </label>
       <div class="time-fields">
@@ -634,6 +674,164 @@ function TrackEditor({ media, track, onCancel, onSave }: TrackEditorProps) {
         保存
       </button>
     </form>
+  );
+}
+
+interface ChapterComboboxProps {
+  value: string;
+  chapters: VideoChapter[];
+  onInput: (value: string) => void;
+  onSelect: (chapter: VideoChapter) => void;
+}
+
+function ChapterCombobox({
+  value,
+  chapters,
+  onInput,
+  onSelect,
+}: ChapterComboboxProps) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);
+  const listboxId = useRef(
+    `chapter-listbox-${Math.random().toString(36).slice(2)}`,
+  ).current;
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      if (!event.composedPath().includes(rootRef.current!)) {
+        setOpen(false);
+        setActiveIndex(-1);
+      }
+    };
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    return () =>
+      document.removeEventListener("pointerdown", closeOnOutsidePointer);
+  }, [open]);
+
+  useEffect(() => {
+    if (chapters.length === 0) {
+      setOpen(false);
+      setActiveIndex(-1);
+    } else if (activeIndex >= chapters.length) {
+      setActiveIndex(chapters.length - 1);
+    }
+  }, [chapters, activeIndex]);
+
+  const close = () => {
+    setOpen(false);
+    setActiveIndex(-1);
+  };
+  const choose = (index: number) => {
+    const chapter = chapters[index];
+    if (!chapter) {
+      return;
+    }
+
+    onSelect(chapter);
+    close();
+  };
+  const moveActive = (direction: 1 | -1) => {
+    if (chapters.length === 0) {
+      return;
+    }
+
+    setOpen(true);
+    setActiveIndex((current) => {
+      if (current < 0) {
+        return direction === 1 ? 0 : chapters.length - 1;
+      }
+      return (current + direction + chapters.length) % chapters.length;
+    });
+  };
+
+  return (
+    <div class="chapter-combobox" ref={rootRef}>
+      <input
+        value={value}
+        required
+        role="combobox"
+        aria-label="标题"
+        aria-autocomplete="none"
+        aria-expanded={open}
+        aria-controls={listboxId}
+        aria-activedescendant={
+          open && activeIndex >= 0
+            ? `${listboxId}-option-${activeIndex}`
+            : undefined
+        }
+        onInput={(event) => onInput(event.currentTarget.value)}
+        onKeyDown={(event) => {
+          switch (event.key) {
+            case "ArrowDown":
+              event.preventDefault();
+              moveActive(1);
+              break;
+            case "ArrowUp":
+              event.preventDefault();
+              moveActive(-1);
+              break;
+            case "Enter":
+              if (open && activeIndex >= 0) {
+                event.preventDefault();
+                choose(activeIndex);
+              }
+              break;
+            case "Escape":
+              if (open) {
+                event.preventDefault();
+                close();
+              }
+              break;
+          }
+        }}
+      />
+      <button
+        class="chapter-toggle"
+        type="button"
+        aria-label={open ? "收起章节列表" : "展开章节列表"}
+        aria-expanded={open}
+        aria-controls={listboxId}
+        onClick={() => {
+          if (chapters.length === 0) {
+            return;
+          }
+          setOpen((current) => !current);
+          setActiveIndex(-1);
+        }}
+      >
+        <ChevronDown
+          class={open ? "expanded" : undefined}
+          size={17}
+          aria-hidden="true"
+        />
+      </button>
+      {open && chapters.length > 0 && (
+        <div class="chapter-listbox" id={listboxId} role="listbox">
+          {chapters.map((chapter, index) => (
+            <button
+              class={`chapter-option ${index === activeIndex ? "active" : ""}`}
+              id={`${listboxId}-option-${index}`}
+              type="button"
+              role="option"
+              aria-selected={index === activeIndex}
+              key={`${chapter.startTime}-${chapter.endTime}-${chapter.title}`}
+              onPointerEnter={() => setActiveIndex(index)}
+              onClick={() => choose(index)}
+            >
+              <span>{chapter.title}</span>
+              <span>
+                {formatTime(chapter.startTime)}–{formatTime(chapter.endTime)}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

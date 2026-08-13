@@ -61,6 +61,7 @@ export function createTrackFromCurrentPage(
   title: string,
   startTime: number,
   endTime?: number,
+  cid?: number,
 ): Track | undefined {
   const metadata = readCurrentVideoMetadata();
   if (!metadata) {
@@ -70,6 +71,7 @@ export function createTrackFromCurrentPage(
   return {
     id: createId("track"),
     ...metadata,
+    ...(cid === undefined ? {} : { cid }),
     title: title.trim() || metadata.title,
     startTime,
     endTime,
