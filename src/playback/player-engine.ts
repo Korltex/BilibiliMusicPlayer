@@ -52,7 +52,6 @@ export class PlayerEngine {
     this.tabs = new TabCoordinator(() => {
       if (this.media && !this.media.paused) {
         this.media.pause();
-        this.setMessage("已由另一个 Bilibili 标签页接管播放");
       }
     });
   }
@@ -364,7 +363,6 @@ export class PlayerEngine {
     }
 
     try {
-      this.tabs.claim();
       await this.media.play();
       this.state.value = {
         ...this.state.peek(),

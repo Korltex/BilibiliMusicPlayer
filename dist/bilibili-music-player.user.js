@@ -2839,10 +2839,7 @@ html[${ROOT_ATTRIBUTE}="active"] video.bpx-player-video {
 			this.store = store;
 			this.locator = new MediaLocator((media, reason) => this.handleMediaChange(media, reason));
 			this.tabs = new TabCoordinator(() => {
-				if (this.media && !this.media.paused) {
-					this.media.pause();
-					this.setMessage("已由另一个 Bilibili 标签页接管播放");
-				}
+				if (this.media && !this.media.paused) this.media.pause();
 			});
 		}
 		start() {
@@ -3031,7 +3028,6 @@ html[${ROOT_ATTRIBUTE}="active"] video.bpx-player-video {
 		async tryPlay() {
 			if (!this.media) return;
 			try {
-				this.tabs.claim();
 				await this.media.play();
 				this.state.value = {
 					...this.state.peek(),
