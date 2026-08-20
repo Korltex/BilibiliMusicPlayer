@@ -222,7 +222,9 @@ test("rewrites XHR text, json, and arraybuffer without changing native errors", 
     });
 });
 
-test("falls back to visible video for durl-only playinfo", async ({ page }) => {
+test("falls back to visible video in full and minimal players for durl-only playinfo", async ({
+  page,
+}) => {
   await page.addInitScript(
     ({ storageKey, value }) => {
       localStorage.setItem(storageKey, JSON.stringify(value));
@@ -244,7 +246,12 @@ test("falls back to visible video for durl-only playinfo", async ({ page }) => {
       </script>
       ${playerMarkup()}
       <script>
-        document.querySelector("video").play = () =>
+        const media = document.querySelector("video");
+        Object.defineProperties(media, {
+          duration: { configurable: true, get: () => 240 },
+          readyState: { configurable: true, get: () => 4 },
+        });
+        media.play = () =>
           Promise.reject(new DOMException("autoplay blocked", "NotAllowedError"));
       </script>
     `,
@@ -283,6 +290,16 @@ test("falls back to visible video for durl-only playinfo", async ({ page }) => {
   await expect(page.locator(".status-message")).toHaveText(autoplayMessage);
   await expect(page.locator(".status-message")).toHaveClass(/actionable/);
   await expect(page.locator(".playlist-context-chip")).toBeVisible();
+
+  await page.getByRole("button", { name: "进入极简模式" }).click();
+  const minimalAudioButton = page
+    .getByRole("region", { name: "Bilibili 音乐播放器（极简模式）" })
+    .locator(".audio-mode-button");
+  await expect(minimalAudioButton).toHaveClass(/fallback/);
+  await expect(minimalAudioButton).toHaveAttribute(
+    "title",
+    "纯音频模式未生效，已回退正常视频：当前视频只提供音视频混流；点击关闭并重载",
+  );
 });
 
 test("persists both toggle directions and preserves navigation context", async ({

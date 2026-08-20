@@ -3,14 +3,20 @@ import type { ViewportPosition } from "../app/draggable-position";
 export const LAYOUT_STORAGE_KEY = "bilibili-music-player:layout";
 
 export type LayoutTarget = "launcher" | "panel";
+export type OpenPanelMode = "full" | "minimal";
 
 export interface LayoutData {
   version: 1;
   launcher?: ViewportPosition;
   panel?: ViewportPosition;
+  lastOpenMode: OpenPanelMode;
 }
 
-const DEFAULT_LAYOUT: LayoutData = { version: 1 };
+const DEFAULT_LAYOUT: LayoutData = { version: 1, lastOpenMode: "full" };
+
+function readOpenPanelMode(value: unknown): OpenPanelMode {
+  return value === "minimal" ? "minimal" : "full";
+}
 
 function readPosition(value: unknown): ViewportPosition | undefined {
   if (!value || typeof value !== "object") {
@@ -40,9 +46,14 @@ export function migrateLayoutData(raw: unknown): LayoutData {
     return DEFAULT_LAYOUT;
   }
 
-  return {
+  const migrated: LayoutData = {
     version: 1,
-    launcher: readPosition(candidate.launcher),
-    panel: readPosition(candidate.panel),
+    lastOpenMode: readOpenPanelMode(candidate.lastOpenMode),
   };
+
+  const launcher = readPosition(candidate.launcher);
+  if (launcher) migrated.launcher = launcher;
+  const panel = readPosition(candidate.panel);
+  if (panel) migrated.panel = panel;
+  return migrated;
 }

@@ -37,6 +37,7 @@ export interface DraggablePositionBinding {
   onPointerUp: (event: DragPointerEvent) => void;
   onPointerCancel: (event: DragPointerEvent) => void;
   consumeSuppressedClick: () => boolean;
+  saveCurrentPosition: () => void;
   resetPosition: () => void;
 }
 
@@ -195,6 +196,20 @@ export function useDraggablePosition(
     suppressClick.current = false;
     return true;
   }, []);
+  const saveCurrentPosition = useCallback(() => {
+    if (!element) {
+      return;
+    }
+
+    const bounds = element.getBoundingClientRect();
+    const nextPosition = clampPosition(
+      { x: bounds.left, y: bounds.top },
+      { width: bounds.width, height: bounds.height },
+      viewportSize(),
+    );
+    setPosition(nextPosition);
+    layoutRepository.savePosition(target, nextPosition);
+  }, [element, target]);
   const resetPosition = useCallback(() => {
     activeDrag.current = undefined;
     suppressClick.current = false;
@@ -217,6 +232,7 @@ export function useDraggablePosition(
     onPointerUp,
     onPointerCancel,
     consumeSuppressedClick,
+    saveCurrentPosition,
     resetPosition,
   };
 }

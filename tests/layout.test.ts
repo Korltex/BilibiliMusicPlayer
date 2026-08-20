@@ -42,6 +42,7 @@ describe("draggable layout", () => {
       version: 1,
       launcher: { x: 24, y: 36 },
       panel: { x: 180, y: 90 },
+      lastOpenMode: "full",
     });
 
     const invalidLayout = migrateLayoutData({
@@ -51,6 +52,35 @@ describe("draggable layout", () => {
     });
     expect(invalidLayout.launcher).toBeUndefined();
     expect(invalidLayout.panel).toBeUndefined();
-    expect(migrateLayoutData({ version: 2 })).toEqual({ version: 1 });
+    expect(migrateLayoutData({ version: 2 })).toEqual({
+      version: 1,
+      lastOpenMode: "full",
+    });
+  });
+
+  it("defaults old layout data to the full panel", () => {
+    expect(
+      migrateLayoutData({
+        version: 1,
+        launcher: { x: 24, y: 36 },
+        panel: { x: 180, y: 90 },
+      }),
+    ).toEqual({
+      version: 1,
+      launcher: { x: 24, y: 36 },
+      panel: { x: 180, y: 90 },
+      lastOpenMode: "full",
+    });
+  });
+
+  it("keeps valid minimal mode and rejects invalid stored modes", () => {
+    expect(migrateLayoutData({ version: 1, lastOpenMode: "minimal" })).toEqual({
+      version: 1,
+      lastOpenMode: "minimal",
+    });
+    expect(migrateLayoutData({ version: 1, lastOpenMode: "compact" })).toEqual({
+      version: 1,
+      lastOpenMode: "full",
+    });
   });
 });

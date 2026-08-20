@@ -71,7 +71,7 @@ export function createTrackFromCurrentPage(
   return {
     id: createId("track"),
     ...metadata,
-    ...(cid === undefined ? {} : { cid }),
+    ...(cid !== undefined ? { cid } : {}),
     title: title.trim() || metadata.title,
     startTime,
     endTime,

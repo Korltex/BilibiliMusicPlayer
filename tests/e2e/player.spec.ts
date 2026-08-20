@@ -1,5 +1,12 @@
 import { expect, test, type Page } from "@playwright/test";
+import { readFileSync } from "node:fs";
 import { injectBuiltUserscript } from "../helpers/userscript";
+
+const packageVersion = (
+  JSON.parse(
+    readFileSync(new URL("../../package.json", import.meta.url), "utf8"),
+  ) as { version: string }
+).version;
 
 const VIDEO_URL = "https://www.bilibili.com/video/BV1TestMusic/";
 const CURRENT_VIDEO_URL = "https://www.bilibili.com/video/BV1CurrentMusic/";
@@ -9,67 +16,15 @@ const WEB_FULLSCREEN_URL = "https://www.bilibili.com/video/BV1WebFullscreen/";
 const DRAGGABLE_UI_URL = "https://www.bilibili.com/video/BV1DraggableUi/";
 const INTEGER_TIME_URL = "https://www.bilibili.com/video/BV1IntegerTime/";
 const LEGACY_TIME_URL = "https://www.bilibili.com/video/BV1LegacyTime/";
+const EDITOR_SWITCH_URL = "https://www.bilibili.com/video/BV1EditorSwitch/";
 const FULL_VIDEO_RANGE_URL =
   "https://www.bilibili.com/video/BV1FullVideoRange/";
+const MINIMAL_PLAYER_URL = "https://www.bilibili.com/video/BV1MinimalPlayer/";
 const CHAPTER_VIDEO_URL = "https://www.bilibili.com/video/BV1ChapterMusic/?p=2";
-const CHAPTER_FAILURE_URL = "https://www.bilibili.com/video/BV1ChapterFailure/";
-
-const apiHeaders = {
-  "access-control-allow-origin": "https://www.bilibili.com",
-  "access-control-allow-credentials": "true",
-};
-
-test.beforeEach(async ({ page }) => {
-  await page.route(
-    "https://api.bilibili.com/x/web-interface/view**",
-    async (route) => {
-      const bvid = new URL(route.request().url()).searchParams.get("bvid");
-      const pages =
-        bvid === "BV1ChapterMusic"
-          ? [
-              { page: 1, cid: 111 },
-              { page: 2, cid: 222 },
-            ]
-          : bvid === "BV1ChapterFailure"
-            ? [{ page: 1, cid: 333 }]
-            : [];
-      await route.fulfill({
-        contentType: "application/json",
-        headers: apiHeaders,
-        body: JSON.stringify({ code: 0, data: { pages } }),
-      });
-    },
-  );
-  await page.route(
-    "https://api.bilibili.com/x/player/wbi/v2**",
-    async (route) => {
-      const url = new URL(route.request().url());
-      const bvid = url.searchParams.get("bvid");
-      if (bvid === "BV1ChapterFailure") {
-        await route.abort("failed");
-        return;
-      }
-
-      const viewPoints =
-        bvid === "BV1ChapterMusic" && url.searchParams.get("cid") === "222"
-          ? [
-              { content: "intro", from: 0.2, to: 363.2 },
-              {
-                content: "ceremony",
-                from: 364.8,
-                to: 558.1,
-                imgUrl: "https://example.com/ceremony.jpg",
-              },
-            ]
-          : [];
-      await route.fulfill({
-        contentType: "application/json",
-        headers: apiHeaders,
-        body: JSON.stringify({ code: 0, data: { view_points: viewPoints } }),
-      });
-    },
-  );
-});
+const EMPTY_CHAPTER_VIDEO_URL =
+  "https://www.bilibili.com/video/BV1EmptyChapter/";
+const VIEW_API_GLOB = "https://api.bilibili.com/x/web-interface/view**";
+const PLAYER_INFO_API_GLOB = "https://api.bilibili.com/x/player/wbi/v2**";
 
 async function installLocalStorageGm(
   page: Page,
@@ -107,6 +62,432 @@ async function installLocalStorageGm(
     { data: initialData },
   );
 }
+
+async function installMockMedia(
+  page: Page,
+  duration = 900,
+  initialTime = 0,
+  rejectFirstPlay = false,
+): Promise<void> {
+  await page.evaluate(
+    ({ mediaDuration, currentTimeAtStart, shouldRejectFirstPlay }) => {
+      const media = document.querySelector("video")!;
+      let paused = true;
+      let currentTime = currentTimeAtStart;
+      let volume = 1;
+      let muted = false;
+      let playAttempts = 0;
+
+      Object.defineProperties(media, {
+        paused: { get: () => paused },
+        currentTime: {
+          get: () => currentTime,
+          set: (value: number) => {
+            currentTime = value;
+            media.dispatchEvent(new Event("timeupdate"));
+          },
+        },
+        duration: { get: () => mediaDuration },
+        readyState: { get: () => 4 },
+        volume: {
+          get: () => volume,
+          set: (value: number) => {
+            volume = value;
+            media.dispatchEvent(new Event("volumechange"));
+          },
+        },
+        muted: {
+          get: () => muted,
+          set: (value: boolean) => {
+            muted = value;
+            media.dispatchEvent(new Event("volumechange"));
+          },
+        },
+      });
+
+      media.play = async () => {
+        playAttempts += 1;
+        if (shouldRejectFirstPlay && playAttempts === 1) {
+          throw new DOMException("autoplay blocked", "NotAllowedError");
+        }
+        paused = false;
+        media.dispatchEvent(new Event("play"));
+      };
+      media.pause = () => {
+        paused = true;
+        media.dispatchEvent(new Event("pause"));
+      };
+    },
+    {
+      mediaDuration: duration,
+      currentTimeAtStart: initialTime,
+      shouldRejectFirstPlay: rejectFirstPlay,
+    },
+  );
+}
+
+interface MinimalPlayerTestOptions {
+  currentTime?: number;
+  duration?: number;
+  installMedia?: boolean;
+  rejectFirstPlay?: boolean;
+}
+
+async function openMinimalPlayerTestPage(
+  page: Page,
+  {
+    currentTime = 0,
+    duration = 240,
+    installMedia = true,
+    rejectFirstPlay = false,
+  }: MinimalPlayerTestOptions = {},
+): Promise<void> {
+  await page.route(MINIMAL_PLAYER_URL, async (route) => {
+    await route.fulfill({
+      contentType: "text/html; charset=utf-8",
+      body: `
+        <!doctype html>
+        <html>
+          <head><title>极简播放器测试_哔哩哔哩_bilibili</title></head>
+          <body>
+            <h1 class="video-title" title="极简播放器测试">极简播放器测试</h1>
+            <a class="up-name">测试作者</a>
+            <video></video>
+          </body>
+        </html>
+      `,
+    });
+  });
+  await installLocalStorageGm(page);
+  await page.goto(MINIMAL_PLAYER_URL);
+  if (installMedia) {
+    await installMockMedia(page, duration, currentTime, rejectFirstPlay);
+  }
+  await injectBuiltUserscript(page);
+}
+
+test("displays the 0.1.6 package version in the full player", async ({
+  page,
+}) => {
+  expect(packageVersion).toBe("0.1.6");
+  await openMinimalPlayerTestPage(page);
+  await page.getByRole("button", { name: "打开 Bilibili 音乐播放器" }).click();
+
+  const full = page.getByRole("region", {
+    name: "Bilibili 音乐播放器",
+    exact: true,
+  });
+  await expect(full.locator(".version")).toHaveText(packageVersion);
+});
+
+test("switches between full, minimal, and launcher modes", async ({ page }) => {
+  await openMinimalPlayerTestPage(page);
+
+  const launcher = page.getByRole("button", {
+    name: "打开 Bilibili 音乐播放器",
+  });
+  await launcher.click();
+
+  const full = page.getByRole("region", {
+    name: "Bilibili 音乐播放器",
+    exact: true,
+  });
+  const fullBeforeMinimal = (await full.boundingBox())!;
+  const headerButtons = full.locator(".header-actions > button");
+  await expect(headerButtons).toHaveCount(3);
+  await expect(headerButtons.nth(0)).toHaveAttribute(
+    "aria-label",
+    "重置图标和播放器位置",
+  );
+  await expect(headerButtons.nth(1)).toHaveAttribute(
+    "aria-label",
+    "进入极简模式",
+  );
+  await expect(headerButtons.nth(2)).toHaveAttribute(
+    "aria-label",
+    "收起播放器",
+  );
+
+  await headerButtons.nth(1).click();
+  const minimal = page.getByRole("region", {
+    name: "Bilibili 音乐播放器（极简模式）",
+  });
+  await expect(minimal).toBeVisible();
+  await expect(full).toHaveCount(0);
+
+  const box = (await minimal.boundingBox())!;
+  expect(box.x).toBeCloseTo(fullBeforeMinimal.x, 0);
+  expect(box.y).toBeCloseTo(fullBeforeMinimal.y, 0);
+  expect(box.width).toBeLessThanOrEqual(396.5);
+  expect(box.height).toBeCloseTo(56, 0);
+
+  for (const name of ["展开完整播放器", "收起播放器"]) {
+    const actionBox = (await minimal
+      .getByRole("button", { name })
+      .boundingBox())!;
+    expect(actionBox.width).toBeGreaterThanOrEqual(26);
+    expect(actionBox.width).toBeLessThanOrEqual(28);
+    expect(actionBox.height).toBeGreaterThanOrEqual(26);
+    expect(actionBox.height).toBeLessThanOrEqual(28);
+  }
+
+  await minimal.getByRole("button", { name: "收起播放器" }).click();
+  await launcher.click();
+  await expect(minimal).toBeVisible();
+
+  await minimal.getByRole("button", { name: "展开完整播放器" }).click();
+  await expect(full).toBeVisible();
+});
+
+test("minimal player keeps controls visible and persists its mode", async ({
+  page,
+}) => {
+  await openMinimalPlayerTestPage(page, { installMedia: false });
+  await page.evaluate(() => {
+    localStorage.setItem(
+      "__bili_music__:bilibili-music-player:layout",
+      JSON.stringify({
+        version: 1,
+        lastOpenMode: "full",
+        launcher: { x: 1200, y: 760 },
+        panel: { x: 960, y: 760 },
+      }),
+    );
+  });
+
+  await page.getByRole("button", { name: "打开 Bilibili 音乐播放器" }).click();
+  const fullBeforeMinimal = (await page
+    .getByRole("region", {
+      name: "Bilibili 音乐播放器",
+      exact: true,
+    })
+    .boundingBox())!;
+  await page.getByRole("button", { name: "进入极简模式" }).click();
+
+  const minimal = page.getByRole("region", {
+    name: "Bilibili 音乐播放器（极简模式）",
+  });
+  await expect(
+    minimal.getByRole("button", { name: "播放", exact: true }),
+  ).toBeDisabled();
+  await expect(minimal.getByRole("button", { name: "上一首" })).toBeDisabled();
+  await expect(minimal.getByRole("button", { name: "下一首" })).toBeDisabled();
+  await expect(
+    minimal.getByRole("button", { name: "开启纯音频模式并重载页面" }),
+  ).toBeEnabled();
+  const playModeButton = minimal.locator(
+    '[aria-label="顺序播放"], [aria-label="列表循环"], [aria-label="单曲循环"], [aria-label="随机播放"]',
+  );
+  await expect(playModeButton).toHaveCount(1);
+  await expect(playModeButton).toBeEnabled();
+  await expect(minimal.getByRole("slider", { name: "音量" })).toBeEnabled();
+  await expect(
+    minimal.getByRole("button", { name: "展开完整播放器" }),
+  ).toBeEnabled();
+  await expect(
+    minimal.getByRole("button", { name: "收起播放器" }),
+  ).toBeEnabled();
+
+  await minimal.getByRole("button", { name: "收起播放器" }).click();
+  await page.reload();
+  await installMockMedia(page, 240, 60);
+  await injectBuiltUserscript(page);
+  await page.getByRole("button", { name: "打开 Bilibili 音乐播放器" }).click();
+
+  await expect(minimal).toBeVisible();
+  await expect(minimal).toContainText("极简播放器测试");
+  await expect(minimal).toContainText("测试作者");
+  await expect(
+    minimal.locator(".cover, .brand, .time-row, .progress-range"),
+  ).toHaveCount(0);
+  await expect(
+    minimal.getByRole("progressbar", { name: "播放进度" }),
+  ).toHaveAttribute("aria-valuenow", "25");
+  await expect(
+    minimal.getByRole("progressbar", { name: "播放进度" }),
+  ).not.toHaveAttribute("tabindex");
+  await expect(minimal.getByRole("slider", { name: "音量" })).toHaveCount(1);
+  await expect(minimal.locator('input[type="range"]')).toHaveCount(1);
+
+  await minimal.getByRole("button", { name: "播放", exact: true }).click();
+  await expect(
+    minimal.getByRole("button", { name: "暂停", exact: true }),
+  ).toBeVisible();
+  await minimal.getByRole("button", { name: "列表循环" }).click();
+  await expect(minimal.getByRole("button", { name: "单曲循环" })).toBeVisible();
+  await minimal.getByRole("button", { name: "静音" }).click();
+  await expect(minimal.getByRole("button", { name: "取消静音" })).toBeVisible();
+
+  const storedLayout = await page.evaluate(() => {
+    const raw = localStorage.getItem(
+      "__bili_music__:bilibili-music-player:layout",
+    );
+    return raw ? JSON.parse(raw) : null;
+  });
+  expect(storedLayout).toMatchObject({
+    version: 1,
+    lastOpenMode: "minimal",
+    launcher: { x: 1200, y: 760 },
+  });
+  expect(storedLayout.panel.x).toBeCloseTo(fullBeforeMinimal.x, 0);
+  expect(storedLayout.panel.y).toBeCloseTo(fullBeforeMinimal.y, 0);
+});
+
+test("minimal player keeps every control visible on a narrow viewport", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 720 });
+  await openMinimalPlayerTestPage(page);
+  await page.getByRole("button", { name: "打开 Bilibili 音乐播放器" }).click();
+  await page.getByRole("button", { name: "进入极简模式" }).click();
+
+  const minimal = page.getByRole("region", {
+    name: "Bilibili 音乐播放器（极简模式）",
+  });
+  const minimalBounds = (await minimal.boundingBox())!;
+  const metadataBounds = (await minimal
+    .locator(".minimal-now-playing")
+    .boundingBox())!;
+  const controls = minimal.locator("button, input");
+  await expect(controls).toHaveCount(9);
+
+  const controlBounds = await controls.evaluateAll((elements) =>
+    elements.map((element) => {
+      const bounds = element.getBoundingClientRect();
+      return {
+        left: bounds.left,
+        right: bounds.right,
+        top: bounds.top,
+        bottom: bounds.bottom,
+      };
+    }),
+  );
+
+  expect(metadataBounds.width).toBeGreaterThanOrEqual(32);
+  expect(metadataBounds.x + metadataBounds.width).toBeLessThanOrEqual(
+    controlBounds[0].left + 0.5,
+  );
+  for (const bounds of controlBounds) {
+    expect(bounds.left).toBeGreaterThanOrEqual(minimalBounds.x - 0.5);
+    expect(bounds.right).toBeLessThanOrEqual(
+      minimalBounds.x + minimalBounds.width + 0.5,
+    );
+    expect(bounds.top).toBeGreaterThanOrEqual(minimalBounds.y - 0.5);
+    expect(bounds.bottom).toBeLessThanOrEqual(
+      minimalBounds.y + minimalBounds.height + 0.5,
+    );
+  }
+  for (let index = 1; index < controlBounds.length; index += 1) {
+    expect(controlBounds[index].left).toBeGreaterThanOrEqual(
+      controlBounds[index - 1].right - 0.5,
+    );
+  }
+});
+
+test("minimal interaction prompt retries playback and clears immediately", async ({
+  page,
+}) => {
+  await openMinimalPlayerTestPage(page, { rejectFirstPlay: true });
+  await page.getByRole("button", { name: "打开 Bilibili 音乐播放器" }).click();
+  await page.getByRole("button", { name: "进入极简模式" }).click();
+
+  const minimal = page.getByRole("region", {
+    name: "Bilibili 音乐播放器（极简模式）",
+  });
+  await minimal.getByRole("button", { name: "播放", exact: true }).click();
+  const prompt = minimal.getByRole("button", { name: "点击继续播放" });
+  await expect(prompt).toBeVisible();
+  const promptBounds = (await prompt.boundingBox())!;
+  const viewport = page.viewportSize()!;
+  expect(promptBounds.y).toBeGreaterThanOrEqual(0);
+  expect(promptBounds.y + promptBounds.height).toBeLessThanOrEqual(
+    viewport.height,
+  );
+  await prompt.click();
+  await expect(
+    minimal.getByRole("button", { name: "暂停", exact: true }),
+  ).toBeVisible();
+  await expect(prompt).toHaveCount(0);
+});
+
+test("minimal interaction prompt expires after five seconds", async ({
+  page,
+}) => {
+  await openMinimalPlayerTestPage(page, { rejectFirstPlay: true });
+  await page.evaluate(() => {
+    localStorage.setItem(
+      "__bili_music__:bilibili-music-player:layout",
+      JSON.stringify({
+        version: 1,
+        lastOpenMode: "minimal",
+        panel: { x: 20, y: 0 },
+      }),
+    );
+  });
+  await page.reload();
+  await installMockMedia(page, 240, 0, true);
+  await injectBuiltUserscript(page);
+  await page.getByRole("button", { name: "打开 Bilibili 音乐播放器" }).click();
+
+  const minimal = page.getByRole("region", {
+    name: "Bilibili 音乐播放器（极简模式）",
+  });
+  await minimal.getByRole("button", { name: "播放", exact: true }).click();
+  const prompt = minimal.getByRole("button", { name: "点击继续播放" });
+  await expect(prompt).toBeVisible();
+  await expect(prompt).toHaveClass(/below/);
+  const promptBounds = (await prompt.boundingBox())!;
+  const viewport = page.viewportSize()!;
+  expect(promptBounds.y).toBeGreaterThanOrEqual(0);
+  expect(promptBounds.y + promptBounds.height).toBeLessThanOrEqual(
+    viewport.height,
+  );
+  await expect(prompt).toHaveCount(0, { timeout: 5_500 });
+});
+
+test("minimal controls are keyboard accessible without triggering page shortcuts", async ({
+  page,
+}) => {
+  await openMinimalPlayerTestPage(page);
+  await page.getByRole("button", { name: "打开 Bilibili 音乐播放器" }).click();
+  await page.getByRole("button", { name: "进入极简模式" }).click();
+  await page.evaluate(() => {
+    const pageState = window as Window & { spaceShortcutCount?: number };
+    pageState.spaceShortcutCount = 0;
+    document.addEventListener("keydown", (event) => {
+      if (event.code === "Space") {
+        pageState.spaceShortcutCount = (pageState.spaceShortcutCount ?? 0) + 1;
+      }
+    });
+  });
+
+  const minimal = page.getByRole("region", {
+    name: "Bilibili 音乐播放器（极简模式）",
+  });
+  const audioButton = minimal.locator(".audio-mode-button");
+  const playButton = minimal.getByRole("button", {
+    name: "播放",
+    exact: true,
+  });
+
+  await page.keyboard.press("Tab");
+  await expect(audioButton).toBeFocused();
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Tab");
+  await expect(playButton).toBeFocused();
+  await page.keyboard.press("Space");
+
+  await expect(
+    minimal.getByRole("button", { name: "暂停", exact: true }),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(
+      () =>
+        (window as Window & { spaceShortcutCount?: number }).spaceShortcutCount,
+    ),
+  ).toBe(0);
+});
 
 test("mounts, controls media, and saves a track", async ({
   page,
@@ -325,6 +706,197 @@ test("mounts, controls media, and saves a track", async ({
     path: testInfo.outputPath("player-panel-mobile.png"),
     fullPage: true,
   });
+});
+
+test("selects video chapters while keeping the title editable", async ({
+  page,
+}) => {
+  let requestedPlayerCid: string | null = null;
+
+  await page.route(CHAPTER_VIDEO_URL, async (route) => {
+    await route.fulfill({
+      contentType: "text/html; charset=utf-8",
+      body: `
+        <!doctype html>
+        <html>
+          <head>
+            <title>章节视频_哔哩哔哩_bilibili</title>
+            <meta property="og:title" content="章节视频">
+          </head>
+          <body>
+            <h1 class="video-title" title="章节视频">章节视频</h1>
+            <a class="up-name">章节作者</a>
+            <video style="display:block;width:900px;height:506px"></video>
+          </body>
+        </html>
+      `,
+    });
+  });
+  await page.route(VIEW_API_GLOB, async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        code: 0,
+        data: { pages: [{ cid: 101 }, { cid: 202 }] },
+      }),
+    });
+  });
+  await page.route(PLAYER_INFO_API_GLOB, async (route) => {
+    requestedPlayerCid = new URL(route.request().url()).searchParams.get("cid");
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        code: 0,
+        data: {
+          view_points: [
+            { content: "ceremony", from: 364, to: 559 },
+            { content: "finale", from: 559, to: 700 },
+          ],
+        },
+      }),
+    });
+  });
+  await installLocalStorageGm(page);
+
+  await page.goto(CHAPTER_VIDEO_URL);
+  await installMockMedia(page);
+  await injectBuiltUserscript(page);
+  await page.locator(".floating-button").click();
+  await page.getByRole("button", { name: "将当前视频添加到歌单" }).click();
+
+  const editor = page.locator(".track-editor");
+  const titleInput = page.getByLabel("标题");
+  const startInput = page.getByLabel("开始时间（秒）");
+  const endInput = page.getByLabel("结束时间（秒）");
+  await editor.getByRole("button", { name: "展开视频章节" }).click();
+
+  const ceremony = editor.getByRole("option", {
+    name: "ceremony 06:04–09:19",
+  });
+  await expect(ceremony).toBeVisible();
+  await ceremony.click();
+  await expect(titleInput).toHaveValue("ceremony");
+  await expect(startInput).toHaveValue("364");
+  await expect(endInput).toHaveValue("559");
+  expect(requestedPlayerCid).toBe("202");
+
+  await titleInput.press("ArrowDown");
+  await expect(titleInput).toHaveAttribute(
+    "aria-activedescendant",
+    "bilibili-music-chapter-0",
+  );
+  await titleInput.press("ArrowDown");
+  await expect(titleInput).toHaveAttribute(
+    "aria-activedescendant",
+    "bilibili-music-chapter-1",
+  );
+  await titleInput.press("Enter");
+  await expect(titleInput).toHaveValue("finale");
+  await expect(startInput).toHaveValue("559");
+  await expect(endInput).toHaveValue("700");
+
+  await titleInput.fill("自定义章节标题");
+  await expect(startInput).toHaveValue("559");
+  await expect(endInput).toHaveValue("700");
+  await page.getByRole("button", { name: "保存", exact: true }).click();
+
+  const storedTrack = await page.evaluate(() => {
+    const raw = localStorage.getItem(
+      "__bili_music__:bilibili-music-player:data",
+    );
+    return JSON.parse(raw!).playlists[0].tracks[0];
+  });
+  expect(storedTrack).toMatchObject({
+    bvid: "BV1ChapterMusic",
+    cid: 202,
+    page: 2,
+    title: "自定义章节标题",
+    startTime: 559,
+    endTime: 700,
+  });
+
+  await page.getByRole("button", { name: "编辑 自定义章节标题" }).click();
+  await page
+    .locator(".track-editor")
+    .getByRole("button", { name: "展开视频章节" })
+    .click();
+  const editedChapterList = page
+    .locator(".track-editor")
+    .getByRole("listbox", { name: "视频章节" });
+  await expect(
+    page.locator(".track-editor").getByRole("option", {
+      name: "ceremony 06:04–09:19",
+    }),
+  ).toBeVisible();
+  await page
+    .locator(".track-editor")
+    .getByRole("combobox", { name: "标题", exact: true })
+    .press("Escape");
+  await expect(editedChapterList).toHaveCount(0);
+
+  await page
+    .locator(".track-editor")
+    .getByRole("button", { name: "展开视频章节" })
+    .click();
+  await expect(editedChapterList).toBeVisible();
+  await page.locator(".track-editor .editor-heading strong").click();
+  await expect(editedChapterList).toHaveCount(0);
+});
+
+test("keeps manual track editing available when the video has no chapters", async ({
+  page,
+}) => {
+  await page.route(EMPTY_CHAPTER_VIDEO_URL, async (route) => {
+    await route.fulfill({
+      contentType: "text/html; charset=utf-8",
+      body: `
+        <!doctype html>
+        <html>
+          <head>
+            <title>无章节视频_哔哩哔哩_bilibili</title>
+            <meta property="og:title" content="无章节视频">
+          </head>
+          <body>
+            <h1 class="video-title" title="无章节视频">无章节视频</h1>
+            <video style="display:block;width:900px;height:506px"></video>
+          </body>
+        </html>
+      `,
+    });
+  });
+  await page.route(VIEW_API_GLOB, async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        code: 0,
+        data: { pages: [{ cid: 404 }] },
+      }),
+    });
+  });
+  await page.route(PLAYER_INFO_API_GLOB, async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ code: 0, data: { view_points: [] } }),
+    });
+  });
+  await installLocalStorageGm(page);
+
+  await page.goto(EMPTY_CHAPTER_VIDEO_URL);
+  await installMockMedia(page, 180);
+  await injectBuiltUserscript(page);
+  await page.locator(".floating-button").click();
+  await page.getByRole("button", { name: "将当前视频添加到歌单" }).click();
+
+  const editor = page.locator(".track-editor");
+  await editor.getByRole("button", { name: "展开视频章节" }).click();
+  await expect(editor.getByRole("listbox", { name: "视频章节" })).toBeVisible();
+  await expect(editor.getByRole("option")).toHaveCount(0);
+
+  await page.getByLabel("标题").fill("手动标题");
+  await page.getByLabel("开始时间（秒）").fill("12");
+  await page.getByLabel("结束时间（秒）").fill("30");
+  await page.getByRole("button", { name: "保存", exact: true }).click();
+  await expect(page.locator(".track-copy strong")).toHaveText("手动标题");
 });
 
 test("uses the actual page metadata when the queue cursor points elsewhere", async ({
@@ -747,6 +1319,26 @@ test("hides the player UI in web fullscreen and restores its previous state", as
       .setAttribute("data-screen", "normal");
   });
   await expect(panel).toBeVisible();
+
+  await panel.getByRole("button", { name: "进入极简模式" }).click();
+  const minimal = page.getByRole("region", {
+    name: "Bilibili 音乐播放器（极简模式）",
+  });
+  await expect(minimal).toBeVisible();
+
+  await page.evaluate(() => {
+    document
+      .querySelector(".bpx-player-container")!
+      .setAttribute("data-screen", "web");
+  });
+  await expect(minimal).toBeHidden();
+
+  await page.evaluate(() => {
+    document
+      .querySelector(".bpx-player-container")!
+      .setAttribute("data-screen", "normal");
+  });
+  await expect(minimal).toBeVisible();
 });
 
 test("drags and persists the launcher and player panel", async ({ page }) => {
@@ -804,9 +1396,51 @@ test("drags and persists the launcher and player panel", async ({ page }) => {
   });
   await page.mouse.up();
 
-  const panelMoved = (await panel.boundingBox())!;
+  let panelMoved = (await panel.boundingBox())!;
   expect(panelMoved.x).toBeCloseTo(panelBefore.x - 300, 0);
   expect(panelMoved.y).toBeCloseTo(panelBefore.y - 140, 0);
+
+  await panel.getByRole("button", { name: "进入极简模式" }).click();
+  const minimal = page.getByRole("region", {
+    name: "Bilibili 音乐播放器（极简模式）",
+  });
+  const minimalMetadata = minimal.locator(".minimal-now-playing");
+  const metadataBounds = (await minimalMetadata.boundingBox())!;
+  const minimalDragStart = {
+    x: metadataBounds.x + metadataBounds.width / 2,
+    y: metadataBounds.y + metadataBounds.height / 2,
+  };
+
+  await page.mouse.move(minimalDragStart.x, minimalDragStart.y);
+  await page.mouse.down();
+  await page.mouse.move(minimalDragStart.x + 500, minimalDragStart.y + 400, {
+    steps: 8,
+  });
+  await page.mouse.up();
+
+  const minimalMoved = (await minimal.boundingBox())!;
+  await minimal.getByRole("button", { name: "展开完整播放器" }).click();
+  await expect(panel).toBeVisible();
+  const viewport = page.viewportSize()!;
+  await expect
+    .poll(async () => {
+      const bounds = await panel.boundingBox();
+      if (!bounds) return false;
+      const expectedX = Math.min(
+        Math.max(minimalMoved.x, 0),
+        viewport.width - bounds.width,
+      );
+      const expectedY = Math.min(
+        Math.max(minimalMoved.y, 0),
+        viewport.height - bounds.height,
+      );
+      return (
+        Math.abs(bounds.x - expectedX) <= 0.5 &&
+        Math.abs(bounds.y - expectedY) <= 0.5
+      );
+    })
+    .toBe(true);
+  panelMoved = (await panel.boundingBox())!;
 
   await panel.locator(".close-panel-button").click();
   await expect(launcher).toBeVisible();
@@ -885,7 +1519,7 @@ test("drags and persists the launcher and player panel", async ({ page }) => {
     );
     return raw ? JSON.parse(raw) : null;
   });
-  expect(storedLayout).toEqual({ version: 1 });
+  expect(storedLayout).toEqual({ version: 1, lastOpenMode: "full" });
 
   await closeButton.click();
   const resetLauncher = (await launcher.boundingBox())!;
@@ -980,161 +1614,6 @@ test("uses whole seconds for new track boundaries", async ({ page }) => {
   expect(savedBoundary).toEqual({ startTime: 12, endTime: 21 });
 });
 
-test("selects chapters for new and existing tracks with mouse and keyboard", async ({
-  page,
-}) => {
-  await page.route(CHAPTER_VIDEO_URL, async (route) => {
-    await route.fulfill({
-      contentType: "text/html; charset=utf-8",
-      body: `
-        <!doctype html>
-        <html>
-          <head>
-            <title>章节测试_哔哩哔哩_bilibili</title>
-            <meta property="og:title" content="章节测试">
-          </head>
-          <body>
-            <h1 class="video-title" title="章节测试">章节测试</h1>
-            <video style="display:block;width:900px;height:506px"></video>
-          </body>
-        </html>
-      `,
-    });
-  });
-  await installLocalStorageGm(page);
-  const apiRequests: string[] = [];
-  page.on("request", (request) => {
-    if (request.url().startsWith("https://api.bilibili.com/")) {
-      apiRequests.push(request.url());
-    }
-  });
-
-  await page.goto(CHAPTER_VIDEO_URL);
-  await page.evaluate(() => {
-    const media = document.querySelector("video")!;
-    Object.defineProperties(media, {
-      paused: { get: () => true },
-      currentTime: { get: () => 0, set: () => {} },
-      duration: { get: () => 600 },
-      readyState: { get: () => 4 },
-      volume: { get: () => 1, set: () => {} },
-      muted: { get: () => false, set: () => {} },
-    });
-  });
-  await injectBuiltUserscript(page);
-  await page.locator(".floating-button").click();
-  await page.locator(".add-current-button").click();
-
-  let editor = page.locator(".track-editor");
-  let titleInput = page.getByRole("combobox", { name: "标题" });
-  const startInput = page.getByLabel("开始时间（秒）");
-  const endInput = page.getByLabel("结束时间（秒）");
-  await expect(titleInput).toHaveValue("章节测试");
-
-  await page.getByRole("button", { name: "展开章节列表" }).click();
-  const ceremony = page.getByRole("option", {
-    name: "ceremony 06:04–09:19",
-  });
-  await expect(ceremony).toBeVisible();
-  await ceremony.click();
-  await expect(titleInput).toHaveValue("ceremony");
-  await expect(startInput).toHaveValue("364");
-  await expect(endInput).toHaveValue("559");
-  await expect(page.locator(".track-row")).toHaveCount(0);
-
-  await titleInput.fill("ceremony 手动版");
-  await expect(startInput).toHaveValue("364");
-  await expect(endInput).toHaveValue("559");
-  await editor.locator(".save-track-button").click();
-
-  const savedTrack = await page.evaluate(() => {
-    const raw = localStorage.getItem(
-      "__bili_music__:bilibili-music-player:data",
-    );
-    return JSON.parse(raw!).playlists[0].tracks[0];
-  });
-  expect(savedTrack).toMatchObject({
-    bvid: "BV1ChapterMusic",
-    page: 2,
-    cid: 222,
-    title: "ceremony 手动版",
-    startTime: 364,
-    endTime: 559,
-  });
-
-  await page.getByRole("button", { name: "编辑 ceremony 手动版" }).click();
-  editor = page.locator(".track-editor");
-  titleInput = page.getByRole("combobox", { name: "标题" });
-  await page.getByRole("button", { name: "展开章节列表" }).click();
-  await expect(page.getByRole("listbox")).toBeVisible();
-  await titleInput.press("Escape");
-  await expect(page.getByRole("listbox")).toHaveCount(0);
-
-  await page.getByRole("button", { name: "展开章节列表" }).click();
-  await editor.locator(".editor-heading").click();
-  await expect(page.getByRole("listbox")).toHaveCount(0);
-
-  await titleInput.press("ArrowDown");
-  await titleInput.press("Enter");
-  await expect(titleInput).toHaveValue("intro");
-  await expect(page.getByLabel("开始时间（秒）")).toHaveValue("0");
-  await expect(page.getByLabel("结束时间（秒）")).toHaveValue("364");
-  await editor.locator(".save-track-button").click();
-
-  const viewRequests = apiRequests.filter((url) =>
-    url.includes("/x/web-interface/view"),
-  );
-  const chapterRequests = apiRequests.filter((url) =>
-    url.includes("/x/player/wbi/v2"),
-  );
-  expect(viewRequests).toHaveLength(1);
-  expect(chapterRequests).toHaveLength(2);
-  expect(chapterRequests[1]).toContain("cid=222");
-});
-
-test("keeps manual track editing available when the chapter request fails", async ({
-  page,
-}) => {
-  await page.route(CHAPTER_FAILURE_URL, async (route) => {
-    await route.fulfill({
-      contentType: "text/html; charset=utf-8",
-      body: `
-        <!doctype html>
-        <html>
-          <head><title>无章节测试_哔哩哔哩_bilibili</title></head>
-          <body>
-            <h1 class="video-title" title="无章节测试">无章节测试</h1>
-            <video></video>
-          </body>
-        </html>
-      `,
-    });
-  });
-  await installLocalStorageGm(page);
-  await page.goto(CHAPTER_FAILURE_URL);
-  await page.evaluate(() => {
-    const media = document.querySelector("video")!;
-    Object.defineProperties(media, {
-      currentTime: { get: () => 0, set: () => {} },
-      duration: { get: () => 120 },
-      readyState: { get: () => 4 },
-    });
-  });
-  await injectBuiltUserscript(page);
-  await page.locator(".floating-button").click();
-  await page.locator(".add-current-button").click();
-
-  const titleInput = page.getByRole("combobox", { name: "标题" });
-  await titleInput.fill("手动歌曲");
-  await page.getByRole("button", { name: "展开章节列表" }).click();
-  await expect(page.getByRole("listbox")).toHaveCount(0);
-  await page.getByLabel("开始时间（秒）").fill("10");
-  await page.getByLabel("结束时间（秒）").fill("20");
-  await page.locator(".track-editor .save-track-button").click();
-  await expect(page.getByText("手动歌曲", { exact: true })).toBeVisible();
-  await expect(page.locator(".status-message")).toHaveCount(0);
-});
-
 test("normalizes legacy fractional boundaries only when an edit is saved", async ({
   page,
 }) => {
@@ -1223,6 +1702,85 @@ test("normalizes legacy fractional boundaries only when an edit is saved", async
     return { startTime: track.startTime, endTime: track.endTime };
   });
   expect(boundaryAfterSave).toEqual({ startTime: 7, endTime: 16 });
+});
+
+test("resets editor fields when switching directly between tracks", async ({
+  page,
+}) => {
+  const now = 1_000;
+  await page.route(EDITOR_SWITCH_URL, async (route) => {
+    await route.fulfill({
+      contentType: "text/html; charset=utf-8",
+      body: `
+        <!doctype html>
+        <html>
+          <head><title>编辑器切换测试_哔哩哔哩_bilibili</title></head>
+          <body>
+            <h1 class="video-title" title="编辑器切换测试">编辑器切换测试</h1>
+            <video></video>
+          </body>
+        </html>
+      `,
+    });
+  });
+  await installLocalStorageGm(page, {
+    version: 1,
+    playlists: [
+      {
+        id: "playlist-default",
+        name: "默认歌单",
+        tracks: [
+          {
+            id: "track-first",
+            bvid: "BV1EditorSwitch",
+            title: "第一首",
+            startTime: 5,
+            endTime: 15,
+            duration: 120,
+            addedAt: now,
+            source: "manual",
+          },
+          {
+            id: "track-second",
+            bvid: "BV1EditorSwitch",
+            title: "第二首",
+            startTime: 30,
+            endTime: 50,
+            duration: 120,
+            addedAt: now,
+            source: "manual",
+          },
+        ],
+        createdAt: now,
+        updatedAt: now,
+      },
+    ],
+    activePlaylistId: "playlist-default",
+    playMode: "sequence",
+    volume: 1,
+    playback: {
+      playlistId: "playlist-default",
+      currentTime: 0,
+      resumeRequested: false,
+      updatedAt: now,
+    },
+  });
+
+  await page.goto(EDITOR_SWITCH_URL);
+  await installMockMedia(page, 120);
+  await injectBuiltUserscript(page);
+  await page.getByRole("button", { name: "打开 Bilibili 音乐播放器" }).click();
+
+  await page.getByRole("button", { name: "编辑 第一首" }).click();
+  const editor = page.locator(".track-editor");
+  await expect(editor.getByLabel("标题")).toHaveValue("第一首");
+  await expect(editor.getByLabel("开始时间（秒）")).toHaveValue("5");
+  await expect(editor.getByLabel("结束时间（秒）")).toHaveValue("15");
+
+  await page.getByRole("button", { name: "编辑 第二首" }).click();
+  await expect(editor.getByLabel("标题")).toHaveValue("第二首");
+  await expect(editor.getByLabel("开始时间（秒）")).toHaveValue("30");
+  await expect(editor.getByLabel("结束时间（秒）")).toHaveValue("50");
 });
 
 test("shows the effective full-video range without storing an end time", async ({

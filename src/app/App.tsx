@@ -3,40 +3,32 @@ import { version } from "../../package.json";
 import {
   ChevronDown,
   Clock3,
-  Headphones,
   ListMusic,
+  Minimize2,
   Music2,
-  Pause,
   Pencil,
-  Play,
   Plus,
-  Repeat,
-  Repeat1,
   RotateCcw,
   Save,
-  Shuffle,
-  SkipBack,
-  SkipForward,
   Trash2,
   Volume2,
-  VolumeX,
   X,
 } from "./icons";
 import type { AppStore } from "./store";
 import type { PlayerEngine } from "../playback/player-engine";
-import type {
-  AudioOnlyController,
-  AudioOnlyState,
-} from "../bili/audio-only-controller";
-import type { AudioOnlyInterceptionReason } from "../bili/audio-only-interceptor";
+import type { AudioOnlyController } from "../bili/audio-only-controller";
 import {
   createTrackFromCurrentPage,
   readCurrentVideoMetadata,
 } from "../bili/metadata";
-import { readVideoChapters, type VideoChapter } from "../bili/chapters";
+import { fetchVideoChapters, type VideoChapter } from "../bili/chapters";
 import { formatTime, toEndSecond, toStartSecond } from "../core/time";
 import type { PlayMode, Track } from "../core/types";
 import { useDraggablePosition } from "./use-draggable-position";
+import { LayoutRepository } from "../storage/layout";
+import type { OpenPanelMode } from "../storage/layout-schema";
+import { MinimalPlayer } from "./minimal-player";
+import { audioOnlyReasonLabel, PlayerControls } from "./player-controls";
 
 interface AppProps {
   store: AppStore;
@@ -51,15 +43,11 @@ const PLAY_MODES: PlayMode[] = [
   "shuffle",
 ];
 
-const PLAY_MODE_LABELS: Record<PlayMode, string> = {
-  sequence: "顺序播放",
-  "list-loop": "列表循环",
-  "single-loop": "单曲循环",
-  shuffle: "随机播放",
-};
+const layoutRepository = new LayoutRepository();
+type DisplayMode = "launcher" | OpenPanelMode;
 
 export function App({ store, engine, audioOnly }: AppProps) {
-  const [panelOpen, setPanelOpen] = useState(false);
+  const [displayMode, setDisplayMode] = useState<DisplayMode>("launcher");
   const [creatingPlaylist, setCreatingPlaylist] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState("");
   const [editorTrack, setEditorTrack] = useState<Track | "new">();
@@ -101,7 +89,15 @@ export function App({ store, engine, audioOnly }: AppProps) {
     engine.setPlayMode(PLAY_MODES[(currentIndex + 1) % PLAY_MODES.length]);
   };
 
-  if (!panelOpen) {
+  const showPanel = (mode: OpenPanelMode) => {
+    if (displayMode !== "launcher" && displayMode !== mode) {
+      panelDrag.saveCurrentPosition();
+    }
+    layoutRepository.saveLastOpenMode(mode);
+    setDisplayMode(mode);
+  };
+
+  if (displayMode === "launcher") {
     return (
       <button
         ref={launcherDrag.ref}
@@ -120,11 +116,35 @@ export function App({ store, engine, audioOnly }: AppProps) {
             return;
           }
 
-          setPanelOpen(true);
+          showPanel(layoutRepository.load().lastOpenMode);
         }}
       >
         <Music2 size={22} aria-hidden="true" />
       </button>
+    );
+  }
+
+  if (displayMode === "minimal") {
+    return (
+      <MinimalPlayer
+        playMode={data.playMode}
+        runtime={runtime}
+        audioOnlyState={audioOnlyState}
+        drag={panelDrag}
+        onToggleAudioOnly={() =>
+          audioOnly.toggle(
+            engine.currentMedia?.currentTime ?? runtime.currentTime,
+          )
+        }
+        onCyclePlayMode={cyclePlayMode}
+        onPrevious={() => engine.previous()}
+        onTogglePlayback={() => void engine.togglePlayback()}
+        onNext={() => engine.next()}
+        onToggleMute={() => engine.toggleMute()}
+        onSetVolume={(volume) => engine.setVolume(volume)}
+        onExpand={() => showPanel("full")}
+        onClose={() => setDisplayMode("launcher")}
+      />
     );
   }
 
@@ -172,11 +192,20 @@ export function App({ store, engine, audioOnly }: AppProps) {
             <RotateCcw size={18} aria-hidden="true" />
           </button>
           <button
+            class="icon-button"
+            type="button"
+            title="进入极简模式"
+            aria-label="进入极简模式"
+            onClick={() => showPanel("minimal")}
+          >
+            <Minimize2 size={18} aria-hidden="true" />
+          </button>
+          <button
             class="icon-button close-panel-button"
             type="button"
             title="收起播放器"
             aria-label="收起播放器"
-            onClick={() => setPanelOpen(false)}
+            onClick={() => setDisplayMode("launcher")}
           >
             <X size={18} aria-hidden="true" />
           </button>
@@ -232,89 +261,23 @@ export function App({ store, engine, audioOnly }: AppProps) {
         </div>
       </div>
 
-      <div class="transport">
-        <button
-          class={`icon-button audio-mode-button ${audioOnlyState.status}`}
-          type="button"
-          title={audioOnlyButtonLabel(audioOnlyState)}
-          aria-label={audioOnlyButtonLabel(audioOnlyState)}
-          aria-pressed={audioOnlyState.requested}
-          onClick={() =>
-            audioOnly.toggle(
-              engine.currentMedia?.currentTime ?? runtime.currentTime,
-            )
-          }
-        >
-          <Headphones size={19} aria-hidden="true" />
-        </button>
-        <button
-          class="icon-button"
-          type="button"
-          title={PLAY_MODE_LABELS[data.playMode]}
-          aria-label={PLAY_MODE_LABELS[data.playMode]}
-          onClick={cyclePlayMode}
-        >
-          <PlayModeIcon mode={data.playMode} />
-        </button>
-        <button
-          class="icon-button"
-          type="button"
-          title="上一首"
-          aria-label="上一首"
-          onClick={() => engine.previous()}
-        >
-          <SkipBack size={20} aria-hidden="true" />
-        </button>
-        <button
-          class="play-button"
-          type="button"
-          title={runtime.playing ? "暂停" : "播放"}
-          aria-label={runtime.playing ? "暂停" : "播放"}
-          onClick={() => void engine.togglePlayback()}
-        >
-          {runtime.playing ? (
-            <Pause size={22} fill="currentColor" aria-hidden="true" />
-          ) : (
-            <Play size={22} fill="currentColor" aria-hidden="true" />
-          )}
-        </button>
-        <button
-          class="icon-button"
-          type="button"
-          title="下一首"
-          aria-label="下一首"
-          onClick={() => engine.next()}
-        >
-          <SkipForward size={20} aria-hidden="true" />
-        </button>
-        <div class="volume-control">
-          <button
-            class="icon-button"
-            type="button"
-            title={runtime.muted ? "取消静音" : "静音"}
-            aria-label={runtime.muted ? "取消静音" : "静音"}
-            onClick={() => engine.toggleMute()}
-          >
-            {runtime.muted || runtime.volume === 0 ? (
-              <VolumeX size={19} aria-hidden="true" />
-            ) : (
-              <Volume2 size={19} aria-hidden="true" />
-            )}
-          </button>
-          <input
-            class="range volume-range"
-            type="range"
-            min="0"
-            max="1"
-            step="0.01"
-            value={runtime.muted ? 0 : runtime.volume}
-            aria-label="音量"
-            onInput={(event) =>
-              engine.setVolume(Number(event.currentTarget.value))
-            }
-          />
-        </div>
-      </div>
+      <PlayerControls
+        variant="full"
+        playMode={data.playMode}
+        runtime={runtime}
+        audioOnlyState={audioOnlyState}
+        onToggleAudioOnly={() =>
+          audioOnly.toggle(
+            engine.currentMedia?.currentTime ?? runtime.currentTime,
+          )
+        }
+        onCyclePlayMode={cyclePlayMode}
+        onPrevious={() => engine.previous()}
+        onTogglePlayback={() => void engine.togglePlayback()}
+        onNext={() => engine.next()}
+        onToggleMute={() => engine.toggleMute()}
+        onSetVolume={(volume) => engine.setVolume(volume)}
+      />
 
       {primaryNotice &&
         (noticeActionable ? (
@@ -489,7 +452,6 @@ interface TrackEditorProps {
 
 function TrackEditor({ media, track, onCancel, onSave }: TrackEditorProps) {
   const metadata = readCurrentVideoMetadata();
-  const chapterReference = track ?? metadata;
   const [title, setTitle] = useState(track?.title ?? metadata?.title ?? "");
   const [startTime, setStartTime] = useState(
     String(toStartSecond(track?.startTime ?? 0)),
@@ -500,28 +462,65 @@ function TrackEditor({ media, track, onCancel, onSave }: TrackEditorProps) {
   const [error, setError] = useState("");
   const [chapters, setChapters] = useState<VideoChapter[]>([]);
   const [resolvedCid, setResolvedCid] = useState(track?.cid);
+  const [chapterMenuOpen, setChapterMenuOpen] = useState(false);
+  const [activeChapterIndex, setActiveChapterIndex] = useState(-1);
+  const chapterCombobox = useRef<HTMLDivElement>(null);
+  const titleInput = useRef<HTMLInputElement>(null);
+  const chapterSourceBvid = track?.bvid ?? metadata?.bvid;
+  const chapterSourcePage = track?.page ?? metadata?.page;
+  const chapterSourceCid = track?.cid;
 
   useEffect(() => {
+    const controller = new AbortController();
+    let cancelled = false;
+
     setChapters([]);
-    setResolvedCid(track?.cid);
-    if (!chapterReference) {
+    setResolvedCid(chapterSourceCid);
+    setChapterMenuOpen(false);
+    setActiveChapterIndex(-1);
+
+    if (chapterSourceBvid) {
+      void fetchVideoChapters(
+        {
+          bvid: chapterSourceBvid,
+          page: chapterSourcePage,
+          cid: chapterSourceCid,
+        },
+        { signal: controller.signal },
+      ).then((result) => {
+        if (cancelled) {
+          return;
+        }
+
+        setChapters(result.chapters);
+        setResolvedCid(result.cid);
+        setActiveChapterIndex(-1);
+      });
+    }
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [chapterSourceBvid, chapterSourceCid, chapterSourcePage]);
+
+  useEffect(() => {
+    if (!chapterMenuOpen) {
       return;
     }
 
-    const controller = new AbortController();
-    void readVideoChapters(chapterReference, {
-      signal: controller.signal,
-    }).then((result) => {
-      if (controller.signal.aborted) {
-        return;
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      const combobox = chapterCombobox.current;
+      if (combobox && !event.composedPath().includes(combobox)) {
+        setChapterMenuOpen(false);
+        setActiveChapterIndex(-1);
       }
+    };
 
-      setResolvedCid(result.cid);
-      setChapters(result.chapters);
-    });
-
-    return () => controller.abort();
-  }, [chapterReference?.bvid, chapterReference?.page, track?.cid]);
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    return () =>
+      document.removeEventListener("pointerdown", closeOnOutsidePointer);
+  }, [chapterMenuOpen]);
 
   useEffect(() => {
     setError("");
@@ -556,7 +555,7 @@ function TrackEditor({ media, track, onCancel, onSave }: TrackEditorProps) {
     if (track) {
       onSave({
         ...track,
-        ...(resolvedCid === undefined ? {} : { cid: resolvedCid }),
+        ...(resolvedCid !== undefined ? { cid: resolvedCid } : {}),
         title: title.trim() || track.title,
         startTime: start,
         endTime: end,
@@ -583,6 +582,31 @@ function TrackEditor({ media, track, onCancel, onSave }: TrackEditorProps) {
     onSave(nextTrack);
   };
 
+  const selectChapter = (chapter: VideoChapter) => {
+    setTitle(chapter.title);
+    setStartTime(String(chapter.startTime));
+    setEndTime(String(chapter.endTime));
+    setChapterMenuOpen(false);
+    setActiveChapterIndex(-1);
+    titleInput.current?.focus();
+  };
+
+  const moveActiveChapter = (direction: 1 | -1) => {
+    if (chapters.length === 0) {
+      setChapterMenuOpen(true);
+      setActiveChapterIndex(-1);
+      return;
+    }
+
+    setChapterMenuOpen(true);
+    setActiveChapterIndex((current) => {
+      if (current < 0) {
+        return direction === 1 ? 0 : chapters.length - 1;
+      }
+      return (current + direction + chapters.length) % chapters.length;
+    });
+  };
+
   return (
     <form class="track-editor" onSubmit={save}>
       <div class="editor-heading">
@@ -597,19 +621,98 @@ function TrackEditor({ media, track, onCancel, onSave }: TrackEditorProps) {
           <X size={16} aria-hidden="true" />
         </button>
       </div>
-      <label class="chapter-field">
-        <span>标题</span>
-        <ChapterCombobox
-          value={title}
-          chapters={chapters}
-          onInput={setTitle}
-          onSelect={(chapter) => {
-            setTitle(chapter.title);
-            setStartTime(String(chapter.startTime));
-            setEndTime(String(chapter.endTime));
-          }}
-        />
-      </label>
+      <div class="editor-field">
+        <label for="bilibili-music-track-title">标题</label>
+        <div class="chapter-combobox" ref={chapterCombobox}>
+          <input
+            id="bilibili-music-track-title"
+            ref={titleInput}
+            value={title}
+            required
+            role="combobox"
+            aria-autocomplete="none"
+            aria-expanded={chapterMenuOpen}
+            aria-controls="bilibili-music-chapter-options"
+            aria-activedescendant={
+              chapterMenuOpen && activeChapterIndex >= 0
+                ? `bilibili-music-chapter-${activeChapterIndex}`
+                : undefined
+            }
+            onInput={(event) => {
+              setTitle(event.currentTarget.value);
+              setActiveChapterIndex(-1);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "ArrowDown") {
+                event.preventDefault();
+                moveActiveChapter(1);
+              } else if (event.key === "ArrowUp") {
+                event.preventDefault();
+                moveActiveChapter(-1);
+              } else if (
+                event.key === "Enter" &&
+                chapterMenuOpen &&
+                activeChapterIndex >= 0
+              ) {
+                event.preventDefault();
+                selectChapter(chapters[activeChapterIndex]);
+              } else if (event.key === "Escape" && chapterMenuOpen) {
+                event.preventDefault();
+                setChapterMenuOpen(false);
+                setActiveChapterIndex(-1);
+              }
+            }}
+          />
+          <button
+            class={`chapter-toggle ${chapterMenuOpen ? "open" : ""}`}
+            type="button"
+            title={chapterMenuOpen ? "收起视频章节" : "展开视频章节"}
+            aria-label={chapterMenuOpen ? "收起视频章节" : "展开视频章节"}
+            aria-expanded={chapterMenuOpen}
+            aria-controls="bilibili-music-chapter-options"
+            onClick={() => {
+              setChapterMenuOpen((open) => {
+                const nextOpen = !open;
+                setActiveChapterIndex(nextOpen && chapters.length > 0 ? 0 : -1);
+                return nextOpen;
+              });
+              titleInput.current?.focus();
+            }}
+          >
+            <ChevronDown size={17} aria-hidden="true" />
+          </button>
+          {chapterMenuOpen && (
+            <div
+              class="chapter-options"
+              id="bilibili-music-chapter-options"
+              role="listbox"
+              aria-label="视频章节"
+            >
+              {chapters.map((chapter, index) => (
+                <button
+                  class={`chapter-option ${
+                    index === activeChapterIndex ? "active" : ""
+                  }`}
+                  id={`bilibili-music-chapter-${index}`}
+                  type="button"
+                  role="option"
+                  aria-selected={index === activeChapterIndex}
+                  tabIndex={-1}
+                  key={`${chapter.startTime}-${chapter.endTime}-${chapter.title}`}
+                  onPointerEnter={() => setActiveChapterIndex(index)}
+                  onClick={() => selectChapter(chapter)}
+                >
+                  <span>{chapter.title}</span>
+                  <span>
+                    {formatTime(chapter.startTime)}–
+                    {formatTime(chapter.endTime)}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
       <div class="time-fields">
         <label>
           <span>开始时间（秒）</span>
@@ -675,216 +778,4 @@ function TrackEditor({ media, track, onCancel, onSave }: TrackEditorProps) {
       </button>
     </form>
   );
-}
-
-interface ChapterComboboxProps {
-  value: string;
-  chapters: VideoChapter[];
-  onInput: (value: string) => void;
-  onSelect: (chapter: VideoChapter) => void;
-}
-
-function ChapterCombobox({
-  value,
-  chapters,
-  onInput,
-  onSelect,
-}: ChapterComboboxProps) {
-  const rootRef = useRef<HTMLDivElement>(null);
-  const [open, setOpen] = useState(false);
-  const [activeIndex, setActiveIndex] = useState(-1);
-  const listboxId = useRef(
-    `chapter-listbox-${Math.random().toString(36).slice(2)}`,
-  ).current;
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-
-    const closeOnOutsidePointer = (event: PointerEvent) => {
-      if (!event.composedPath().includes(rootRef.current!)) {
-        setOpen(false);
-        setActiveIndex(-1);
-      }
-    };
-    document.addEventListener("pointerdown", closeOnOutsidePointer);
-    return () =>
-      document.removeEventListener("pointerdown", closeOnOutsidePointer);
-  }, [open]);
-
-  useEffect(() => {
-    if (chapters.length === 0) {
-      setOpen(false);
-      setActiveIndex(-1);
-    } else if (activeIndex >= chapters.length) {
-      setActiveIndex(chapters.length - 1);
-    }
-  }, [chapters, activeIndex]);
-
-  const close = () => {
-    setOpen(false);
-    setActiveIndex(-1);
-  };
-  const choose = (index: number) => {
-    const chapter = chapters[index];
-    if (!chapter) {
-      return;
-    }
-
-    onSelect(chapter);
-    close();
-  };
-  const moveActive = (direction: 1 | -1) => {
-    if (chapters.length === 0) {
-      return;
-    }
-
-    setOpen(true);
-    setActiveIndex((current) => {
-      if (current < 0) {
-        return direction === 1 ? 0 : chapters.length - 1;
-      }
-      return (current + direction + chapters.length) % chapters.length;
-    });
-  };
-
-  return (
-    <div class="chapter-combobox" ref={rootRef}>
-      <input
-        value={value}
-        required
-        role="combobox"
-        aria-label="标题"
-        aria-autocomplete="none"
-        aria-expanded={open}
-        aria-controls={listboxId}
-        aria-activedescendant={
-          open && activeIndex >= 0
-            ? `${listboxId}-option-${activeIndex}`
-            : undefined
-        }
-        onInput={(event) => onInput(event.currentTarget.value)}
-        onKeyDown={(event) => {
-          switch (event.key) {
-            case "ArrowDown":
-              event.preventDefault();
-              moveActive(1);
-              break;
-            case "ArrowUp":
-              event.preventDefault();
-              moveActive(-1);
-              break;
-            case "Enter":
-              if (open && activeIndex >= 0) {
-                event.preventDefault();
-                choose(activeIndex);
-              }
-              break;
-            case "Escape":
-              if (open) {
-                event.preventDefault();
-                close();
-              }
-              break;
-          }
-        }}
-      />
-      <button
-        class="chapter-toggle"
-        type="button"
-        aria-label={open ? "收起章节列表" : "展开章节列表"}
-        aria-expanded={open}
-        aria-controls={listboxId}
-        onClick={() => {
-          if (chapters.length === 0) {
-            return;
-          }
-          setOpen((current) => !current);
-          setActiveIndex(-1);
-        }}
-      >
-        <ChevronDown
-          class={open ? "expanded" : undefined}
-          size={17}
-          aria-hidden="true"
-        />
-      </button>
-      {open && chapters.length > 0 && (
-        <div class="chapter-listbox" id={listboxId} role="listbox">
-          {chapters.map((chapter, index) => (
-            <button
-              class={`chapter-option ${index === activeIndex ? "active" : ""}`}
-              id={`${listboxId}-option-${index}`}
-              type="button"
-              role="option"
-              aria-selected={index === activeIndex}
-              key={`${chapter.startTime}-${chapter.endTime}-${chapter.title}`}
-              onPointerEnter={() => setActiveIndex(index)}
-              onClick={() => choose(index)}
-            >
-              <span>{chapter.title}</span>
-              <span>
-                {formatTime(chapter.startTime)}–{formatTime(chapter.endTime)}
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function PlayModeIcon({ mode }: { mode: PlayMode }) {
-  switch (mode) {
-    case "list-loop":
-      return <Repeat size={19} aria-hidden="true" />;
-    case "single-loop":
-      return <Repeat1 size={19} aria-hidden="true" />;
-    case "shuffle":
-      return <Shuffle size={19} aria-hidden="true" />;
-    default:
-      return <ListMusic size={19} aria-hidden="true" />;
-  }
-}
-
-function audioOnlyButtonLabel(state: AudioOnlyState): string {
-  switch (state.status) {
-    case "detecting":
-      return "纯音频模式正在检测播放流；点击关闭并重载";
-    case "active":
-      return "纯音频模式已生效；点击关闭并重载";
-    case "fallback":
-      return `纯音频模式未生效，已回退正常视频：${audioOnlyReasonLabel(
-        state.reason,
-      )}；点击关闭并重载`;
-    default:
-      return "开启纯音频模式并重载页面";
-  }
-}
-
-function audioOnlyReasonLabel(
-  reason: AudioOnlyInterceptionReason | undefined,
-): string {
-  switch (reason) {
-    case "durl-only":
-      return "当前视频只提供音视频混流";
-    case "missing-audio":
-      return "DASH 清单没有可用音频";
-    case "missing-dash":
-    case "invalid-payload":
-      return "未找到可改写的 DASH 清单";
-    case "invalid-json":
-      return "播放清单不是有效 JSON";
-    case "unsupported-response-type":
-      return "播放器使用了暂不支持的响应格式";
-    case "playinfo-nonconfigurable":
-      return "首屏播放信息无法拦截";
-    case "playinfo-rewrite-failed":
-    case "fetch-rewrite-failed":
-    case "xhr-rewrite-failed":
-      return "播放清单拦截失败";
-    default:
-      return "当前播放格式不受支持";
-  }
 }

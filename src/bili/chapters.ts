@@ -1,4 +1,4 @@
-const BILIBILI_API_ORIGIN = "https://api.bilibili.com";
+import { toEndSecond, toStartSecond } from "../core/time";
 
 export interface VideoChapter {
   title: string;
@@ -7,7 +7,7 @@ export interface VideoChapter {
   cover?: string;
 }
 
-export interface VideoChapterReference {
+export interface VideoChapterSource {
   bvid: string;
   page?: number;
   cid?: number;
@@ -18,138 +18,123 @@ export interface VideoChapterResult {
   chapters: VideoChapter[];
 }
 
-type FetchLike = (
-  input: RequestInfo | URL,
-  init?: RequestInit,
-) => Promise<Response>;
+interface FetchVideoChapterOptions {
+  signal?: AbortSignal;
+  fetcher?: typeof fetch;
+}
 
-export async function readVideoChapters(
-  reference: VideoChapterReference,
-  options: { signal?: AbortSignal; fetch?: FetchLike } = {},
+export async function fetchVideoChapters(
+  source: VideoChapterSource,
+  options: FetchVideoChapterOptions = {},
 ): Promise<VideoChapterResult> {
-  const request = options.fetch ?? fetch;
-  let cid = validPositiveInteger(reference.cid);
-
-  if (cid === undefined) {
-    try {
-      cid = await readPageCid(reference, request, options.signal);
-    } catch {
-      return { chapters: [] };
-    }
-  }
-
-  if (cid === undefined) {
-    return { chapters: [] };
-  }
+  const fetcher = options.fetcher ?? fetch;
+  let cid = validPositiveInteger(source.cid) ? source.cid : undefined;
 
   try {
-    const url = new URL("/x/player/wbi/v2", BILIBILI_API_ORIGIN);
-    url.searchParams.set("bvid", reference.bvid);
-    url.searchParams.set("cid", String(cid));
-    const response = await request(url, {
+    if (cid === undefined) {
+      const viewUrl = new URL("https://api.bilibili.com/x/web-interface/view");
+      viewUrl.searchParams.set("bvid", source.bvid);
+      const viewResponse = await fetcher(viewUrl, {
+        credentials: "include",
+        signal: options.signal,
+      });
+      const viewPayload = await readSuccessfulPayload(viewResponse);
+      const pages = readRecord(viewPayload?.data)?.pages;
+      const pageIndex = validPositiveInteger(source.page) ? source.page - 1 : 0;
+      const selectedPage = Array.isArray(pages)
+        ? readRecord(pages[pageIndex])
+        : undefined;
+      const resolvedCid = selectedPage?.cid;
+      cid = validPositiveInteger(resolvedCid) ? resolvedCid : undefined;
+    }
+
+    if (cid === undefined) {
+      return { chapters: [] };
+    }
+
+    const playerUrl = new URL("https://api.bilibili.com/x/player/wbi/v2");
+    playerUrl.searchParams.set("bvid", source.bvid);
+    playerUrl.searchParams.set("cid", String(cid));
+    const playerResponse = await fetcher(playerUrl, {
       credentials: "include",
       signal: options.signal,
     });
-
-    if (!response.ok) {
-      return { cid, chapters: [] };
-    }
+    const playerPayload = await readSuccessfulPayload(playerResponse);
+    const viewPoints = readRecord(playerPayload?.data)?.view_points;
 
     return {
       cid,
-      chapters: parseVideoChapters(await response.json()),
+      chapters: parseVideoChapters(viewPoints),
     };
   } catch {
     return { cid, chapters: [] };
   }
 }
 
-export function parseVideoChapters(payload: unknown): VideoChapter[] {
-  if (!isRecord(payload) || payload.code !== 0 || !isRecord(payload.data)) {
+export function parseVideoChapters(value: unknown): VideoChapter[] {
+  if (!Array.isArray(value)) {
     return [];
   }
 
-  const viewPoints = payload.data.view_points;
-  if (!Array.isArray(viewPoints)) {
-    return [];
-  }
-
-  return viewPoints.flatMap((viewPoint) => {
-    if (!isRecord(viewPoint)) {
-      return [];
-    }
-
+  return value.flatMap((entry): VideoChapter[] => {
+    const record = readRecord(entry);
     const title =
-      typeof viewPoint.content === "string" ? viewPoint.content.trim() : "";
-    const rawStart = viewPoint.from;
-    const rawEnd = viewPoint.to;
+      typeof record?.content === "string" ? record.content.trim() : "";
+    const rawStart = record?.from;
+    const rawEnd = record?.to;
+
     if (
       !title ||
       typeof rawStart !== "number" ||
-      !Number.isFinite(rawStart) ||
-      rawStart < 0 ||
       typeof rawEnd !== "number" ||
+      !Number.isFinite(rawStart) ||
       !Number.isFinite(rawEnd) ||
+      rawStart < 0 ||
       rawEnd <= rawStart
     ) {
       return [];
     }
 
-    const startTime = Math.floor(rawStart);
-    const endTime = Math.ceil(rawEnd);
+    const startTime = toStartSecond(rawStart);
+    const endTime = toEndSecond(rawEnd);
     if (endTime <= startTime) {
       return [];
     }
 
+    const rawCover = record?.imgUrl;
     const cover =
-      typeof viewPoint.imgUrl === "string" && viewPoint.imgUrl.trim()
-        ? viewPoint.imgUrl.trim()
+      typeof rawCover === "string" && rawCover.trim()
+        ? rawCover.trim().replace(/^http:/i, "https:")
         : undefined;
-    return [{ title, startTime, endTime, cover }];
+
+    return [
+      {
+        title,
+        startTime,
+        endTime,
+        ...(cover ? { cover } : {}),
+      },
+    ];
   });
 }
 
-async function readPageCid(
-  reference: VideoChapterReference,
-  request: FetchLike,
-  signal?: AbortSignal,
-): Promise<number | undefined> {
-  const url = new URL("/x/web-interface/view", BILIBILI_API_ORIGIN);
-  url.searchParams.set("bvid", reference.bvid);
-  const response = await request(url, {
-    credentials: "include",
-    signal,
-  });
-
+async function readSuccessfulPayload(
+  response: Response,
+): Promise<Record<string, unknown> | undefined> {
   if (!response.ok) {
     return undefined;
   }
 
-  const payload: unknown = await response.json();
-  if (!isRecord(payload) || payload.code !== 0 || !isRecord(payload.data)) {
-    return undefined;
-  }
+  const payload = readRecord(await response.json());
+  return payload?.code === 0 ? payload : undefined;
+}
 
-  const pages = payload.data.pages;
-  if (!Array.isArray(pages)) {
-    return undefined;
-  }
-
-  const requestedPage = validPositiveInteger(reference.page) ?? 1;
-  const matchingPage = pages.find(
-    (page) => isRecord(page) && page.page === requestedPage,
-  );
-  return isRecord(matchingPage)
-    ? validPositiveInteger(matchingPage.cid)
+function readRecord(value: unknown): Record<string, unknown> | undefined {
+  return value !== null && typeof value === "object"
+    ? (value as Record<string, unknown>)
     : undefined;
 }
 
-function validPositiveInteger(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isInteger(value) && value > 0
-    ? value
-    : undefined;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
+function validPositiveInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value > 0;
 }

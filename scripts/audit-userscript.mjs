@@ -11,7 +11,9 @@ const readJson = (relativePath) => JSON.parse(readProjectFile(relativePath));
 
 const packageJson = readJson("package.json");
 const runtimeLibraries = readJson("scripts/userscript-runtime.json");
-const thirdPartyNotices = readProjectFile("THIRD_PARTY_NOTICES.txt").trim();
+const thirdPartyNotices = readProjectFile("THIRD_PARTY_NOTICES.txt")
+  .replace(/\r\n?/g, "\n")
+  .trim();
 const userscriptPath = projectFile("dist/bilibili-music-player.user.js");
 const metadataPath = projectFile("dist/bilibili-music-player.meta.js");
 const userscript = readFileSync(userscriptPath, "utf8");

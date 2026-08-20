@@ -52,7 +52,8 @@ button {
 }
 
 .floating-button,
-.player-panel {
+.player-panel,
+.minimal-player {
   pointer-events: auto;
 }
 
@@ -87,6 +88,81 @@ button {
   border-radius: 8px;
   background: var(--bg);
   box-shadow: 0 18px 60px rgb(0 0 0 / 42%);
+}
+
+.minimal-player {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  display: flex;
+  width: min(396px, calc(100vw - 24px));
+  height: 56px;
+  align-items: center;
+  gap: 2px;
+  padding: 0 6px;
+  overflow: visible;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  box-shadow: 0 12px 36px rgb(0 0 0 / 38%);
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.minimal-now-playing {
+  min-width: 0;
+  width: auto;
+  flex: 1 1 84px;
+  cursor: move;
+  user-select: none;
+}
+
+.minimal-now-playing strong,
+.minimal-now-playing span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.minimal-now-playing strong {
+  font-size: 12px;
+}
+
+.minimal-now-playing span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.minimal-player > .minimal-action-button {
+  width: 26px;
+  height: 26px;
+}
+
+.minimal-interaction-prompt {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  min-height: 32px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 32%);
+  cursor: pointer;
+}
+
+.minimal-interaction-prompt.above {
+  bottom: calc(100% + 6px);
+}
+
+.minimal-interaction-prompt.below {
+  top: calc(100% + 6px);
+}
+
+.minimal-player :focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .panel-header,
@@ -325,6 +401,98 @@ button {
   background: var(--accent-hover);
 }
 
+.play-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.transport-minimal {
+  min-width: 0;
+  flex: 0 0 auto;
+  gap: 0;
+  padding: 0;
+}
+
+.transport-minimal .icon-button {
+  width: 26px;
+  height: 26px;
+}
+
+.transport-minimal .icon-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.transport-minimal .play-button {
+  position: relative;
+  z-index: 1;
+  width: 36px;
+  height: 36px;
+}
+
+.transport-minimal .play-button svg {
+  width: 18px;
+  height: 18px;
+}
+
+.transport-minimal .volume-control {
+  width: 68px;
+}
+
+.transport-minimal .volume-range {
+  width: 42px;
+}
+
+.circular-play-control {
+  position: relative;
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+}
+
+.circular-progress {
+  position: absolute;
+  inset: 0;
+  width: 40px;
+  height: 40px;
+  transform: rotate(-90deg);
+  transform-origin: center;
+  pointer-events: none;
+}
+
+.circular-progress-track,
+.circular-progress-value {
+  fill: none;
+  stroke-width: 2;
+}
+
+.circular-progress-track {
+  stroke: var(--border);
+}
+
+.circular-progress-value {
+  stroke-dasharray: var(--play-progress) 100;
+  stroke: var(--accent);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .volume-control {
   display: flex;
   width: 92px;
@@ -559,9 +727,109 @@ button {
   gap: 4px;
 }
 
-.track-editor label > span {
+.editor-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.track-editor label > span,
+.editor-field > label {
   color: var(--muted);
   font-size: 12px;
+}
+
+.chapter-combobox {
+  position: relative;
+  min-width: 0;
+}
+
+.chapter-combobox input {
+  width: 100%;
+  padding-right: 36px;
+}
+
+.chapter-toggle {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 0;
+  border-radius: 0 5px 5px 0;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+}
+
+.chapter-toggle:hover,
+.chapter-toggle:focus-visible {
+  color: var(--text);
+  background: var(--surface-hover);
+  outline: none;
+}
+
+.chapter-toggle svg {
+  transition: transform 120ms ease;
+}
+
+.chapter-toggle.open svg {
+  transform: rotate(180deg);
+}
+
+.chapter-options {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  left: 0;
+  z-index: 5;
+  min-height: 34px;
+  max-height: 184px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  box-shadow: 0 10px 26px rgb(0 0 0 / 35%);
+}
+
+.chapter-option {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  border: 0;
+  padding: 8px 10px;
+  color: var(--text);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.chapter-option + .chapter-option {
+  border-top: 1px solid rgb(56 59 68 / 65%);
+}
+
+.chapter-option:hover,
+.chapter-option.active {
+  background: var(--surface-hover);
+}
+
+.chapter-option span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chapter-option span:last-child {
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .time-fields {
@@ -694,5 +962,37 @@ button {
 
   .volume-range {
     width: 42px;
+  }
+}
+
+@media (max-width: 340px) {
+  .minimal-player {
+    gap: 1px;
+    padding-inline: 4px;
+  }
+
+  .transport-minimal .icon-button,
+  .minimal-player > .minimal-action-button {
+    width: 24px;
+    height: 24px;
+  }
+
+  .circular-play-control,
+  .circular-progress {
+    width: 36px;
+    height: 36px;
+  }
+
+  .transport-minimal .play-button {
+    width: 32px;
+    height: 32px;
+  }
+
+  .transport-minimal .volume-control {
+    width: 56px;
+  }
+
+  .transport-minimal .volume-range {
+    width: 32px;
   }
 }

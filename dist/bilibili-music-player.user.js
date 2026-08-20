@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bilibili 音乐播放器
 // @namespace    bilibili-music-player
-// @version      0.1.5
+// @version      0.1.6
 // @author       Korltex
 // @description  在 Bilibili 视频页面中控制原生播放器、管理音乐歌单并可选纯音频模式
 // @license      MIT
@@ -172,7 +172,8 @@
 		"}",
 		"",
 		".floating-button,",
-		".player-panel {",
+		".player-panel,",
+		".minimal-player {",
 		"  pointer-events: auto;",
 		"}",
 		"",
@@ -207,6 +208,81 @@
 		"  border-radius: 8px;",
 		"  background: var(--bg);",
 		"  box-shadow: 0 18px 60px rgb(0 0 0 / 42%);",
+		"}",
+		"",
+		".minimal-player {",
+		"  position: fixed;",
+		"  right: 20px;",
+		"  bottom: 20px;",
+		"  display: flex;",
+		"  width: min(396px, calc(100vw - 24px));",
+		"  height: 56px;",
+		"  align-items: center;",
+		"  gap: 2px;",
+		"  padding: 0 6px;",
+		"  overflow: visible;",
+		"  border: 1px solid var(--border);",
+		"  border-radius: 10px;",
+		"  background: var(--bg);",
+		"  box-shadow: 0 12px 36px rgb(0 0 0 / 38%);",
+		"  pointer-events: auto;",
+		"  touch-action: none;",
+		"}",
+		"",
+		".minimal-now-playing {",
+		"  min-width: 0;",
+		"  width: auto;",
+		"  flex: 1 1 84px;",
+		"  cursor: move;",
+		"  user-select: none;",
+		"}",
+		"",
+		".minimal-now-playing strong,",
+		".minimal-now-playing span {",
+		"  display: block;",
+		"  overflow: hidden;",
+		"  text-overflow: ellipsis;",
+		"  white-space: nowrap;",
+		"}",
+		"",
+		".minimal-now-playing strong {",
+		"  font-size: 12px;",
+		"}",
+		"",
+		".minimal-now-playing span {",
+		"  color: var(--muted);",
+		"  font-size: 11px;",
+		"}",
+		"",
+		".minimal-player > .minimal-action-button {",
+		"  width: 26px;",
+		"  height: 26px;",
+		"}",
+		"",
+		".minimal-interaction-prompt {",
+		"  position: absolute;",
+		"  left: 0;",
+		"  width: 100%;",
+		"  min-height: 32px;",
+		"  border: 1px solid var(--accent);",
+		"  border-radius: 8px;",
+		"  color: var(--text);",
+		"  background: var(--surface);",
+		"  box-shadow: 0 8px 24px rgb(0 0 0 / 32%);",
+		"  cursor: pointer;",
+		"}",
+		"",
+		".minimal-interaction-prompt.above {",
+		"  bottom: calc(100% + 6px);",
+		"}",
+		"",
+		".minimal-interaction-prompt.below {",
+		"  top: calc(100% + 6px);",
+		"}",
+		"",
+		".minimal-player :focus-visible {",
+		"  outline: 2px solid var(--accent);",
+		"  outline-offset: 2px;",
 		"}",
 		"",
 		".panel-header,",
@@ -445,6 +521,98 @@
 		"  background: var(--accent-hover);",
 		"}",
 		"",
+		".play-button:disabled {",
+		"  cursor: not-allowed;",
+		"  opacity: 0.4;",
+		"}",
+		"",
+		".transport-minimal {",
+		"  min-width: 0;",
+		"  flex: 0 0 auto;",
+		"  gap: 0;",
+		"  padding: 0;",
+		"}",
+		"",
+		".transport-minimal .icon-button {",
+		"  width: 26px;",
+		"  height: 26px;",
+		"}",
+		"",
+		".transport-minimal .icon-button svg {",
+		"  width: 16px;",
+		"  height: 16px;",
+		"}",
+		"",
+		".transport-minimal .play-button {",
+		"  position: relative;",
+		"  z-index: 1;",
+		"  width: 36px;",
+		"  height: 36px;",
+		"}",
+		"",
+		".transport-minimal .play-button svg {",
+		"  width: 18px;",
+		"  height: 18px;",
+		"}",
+		"",
+		".transport-minimal .volume-control {",
+		"  width: 68px;",
+		"}",
+		"",
+		".transport-minimal .volume-range {",
+		"  width: 42px;",
+		"}",
+		"",
+		".circular-play-control {",
+		"  position: relative;",
+		"  display: grid;",
+		"  width: 40px;",
+		"  height: 40px;",
+		"  place-items: center;",
+		"}",
+		"",
+		".circular-progress {",
+		"  position: absolute;",
+		"  inset: 0;",
+		"  width: 40px;",
+		"  height: 40px;",
+		"  transform: rotate(-90deg);",
+		"  transform-origin: center;",
+		"  pointer-events: none;",
+		"}",
+		"",
+		".circular-progress-track,",
+		".circular-progress-value {",
+		"  fill: none;",
+		"  stroke-width: 2;",
+		"}",
+		"",
+		".circular-progress-track {",
+		"  stroke: var(--border);",
+		"}",
+		"",
+		".circular-progress-value {",
+		"  stroke-dasharray: var(--play-progress) 100;",
+		"  stroke: var(--accent);",
+		"}",
+		"",
+		".visually-hidden {",
+		"  position: absolute;",
+		"  width: 1px;",
+		"  height: 1px;",
+		"  overflow: hidden;",
+		"  clip: rect(0 0 0 0);",
+		"  clip-path: inset(50%);",
+		"  white-space: nowrap;",
+		"}",
+		"",
+		"button:focus-visible,",
+		"input:focus-visible,",
+		"select:focus-visible {",
+		"  outline: 2px solid var(--accent);",
+		"  outline-offset: 2px;",
+		"}",
+		"",
 		".volume-control {",
 		"  display: flex;",
 		"  width: 92px;",
@@ -679,9 +847,109 @@
 		"  gap: 4px;",
 		"}",
 		"",
-		".track-editor label > span {",
+		".editor-field {",
+		"  display: flex;",
+		"  min-width: 0;",
+		"  flex-direction: column;",
+		"  gap: 4px;",
+		"}",
+		"",
+		".track-editor label > span,",
+		".editor-field > label {",
 		"  color: var(--muted);",
 		"  font-size: 12px;",
+		"}",
+		"",
+		".chapter-combobox {",
+		"  position: relative;",
+		"  min-width: 0;",
+		"}",
+		"",
+		".chapter-combobox input {",
+		"  width: 100%;",
+		"  padding-right: 36px;",
+		"}",
+		"",
+		".chapter-toggle {",
+		"  position: absolute;",
+		"  top: 1px;",
+		"  right: 1px;",
+		"  display: grid;",
+		"  width: 32px;",
+		"  height: 32px;",
+		"  place-items: center;",
+		"  border: 0;",
+		"  border-radius: 0 5px 5px 0;",
+		"  color: var(--muted);",
+		"  background: transparent;",
+		"  cursor: pointer;",
+		"}",
+		"",
+		".chapter-toggle:hover,",
+		".chapter-toggle:focus-visible {",
+		"  color: var(--text);",
+		"  background: var(--surface-hover);",
+		"  outline: none;",
+		"}",
+		"",
+		".chapter-toggle svg {",
+		"  transition: transform 120ms ease;",
+		"}",
+		"",
+		".chapter-toggle.open svg {",
+		"  transform: rotate(180deg);",
+		"}",
+		"",
+		".chapter-options {",
+		"  position: absolute;",
+		"  top: calc(100% + 4px);",
+		"  right: 0;",
+		"  left: 0;",
+		"  z-index: 5;",
+		"  min-height: 34px;",
+		"  max-height: 184px;",
+		"  overflow-y: auto;",
+		"  border: 1px solid var(--border);",
+		"  border-radius: 6px;",
+		"  background: var(--surface);",
+		"  box-shadow: 0 10px 26px rgb(0 0 0 / 35%);",
+		"}",
+		"",
+		".chapter-option {",
+		"  display: grid;",
+		"  width: 100%;",
+		"  min-width: 0;",
+		"  grid-template-columns: minmax(0, 1fr) auto;",
+		"  align-items: center;",
+		"  gap: 12px;",
+		"  border: 0;",
+		"  padding: 8px 10px;",
+		"  color: var(--text);",
+		"  background: transparent;",
+		"  text-align: left;",
+		"  cursor: pointer;",
+		"}",
+		"",
+		".chapter-option + .chapter-option {",
+		"  border-top: 1px solid rgb(56 59 68 / 65%);",
+		"}",
+		"",
+		".chapter-option:hover,",
+		".chapter-option.active {",
+		"  background: var(--surface-hover);",
+		"}",
+		"",
+		".chapter-option span:first-child {",
+		"  overflow: hidden;",
+		"  text-overflow: ellipsis;",
+		"  white-space: nowrap;",
+		"}",
+		"",
+		".chapter-option span:last-child {",
+		"  color: var(--muted);",
+		"  font-size: 12px;",
+		"  font-variant-numeric: tabular-nums;",
+		"  white-space: nowrap;",
 		"}",
 		"",
 		".time-fields {",
@@ -816,11 +1084,43 @@
 		"    width: 42px;",
 		"  }",
 		"}",
+		"",
+		"@media (max-width: 340px) {",
+		"  .minimal-player {",
+		"    gap: 1px;",
+		"    padding-inline: 4px;",
+		"  }",
+		"",
+		"  .transport-minimal .icon-button,",
+		"  .minimal-player > .minimal-action-button {",
+		"    width: 24px;",
+		"    height: 24px;",
+		"  }",
+		"",
+		"  .circular-play-control,",
+		"  .circular-progress {",
+		"    width: 36px;",
+		"    height: 36px;",
+		"  }",
+		"",
+		"  .transport-minimal .play-button {",
+		"    width: 32px;",
+		"    height: 32px;",
+		"  }",
+		"",
+		"  .transport-minimal .volume-control {",
+		"    width: 56px;",
+		"  }",
+		"",
+		"  .transport-minimal .volume-range {",
+		"    width: 32px;",
+		"  }",
+		"}",
 		""
 	].join("\n");
 	var _style = (b, a = document.createElement("style")) => (a.append(b), a);
 	var styles_css_default = _style(styles_default);
-	var version = "0.1.5";
+	var version = "0.1.6";
 	function SvgIcon({ size = 24, strokeWidth = 2, children, ...props }) {
 		return (0, preact_jsx_runtime.jsx)("svg", {
 			xmlns: "http://www.w3.org/2000/svg",
@@ -883,6 +1183,28 @@
 				cy: "18",
 				r: "4"
 			}), (0, preact_jsx_runtime.jsx)("path", { d: "M12 18V2l7 4" })]
+		});
+	}
+	function Minimize2(props) {
+		return (0, preact_jsx_runtime.jsxs)(SvgIcon, {
+			...props,
+			children: [
+				(0, preact_jsx_runtime.jsx)("path", { d: "m14 10 7-7" }),
+				(0, preact_jsx_runtime.jsx)("path", { d: "M20 10h-6V4" }),
+				(0, preact_jsx_runtime.jsx)("path", { d: "m3 21 7-7" }),
+				(0, preact_jsx_runtime.jsx)("path", { d: "M4 14h6v6" })
+			]
+		});
+	}
+	function Maximize2(props) {
+		return (0, preact_jsx_runtime.jsxs)(SvgIcon, {
+			...props,
+			children: [
+				(0, preact_jsx_runtime.jsx)("path", { d: "M15 3h6v6" }),
+				(0, preact_jsx_runtime.jsx)("path", { d: "m21 3-7 7" }),
+				(0, preact_jsx_runtime.jsx)("path", { d: "m3 21 7-7" }),
+				(0, preact_jsx_runtime.jsx)("path", { d: "M9 21H3v-6" })
+			]
 		});
 	}
 	function Pause(props) {
@@ -1063,7 +1385,7 @@
 		return {
 			id: createId("track"),
 			...metadata,
-			...cid === void 0 ? {} : { cid },
+			...cid !== void 0 ? { cid } : {},
 			title: title.trim() || metadata.title,
 			startTime,
 			endTime,
@@ -1074,82 +1396,6 @@
 	}
 	function cleanPageTitle(title) {
 		return title.replace(/_哔哩哔哩_bilibili$/i, "").replace(/\s*-\s*哔哩哔哩.*$/i, "").trim();
-	}
-	var BILIBILI_API_ORIGIN = "https://api.bilibili.com";
-	async function readVideoChapters(reference, options = {}) {
-		const request = options.fetch ?? fetch;
-		let cid = validPositiveInteger(reference.cid);
-		if (cid === void 0) try {
-			cid = await readPageCid(reference, request, options.signal);
-		} catch {
-			return { chapters: [] };
-		}
-		if (cid === void 0) return { chapters: [] };
-		try {
-			const url = new URL("/x/player/wbi/v2", BILIBILI_API_ORIGIN);
-			url.searchParams.set("bvid", reference.bvid);
-			url.searchParams.set("cid", String(cid));
-			const response = await request(url, {
-				credentials: "include",
-				signal: options.signal
-			});
-			if (!response.ok) return {
-				cid,
-				chapters: []
-			};
-			return {
-				cid,
-				chapters: parseVideoChapters(await response.json())
-			};
-		} catch {
-			return {
-				cid,
-				chapters: []
-			};
-		}
-	}
-	function parseVideoChapters(payload) {
-		if (!isRecord$1(payload) || payload.code !== 0 || !isRecord$1(payload.data)) return [];
-		const viewPoints = payload.data.view_points;
-		if (!Array.isArray(viewPoints)) return [];
-		return viewPoints.flatMap((viewPoint) => {
-			if (!isRecord$1(viewPoint)) return [];
-			const title = typeof viewPoint.content === "string" ? viewPoint.content.trim() : "";
-			const rawStart = viewPoint.from;
-			const rawEnd = viewPoint.to;
-			if (!title || typeof rawStart !== "number" || !Number.isFinite(rawStart) || rawStart < 0 || typeof rawEnd !== "number" || !Number.isFinite(rawEnd) || rawEnd <= rawStart) return [];
-			const startTime = Math.floor(rawStart);
-			const endTime = Math.ceil(rawEnd);
-			if (endTime <= startTime) return [];
-			return [{
-				title,
-				startTime,
-				endTime,
-				cover: typeof viewPoint.imgUrl === "string" && viewPoint.imgUrl.trim() ? viewPoint.imgUrl.trim() : void 0
-			}];
-		});
-	}
-	async function readPageCid(reference, request, signal) {
-		const url = new URL("/x/web-interface/view", BILIBILI_API_ORIGIN);
-		url.searchParams.set("bvid", reference.bvid);
-		const response = await request(url, {
-			credentials: "include",
-			signal
-		});
-		if (!response.ok) return;
-		const payload = await response.json();
-		if (!isRecord$1(payload) || payload.code !== 0 || !isRecord$1(payload.data)) return;
-		const pages = payload.data.pages;
-		if (!Array.isArray(pages)) return;
-		const requestedPage = validPositiveInteger(reference.page) ?? 1;
-		const matchingPage = pages.find((page) => isRecord$1(page) && page.page === requestedPage);
-		return isRecord$1(matchingPage) ? validPositiveInteger(matchingPage.cid) : void 0;
-	}
-	function validPositiveInteger(value) {
-		return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : void 0;
-	}
-	function isRecord$1(value) {
-		return typeof value === "object" && value !== null;
 	}
 	function clamp(value, minimum, maximum) {
 		return Math.min(maximum, Math.max(minimum, value));
@@ -1173,13 +1419,85 @@
 		].map((part) => String(part).padStart(2, "0")).join(":");
 		return [minutes, seconds].map((part) => String(part).padStart(2, "0")).join(":");
 	}
+	async function fetchVideoChapters(source, options = {}) {
+		const fetcher = options.fetcher ?? fetch;
+		let cid = validPositiveInteger(source.cid) ? source.cid : void 0;
+		try {
+			if (cid === void 0) {
+				const viewUrl = new URL("https://api.bilibili.com/x/web-interface/view");
+				viewUrl.searchParams.set("bvid", source.bvid);
+				const pages = readRecord((await readSuccessfulPayload(await fetcher(viewUrl, {
+					credentials: "include",
+					signal: options.signal
+				})))?.data)?.pages;
+				const pageIndex = validPositiveInteger(source.page) ? source.page - 1 : 0;
+				const resolvedCid = (Array.isArray(pages) ? readRecord(pages[pageIndex]) : void 0)?.cid;
+				cid = validPositiveInteger(resolvedCid) ? resolvedCid : void 0;
+			}
+			if (cid === void 0) return { chapters: [] };
+			const playerUrl = new URL("https://api.bilibili.com/x/player/wbi/v2");
+			playerUrl.searchParams.set("bvid", source.bvid);
+			playerUrl.searchParams.set("cid", String(cid));
+			const viewPoints = readRecord((await readSuccessfulPayload(await fetcher(playerUrl, {
+				credentials: "include",
+				signal: options.signal
+			})))?.data)?.view_points;
+			return {
+				cid,
+				chapters: parseVideoChapters(viewPoints)
+			};
+		} catch {
+			return {
+				cid,
+				chapters: []
+			};
+		}
+	}
+	function parseVideoChapters(value) {
+		if (!Array.isArray(value)) return [];
+		return value.flatMap((entry) => {
+			const record = readRecord(entry);
+			const title = typeof record?.content === "string" ? record.content.trim() : "";
+			const rawStart = record?.from;
+			const rawEnd = record?.to;
+			if (!title || typeof rawStart !== "number" || typeof rawEnd !== "number" || !Number.isFinite(rawStart) || !Number.isFinite(rawEnd) || rawStart < 0 || rawEnd <= rawStart) return [];
+			const startTime = toStartSecond(rawStart);
+			const endTime = toEndSecond(rawEnd);
+			if (endTime <= startTime) return [];
+			const rawCover = record?.imgUrl;
+			const cover = typeof rawCover === "string" && rawCover.trim() ? rawCover.trim().replace(/^http:/i, "https:") : void 0;
+			return [{
+				title,
+				startTime,
+				endTime,
+				...cover ? { cover } : {}
+			}];
+		});
+	}
+	async function readSuccessfulPayload(response) {
+		if (!response.ok) return;
+		const payload = readRecord(await response.json());
+		return payload?.code === 0 ? payload : void 0;
+	}
+	function readRecord(value) {
+		return value !== null && typeof value === "object" ? value : void 0;
+	}
+	function validPositiveInteger(value) {
+		return typeof value === "number" && Number.isInteger(value) && value > 0;
+	}
 	var _GM_addValueChangeListener = (() => typeof GM_addValueChangeListener != "undefined" ? GM_addValueChangeListener : void 0)();
 	var _GM_getValue = (() => typeof GM_getValue != "undefined" ? GM_getValue : void 0)();
 	var _GM_removeValueChangeListener = (() => typeof GM_removeValueChangeListener != "undefined" ? GM_removeValueChangeListener : void 0)();
 	var _GM_setValue = (() => typeof GM_setValue != "undefined" ? GM_setValue : void 0)();
 	var _unsafeWindow = (() => typeof unsafeWindow != "undefined" ? unsafeWindow : void 0)();
 	var LAYOUT_STORAGE_KEY = "bilibili-music-player:layout";
-	var DEFAULT_LAYOUT = { version: 1 };
+	var DEFAULT_LAYOUT = {
+		version: 1,
+		lastOpenMode: "full"
+	};
+	function readOpenPanelMode(value) {
+		return value === "minimal" ? "minimal" : "full";
+	}
 	function readPosition(value) {
 		if (!value || typeof value !== "object") return;
 		const candidate = value;
@@ -1193,11 +1511,15 @@
 		if (!raw || typeof raw !== "object") return DEFAULT_LAYOUT;
 		const candidate = raw;
 		if (candidate.version !== 1) return DEFAULT_LAYOUT;
-		return {
+		const migrated = {
 			version: 1,
-			launcher: readPosition(candidate.launcher),
-			panel: readPosition(candidate.panel)
+			lastOpenMode: readOpenPanelMode(candidate.lastOpenMode)
 		};
+		const launcher = readPosition(candidate.launcher);
+		if (launcher) migrated.launcher = launcher;
+		const panel = readPosition(candidate.panel);
+		if (panel) migrated.panel = panel;
+		return migrated;
 	}
 	var LayoutRepository = class {
 		load() {
@@ -1214,6 +1536,12 @@
 			delete layout[target];
 			_GM_setValue(LAYOUT_STORAGE_KEY, layout);
 		}
+		saveLastOpenMode(lastOpenMode) {
+			_GM_setValue(LAYOUT_STORAGE_KEY, {
+				...this.load(),
+				lastOpenMode
+			});
+		}
 	};
 	function clampPosition(position, elementSize, viewportSize) {
 		const maximumX = Math.max(0, viewportSize.width - elementSize.width);
@@ -1227,7 +1555,7 @@
 		return first.x === second.x && first.y === second.y;
 	}
 	var DRAG_THRESHOLD = 4;
-	var layoutRepository = new LayoutRepository();
+	var layoutRepository$1 = new LayoutRepository();
 	function viewportSize() {
 		return {
 			width: window.innerWidth,
@@ -1236,7 +1564,7 @@
 	}
 	function useDraggablePosition(target) {
 		const [element, setElement] = (0, preact_hooks.useState)(null);
-		const [position, setPosition] = (0, preact_hooks.useState)(() => layoutRepository.load()[target]);
+		const [position, setPosition] = (0, preact_hooks.useState)(() => layoutRepository$1.load()[target]);
 		const activeDrag = (0, preact_hooks.useRef)();
 		const suppressClick = (0, preact_hooks.useRef)(false);
 		const ref = (0, preact_hooks.useCallback)((nextElement) => {
@@ -1309,7 +1637,7 @@
 			if (!drag || drag.pointerId !== event.pointerId) return;
 			if (drag.dragged) {
 				setPosition(drag.lastPosition);
-				layoutRepository.savePosition(target, drag.lastPosition);
+				layoutRepository$1.savePosition(target, drag.lastPosition);
 				suppressClick.current = !cancelled;
 			}
 			activeDrag.current = void 0;
@@ -1322,11 +1650,24 @@
 			suppressClick.current = false;
 			return true;
 		}, []);
+		const saveCurrentPosition = (0, preact_hooks.useCallback)(() => {
+			if (!element) return;
+			const bounds = element.getBoundingClientRect();
+			const nextPosition = clampPosition({
+				x: bounds.left,
+				y: bounds.top
+			}, {
+				width: bounds.width,
+				height: bounds.height
+			}, viewportSize());
+			setPosition(nextPosition);
+			layoutRepository$1.savePosition(target, nextPosition);
+		}, [element, target]);
 		const resetPosition = (0, preact_hooks.useCallback)(() => {
 			activeDrag.current = void 0;
 			suppressClick.current = false;
 			setPosition(void 0);
-			layoutRepository.clearPosition(target);
+			layoutRepository$1.clearPosition(target);
 		}, [target]);
 		return {
 			ref,
@@ -1341,8 +1682,294 @@
 			onPointerUp,
 			onPointerCancel,
 			consumeSuppressedClick,
+			saveCurrentPosition,
 			resetPosition
 		};
+	}
+	function calculatePlaybackProgress({ currentTime, startTime, endTime, duration, storedDuration }) {
+		const effectiveEnd = endTime ?? (duration > 0 ? duration : storedDuration);
+		if (!Number.isFinite(currentTime) || !Number.isFinite(startTime) || !Number.isFinite(effectiveEnd) || effectiveEnd <= startTime) return 0;
+		return Math.min(1, Math.max(0, (currentTime - startTime) / (effectiveEnd - startTime)));
+	}
+	var PLAY_MODE_LABELS = {
+		sequence: "顺序播放",
+		"list-loop": "列表循环",
+		"single-loop": "单曲循环",
+		shuffle: "随机播放"
+	};
+	function PlayerControls({ variant, playMode, runtime, audioOnlyState, progress, onToggleAudioOnly, onCyclePlayMode, onPrevious, onTogglePlayback, onNext, onToggleMute, onSetVolume }) {
+		const playButton = (0, preact_jsx_runtime.jsx)("button", {
+			class: "play-button",
+			type: "button",
+			title: runtime.playing ? "暂停" : "播放",
+			"aria-label": runtime.playing ? "暂停" : "播放",
+			disabled: !runtime.mediaReady,
+			onClick: onTogglePlayback,
+			children: runtime.playing ? (0, preact_jsx_runtime.jsx)(Pause, {
+				size: 22,
+				fill: "currentColor",
+				"aria-hidden": "true"
+			}) : (0, preact_jsx_runtime.jsx)(Play, {
+				size: 22,
+				fill: "currentColor",
+				"aria-hidden": "true"
+			})
+		});
+		return (0, preact_jsx_runtime.jsxs)("div", {
+			class: `transport transport-${variant}`,
+			children: [
+				(0, preact_jsx_runtime.jsx)("button", {
+					class: `icon-button audio-mode-button ${audioOnlyState.status}`,
+					type: "button",
+					title: audioOnlyButtonLabel(audioOnlyState),
+					"aria-label": audioOnlyButtonLabel(audioOnlyState),
+					"aria-pressed": audioOnlyState.requested,
+					onClick: onToggleAudioOnly,
+					children: (0, preact_jsx_runtime.jsx)(Headphones, {
+						size: 19,
+						"aria-hidden": "true"
+					})
+				}),
+				(0, preact_jsx_runtime.jsx)("button", {
+					class: "icon-button",
+					type: "button",
+					title: PLAY_MODE_LABELS[playMode],
+					"aria-label": PLAY_MODE_LABELS[playMode],
+					onClick: onCyclePlayMode,
+					children: (0, preact_jsx_runtime.jsx)(PlayModeIcon, { mode: playMode })
+				}),
+				(0, preact_jsx_runtime.jsx)("button", {
+					class: "icon-button",
+					type: "button",
+					title: "上一首",
+					"aria-label": "上一首",
+					disabled: !runtime.mediaReady,
+					onClick: onPrevious,
+					children: (0, preact_jsx_runtime.jsx)(SkipBack, {
+						size: 20,
+						"aria-hidden": "true"
+					})
+				}),
+				variant === "minimal" ? (0, preact_jsx_runtime.jsxs)("div", {
+					class: "circular-play-control",
+					style: { "--play-progress": String((progress ?? 0) * 100) },
+					children: [
+						(0, preact_jsx_runtime.jsxs)("svg", {
+							class: "circular-progress",
+							viewBox: "0 0 40 40",
+							"aria-hidden": "true",
+							children: [(0, preact_jsx_runtime.jsx)("circle", {
+								class: "circular-progress-track",
+								cx: "20",
+								cy: "20",
+								r: "18"
+							}), (0, preact_jsx_runtime.jsx)("circle", {
+								class: "circular-progress-value",
+								cx: "20",
+								cy: "20",
+								r: "18",
+								pathLength: "100"
+							})]
+						}),
+						playButton,
+						(0, preact_jsx_runtime.jsx)("span", {
+							class: "visually-hidden",
+							role: "progressbar",
+							"aria-label": "播放进度",
+							"aria-valuemin": 0,
+							"aria-valuemax": 100,
+							"aria-valuenow": Math.round((progress ?? 0) * 100)
+						})
+					]
+				}) : playButton,
+				(0, preact_jsx_runtime.jsx)("button", {
+					class: "icon-button",
+					type: "button",
+					title: "下一首",
+					"aria-label": "下一首",
+					disabled: !runtime.mediaReady,
+					onClick: onNext,
+					children: (0, preact_jsx_runtime.jsx)(SkipForward, {
+						size: 20,
+						"aria-hidden": "true"
+					})
+				}),
+				(0, preact_jsx_runtime.jsxs)("div", {
+					class: "volume-control",
+					children: [(0, preact_jsx_runtime.jsx)("button", {
+						class: "icon-button",
+						type: "button",
+						title: runtime.muted ? "取消静音" : "静音",
+						"aria-label": runtime.muted ? "取消静音" : "静音",
+						onClick: onToggleMute,
+						children: runtime.muted || runtime.volume === 0 ? (0, preact_jsx_runtime.jsx)(VolumeX, {
+							size: 19,
+							"aria-hidden": "true"
+						}) : (0, preact_jsx_runtime.jsx)(Volume2, {
+							size: 19,
+							"aria-hidden": "true"
+						})
+					}), (0, preact_jsx_runtime.jsx)("input", {
+						class: "range volume-range",
+						type: "range",
+						min: "0",
+						max: "1",
+						step: "0.01",
+						value: runtime.muted ? 0 : runtime.volume,
+						"aria-label": "音量",
+						onInput: (event) => onSetVolume(Number(event.currentTarget.value))
+					})]
+				})
+			]
+		});
+	}
+	function PlayModeIcon({ mode }) {
+		switch (mode) {
+			case "list-loop": return (0, preact_jsx_runtime.jsx)(Repeat, {
+				size: 19,
+				"aria-hidden": "true"
+			});
+			case "single-loop": return (0, preact_jsx_runtime.jsx)(Repeat1, {
+				size: 19,
+				"aria-hidden": "true"
+			});
+			case "shuffle": return (0, preact_jsx_runtime.jsx)(Shuffle, {
+				size: 19,
+				"aria-hidden": "true"
+			});
+			default: return (0, preact_jsx_runtime.jsx)(ListMusic, {
+				size: 19,
+				"aria-hidden": "true"
+			});
+		}
+	}
+	function audioOnlyButtonLabel(state) {
+		switch (state.status) {
+			case "detecting": return "纯音频模式正在检测播放流；点击关闭并重载";
+			case "active": return "纯音频模式已生效；点击关闭并重载";
+			case "fallback": return `纯音频模式未生效，已回退正常视频：${audioOnlyReasonLabel(state.reason)}；点击关闭并重载`;
+			default: return "开启纯音频模式并重载页面";
+		}
+	}
+	function audioOnlyReasonLabel(reason) {
+		switch (reason) {
+			case "durl-only": return "当前视频只提供音视频混流";
+			case "missing-audio": return "DASH 清单没有可用音频";
+			case "missing-dash":
+			case "invalid-payload": return "未找到可改写的 DASH 清单";
+			case "invalid-json": return "播放清单不是有效 JSON";
+			case "unsupported-response-type": return "播放器使用了暂不支持的响应格式";
+			case "playinfo-nonconfigurable": return "首屏播放信息无法拦截";
+			case "playinfo-rewrite-failed":
+			case "fetch-rewrite-failed":
+			case "xhr-rewrite-failed": return "播放清单拦截失败";
+			default: return "当前播放格式不受支持";
+		}
+	}
+	function MinimalPlayer({ playMode, runtime, audioOnlyState, drag, onToggleAudioOnly, onCyclePlayMode, onPrevious, onTogglePlayback, onNext, onToggleMute, onSetVolume, onExpand, onClose }) {
+		const [interactionPromptVisible, setInteractionPromptVisible] = (0, preact_hooks.useState)(false);
+		const [interactionPromptPlacement, setInteractionPromptPlacement] = (0, preact_hooks.useState)("above");
+		const playerElement = (0, preact_hooks.useRef)(null);
+		const setPlayerElement = (0, preact_hooks.useCallback)((element) => {
+			playerElement.current = element;
+			drag.ref(element);
+		}, [drag.ref]);
+		const progress = calculatePlaybackProgress({
+			currentTime: runtime.currentTime,
+			startTime: runtime.nowPlaying.startTime,
+			endTime: runtime.nowPlaying.endTime,
+			duration: runtime.duration,
+			storedDuration: runtime.nowPlaying.storedDuration
+		});
+		(0, preact_hooks.useEffect)(() => {
+			if (!runtime.requiresInteraction) {
+				setInteractionPromptVisible(false);
+				return;
+			}
+			setInteractionPromptVisible(true);
+			const timeout = window.setTimeout(() => setInteractionPromptVisible(false), 5e3);
+			return () => window.clearTimeout(timeout);
+		}, [runtime.message, runtime.requiresInteraction]);
+		(0, preact_hooks.useLayoutEffect)(() => {
+			const element = playerElement.current;
+			if (!interactionPromptVisible || !element) return;
+			const bounds = element.getBoundingClientRect();
+			const promptExtent = 38;
+			const nextPlacement = bounds.bottom + promptExtent <= window.innerHeight || bounds.top < promptExtent ? "below" : "above";
+			setInteractionPromptPlacement(nextPlacement);
+		}, [
+			drag.style?.left,
+			drag.style?.top,
+			interactionPromptVisible
+		]);
+		return (0, preact_jsx_runtime.jsxs)("section", {
+			ref: setPlayerElement,
+			class: "minimal-player",
+			style: drag.style,
+			"aria-label": "Bilibili 音乐播放器（极简模式）",
+			onPointerDown: (event) => {
+				if (event.target instanceof Element && event.target.closest("button, input, select, textarea, a")) return;
+				drag.onPointerDown(event);
+			},
+			onPointerMove: drag.onPointerMove,
+			onPointerUp: drag.onPointerUp,
+			onPointerCancel: drag.onPointerCancel,
+			children: [
+				(0, preact_jsx_runtime.jsxs)("div", {
+					class: "minimal-now-playing",
+					children: [(0, preact_jsx_runtime.jsx)("strong", {
+						title: runtime.nowPlaying.title,
+						children: runtime.mediaReady ? runtime.nowPlaying.title : "等待播放器"
+					}), runtime.mediaReady && runtime.nowPlaying.uploader && (0, preact_jsx_runtime.jsx)("span", {
+						title: runtime.nowPlaying.uploader,
+						children: runtime.nowPlaying.uploader
+					})]
+				}),
+				(0, preact_jsx_runtime.jsx)(PlayerControls, {
+					variant: "minimal",
+					playMode,
+					runtime,
+					audioOnlyState,
+					progress,
+					onToggleAudioOnly,
+					onCyclePlayMode,
+					onPrevious,
+					onTogglePlayback,
+					onNext,
+					onToggleMute,
+					onSetVolume
+				}),
+				interactionPromptVisible && (0, preact_jsx_runtime.jsx)("button", {
+					class: `minimal-interaction-prompt ${interactionPromptPlacement}`,
+					type: "button",
+					"aria-label": "点击继续播放",
+					onClick: onTogglePlayback,
+					children: "点击继续播放"
+				}),
+				(0, preact_jsx_runtime.jsx)("button", {
+					class: "icon-button minimal-action-button",
+					type: "button",
+					title: "展开完整播放器",
+					"aria-label": "展开完整播放器",
+					onClick: onExpand,
+					children: (0, preact_jsx_runtime.jsx)(Maximize2, {
+						size: 18,
+						"aria-hidden": "true"
+					})
+				}),
+				(0, preact_jsx_runtime.jsx)("button", {
+					class: "icon-button close-panel-button minimal-action-button",
+					type: "button",
+					title: "收起播放器",
+					"aria-label": "收起播放器",
+					onClick: onClose,
+					children: (0, preact_jsx_runtime.jsx)(X, {
+						size: 18,
+						"aria-hidden": "true"
+					})
+				})
+			]
+		});
 	}
 	var PLAY_MODES = [
 		"sequence",
@@ -1350,14 +1977,9 @@
 		"single-loop",
 		"shuffle"
 	];
-	var PLAY_MODE_LABELS = {
-		sequence: "顺序播放",
-		"list-loop": "列表循环",
-		"single-loop": "单曲循环",
-		shuffle: "随机播放"
-	};
+	var layoutRepository = new LayoutRepository();
 	function App({ store, engine, audioOnly }) {
-		const [panelOpen, setPanelOpen] = (0, preact_hooks.useState)(false);
+		const [displayMode, setDisplayMode] = (0, preact_hooks.useState)("launcher");
 		const [creatingPlaylist, setCreatingPlaylist] = (0, preact_hooks.useState)(false);
 		const [newPlaylistName, setNewPlaylistName] = (0, preact_hooks.useState)("");
 		const [editorTrack, setEditorTrack] = (0, preact_hooks.useState)();
@@ -1384,7 +2006,12 @@
 			const currentIndex = PLAY_MODES.indexOf(data.playMode);
 			engine.setPlayMode(PLAY_MODES[(currentIndex + 1) % PLAY_MODES.length]);
 		};
-		if (!panelOpen) return (0, preact_jsx_runtime.jsx)("button", {
+		const showPanel = (mode) => {
+			if (displayMode !== "launcher" && displayMode !== mode) panelDrag.saveCurrentPosition();
+			layoutRepository.saveLastOpenMode(mode);
+			setDisplayMode(mode);
+		};
+		if (displayMode === "launcher") return (0, preact_jsx_runtime.jsx)("button", {
 			ref: launcherDrag.ref,
 			class: "floating-button",
 			type: "button",
@@ -1400,12 +2027,27 @@
 					event.preventDefault();
 					return;
 				}
-				setPanelOpen(true);
+				showPanel(layoutRepository.load().lastOpenMode);
 			},
 			children: (0, preact_jsx_runtime.jsx)(Music2, {
 				size: 22,
 				"aria-hidden": "true"
 			})
+		});
+		if (displayMode === "minimal") return (0, preact_jsx_runtime.jsx)(MinimalPlayer, {
+			playMode: data.playMode,
+			runtime,
+			audioOnlyState,
+			drag: panelDrag,
+			onToggleAudioOnly: () => audioOnly.toggle(engine.currentMedia?.currentTime ?? runtime.currentTime),
+			onCyclePlayMode: cyclePlayMode,
+			onPrevious: () => engine.previous(),
+			onTogglePlayback: () => void engine.togglePlayback(),
+			onNext: () => engine.next(),
+			onToggleMute: () => engine.toggleMute(),
+			onSetVolume: (volume) => engine.setVolume(volume),
+			onExpand: () => showPanel("full"),
+			onClose: () => setDisplayMode("launcher")
 		});
 		return (0, preact_jsx_runtime.jsxs)("section", {
 			ref: panelDrag.ref,
@@ -1440,30 +2082,44 @@
 						]
 					}), (0, preact_jsx_runtime.jsxs)("div", {
 						class: "header-actions",
-						children: [(0, preact_jsx_runtime.jsx)("button", {
-							class: "icon-button reset-position-button",
-							type: "button",
-							title: "重置图标和播放器位置",
-							"aria-label": "重置图标和播放器位置",
-							onClick: () => {
-								launcherDrag.resetPosition();
-								panelDrag.resetPosition();
-							},
-							children: (0, preact_jsx_runtime.jsx)(RotateCcw, {
-								size: 18,
-								"aria-hidden": "true"
+						children: [
+							(0, preact_jsx_runtime.jsx)("button", {
+								class: "icon-button reset-position-button",
+								type: "button",
+								title: "重置图标和播放器位置",
+								"aria-label": "重置图标和播放器位置",
+								onClick: () => {
+									launcherDrag.resetPosition();
+									panelDrag.resetPosition();
+								},
+								children: (0, preact_jsx_runtime.jsx)(RotateCcw, {
+									size: 18,
+									"aria-hidden": "true"
+								})
+							}),
+							(0, preact_jsx_runtime.jsx)("button", {
+								class: "icon-button",
+								type: "button",
+								title: "进入极简模式",
+								"aria-label": "进入极简模式",
+								onClick: () => showPanel("minimal"),
+								children: (0, preact_jsx_runtime.jsx)(Minimize2, {
+									size: 18,
+									"aria-hidden": "true"
+								})
+							}),
+							(0, preact_jsx_runtime.jsx)("button", {
+								class: "icon-button close-panel-button",
+								type: "button",
+								title: "收起播放器",
+								"aria-label": "收起播放器",
+								onClick: () => setDisplayMode("launcher"),
+								children: (0, preact_jsx_runtime.jsx)(X, {
+									size: 18,
+									"aria-hidden": "true"
+								})
 							})
-						}), (0, preact_jsx_runtime.jsx)("button", {
-							class: "icon-button close-panel-button",
-							type: "button",
-							title: "收起播放器",
-							"aria-label": "收起播放器",
-							onClick: () => setPanelOpen(false),
-							children: (0, preact_jsx_runtime.jsx)(X, {
-								size: 18,
-								"aria-hidden": "true"
-							})
-						})]
+						]
 					})]
 				}),
 				(0, preact_jsx_runtime.jsxs)("div", {
@@ -1513,94 +2169,18 @@
 						children: [(0, preact_jsx_runtime.jsx)("span", { children: formatTime(runtime.currentTime) }), (0, preact_jsx_runtime.jsx)("span", { children: formatTime(progressMaximum) })]
 					})]
 				}),
-				(0, preact_jsx_runtime.jsxs)("div", {
-					class: "transport",
-					children: [
-						(0, preact_jsx_runtime.jsx)("button", {
-							class: `icon-button audio-mode-button ${audioOnlyState.status}`,
-							type: "button",
-							title: audioOnlyButtonLabel(audioOnlyState),
-							"aria-label": audioOnlyButtonLabel(audioOnlyState),
-							"aria-pressed": audioOnlyState.requested,
-							onClick: () => audioOnly.toggle(engine.currentMedia?.currentTime ?? runtime.currentTime),
-							children: (0, preact_jsx_runtime.jsx)(Headphones, {
-								size: 19,
-								"aria-hidden": "true"
-							})
-						}),
-						(0, preact_jsx_runtime.jsx)("button", {
-							class: "icon-button",
-							type: "button",
-							title: PLAY_MODE_LABELS[data.playMode],
-							"aria-label": PLAY_MODE_LABELS[data.playMode],
-							onClick: cyclePlayMode,
-							children: (0, preact_jsx_runtime.jsx)(PlayModeIcon, { mode: data.playMode })
-						}),
-						(0, preact_jsx_runtime.jsx)("button", {
-							class: "icon-button",
-							type: "button",
-							title: "上一首",
-							"aria-label": "上一首",
-							onClick: () => engine.previous(),
-							children: (0, preact_jsx_runtime.jsx)(SkipBack, {
-								size: 20,
-								"aria-hidden": "true"
-							})
-						}),
-						(0, preact_jsx_runtime.jsx)("button", {
-							class: "play-button",
-							type: "button",
-							title: runtime.playing ? "暂停" : "播放",
-							"aria-label": runtime.playing ? "暂停" : "播放",
-							onClick: () => void engine.togglePlayback(),
-							children: runtime.playing ? (0, preact_jsx_runtime.jsx)(Pause, {
-								size: 22,
-								fill: "currentColor",
-								"aria-hidden": "true"
-							}) : (0, preact_jsx_runtime.jsx)(Play, {
-								size: 22,
-								fill: "currentColor",
-								"aria-hidden": "true"
-							})
-						}),
-						(0, preact_jsx_runtime.jsx)("button", {
-							class: "icon-button",
-							type: "button",
-							title: "下一首",
-							"aria-label": "下一首",
-							onClick: () => engine.next(),
-							children: (0, preact_jsx_runtime.jsx)(SkipForward, {
-								size: 20,
-								"aria-hidden": "true"
-							})
-						}),
-						(0, preact_jsx_runtime.jsxs)("div", {
-							class: "volume-control",
-							children: [(0, preact_jsx_runtime.jsx)("button", {
-								class: "icon-button",
-								type: "button",
-								title: runtime.muted ? "取消静音" : "静音",
-								"aria-label": runtime.muted ? "取消静音" : "静音",
-								onClick: () => engine.toggleMute(),
-								children: runtime.muted || runtime.volume === 0 ? (0, preact_jsx_runtime.jsx)(VolumeX, {
-									size: 19,
-									"aria-hidden": "true"
-								}) : (0, preact_jsx_runtime.jsx)(Volume2, {
-									size: 19,
-									"aria-hidden": "true"
-								})
-							}), (0, preact_jsx_runtime.jsx)("input", {
-								class: "range volume-range",
-								type: "range",
-								min: "0",
-								max: "1",
-								step: "0.01",
-								value: runtime.muted ? 0 : runtime.volume,
-								"aria-label": "音量",
-								onInput: (event) => engine.setVolume(Number(event.currentTarget.value))
-							})]
-						})
-					]
+				(0, preact_jsx_runtime.jsx)(PlayerControls, {
+					variant: "full",
+					playMode: data.playMode,
+					runtime,
+					audioOnlyState,
+					onToggleAudioOnly: () => audioOnly.toggle(engine.currentMedia?.currentTime ?? runtime.currentTime),
+					onCyclePlayMode: cyclePlayMode,
+					onPrevious: () => engine.previous(),
+					onTogglePlayback: () => void engine.togglePlayback(),
+					onNext: () => engine.next(),
+					onToggleMute: () => engine.toggleMute(),
+					onSetVolume: (volume) => engine.setVolume(volume)
 				}),
 				primaryNotice && (noticeActionable ? (0, preact_jsx_runtime.jsx)("button", {
 					class: "status-message actionable",
@@ -1757,29 +2337,57 @@
 	}
 	function TrackEditor({ media, track, onCancel, onSave }) {
 		const metadata = readCurrentVideoMetadata();
-		const chapterReference = track ?? metadata;
 		const [title, setTitle] = (0, preact_hooks.useState)(track?.title ?? metadata?.title ?? "");
 		const [startTime, setStartTime] = (0, preact_hooks.useState)(String(toStartSecond(track?.startTime ?? 0)));
 		const [endTime, setEndTime] = (0, preact_hooks.useState)(track?.endTime === void 0 ? "" : String(toEndSecond(track.endTime)));
 		const [error, setError] = (0, preact_hooks.useState)("");
 		const [chapters, setChapters] = (0, preact_hooks.useState)([]);
 		const [resolvedCid, setResolvedCid] = (0, preact_hooks.useState)(track?.cid);
+		const [chapterMenuOpen, setChapterMenuOpen] = (0, preact_hooks.useState)(false);
+		const [activeChapterIndex, setActiveChapterIndex] = (0, preact_hooks.useState)(-1);
+		const chapterCombobox = (0, preact_hooks.useRef)(null);
+		const titleInput = (0, preact_hooks.useRef)(null);
+		const chapterSourceBvid = track?.bvid ?? metadata?.bvid;
+		const chapterSourcePage = track?.page ?? metadata?.page;
+		const chapterSourceCid = track?.cid;
 		(0, preact_hooks.useEffect)(() => {
-			setChapters([]);
-			setResolvedCid(track?.cid);
-			if (!chapterReference) return;
 			const controller = new AbortController();
-			readVideoChapters(chapterReference, { signal: controller.signal }).then((result) => {
-				if (controller.signal.aborted) return;
-				setResolvedCid(result.cid);
+			let cancelled = false;
+			setChapters([]);
+			setResolvedCid(chapterSourceCid);
+			setChapterMenuOpen(false);
+			setActiveChapterIndex(-1);
+			if (chapterSourceBvid) fetchVideoChapters({
+				bvid: chapterSourceBvid,
+				page: chapterSourcePage,
+				cid: chapterSourceCid
+			}, { signal: controller.signal }).then((result) => {
+				if (cancelled) return;
 				setChapters(result.chapters);
+				setResolvedCid(result.cid);
+				setActiveChapterIndex(-1);
 			});
-			return () => controller.abort();
+			return () => {
+				cancelled = true;
+				controller.abort();
+			};
 		}, [
-			chapterReference?.bvid,
-			chapterReference?.page,
-			track?.cid
+			chapterSourceBvid,
+			chapterSourceCid,
+			chapterSourcePage
 		]);
+		(0, preact_hooks.useEffect)(() => {
+			if (!chapterMenuOpen) return;
+			const closeOnOutsidePointer = (event) => {
+				const combobox = chapterCombobox.current;
+				if (combobox && !event.composedPath().includes(combobox)) {
+					setChapterMenuOpen(false);
+					setActiveChapterIndex(-1);
+				}
+			};
+			document.addEventListener("pointerdown", closeOnOutsidePointer);
+			return () => document.removeEventListener("pointerdown", closeOnOutsidePointer);
+		}, [chapterMenuOpen]);
 		(0, preact_hooks.useEffect)(() => {
 			setError("");
 		}, [startTime, endTime]);
@@ -1810,7 +2418,7 @@
 			if (track) {
 				onSave({
 					...track,
-					...resolvedCid === void 0 ? {} : { cid: resolvedCid },
+					...resolvedCid !== void 0 ? { cid: resolvedCid } : {},
 					title: title.trim() || track.title,
 					startTime: start,
 					endTime: end
@@ -1827,6 +2435,26 @@
 				return;
 			}
 			onSave(nextTrack);
+		};
+		const selectChapter = (chapter) => {
+			setTitle(chapter.title);
+			setStartTime(String(chapter.startTime));
+			setEndTime(String(chapter.endTime));
+			setChapterMenuOpen(false);
+			setActiveChapterIndex(-1);
+			titleInput.current?.focus();
+		};
+		const moveActiveChapter = (direction) => {
+			if (chapters.length === 0) {
+				setChapterMenuOpen(true);
+				setActiveChapterIndex(-1);
+				return;
+			}
+			setChapterMenuOpen(true);
+			setActiveChapterIndex((current) => {
+				if (current < 0) return direction === 1 ? 0 : chapters.length - 1;
+				return (current + direction + chapters.length) % chapters.length;
+			});
 		};
 		return (0, preact_jsx_runtime.jsxs)("form", {
 			class: "track-editor",
@@ -1846,17 +2474,88 @@
 						})
 					})]
 				}),
-				(0, preact_jsx_runtime.jsxs)("label", {
-					class: "chapter-field",
-					children: [(0, preact_jsx_runtime.jsx)("span", { children: "标题" }), (0, preact_jsx_runtime.jsx)(ChapterCombobox, {
-						value: title,
-						chapters,
-						onInput: setTitle,
-						onSelect: (chapter) => {
-							setTitle(chapter.title);
-							setStartTime(String(chapter.startTime));
-							setEndTime(String(chapter.endTime));
-						}
+				(0, preact_jsx_runtime.jsxs)("div", {
+					class: "editor-field",
+					children: [(0, preact_jsx_runtime.jsx)("label", {
+						for: "bilibili-music-track-title",
+						children: "标题"
+					}), (0, preact_jsx_runtime.jsxs)("div", {
+						class: "chapter-combobox",
+						ref: chapterCombobox,
+						children: [
+							(0, preact_jsx_runtime.jsx)("input", {
+								id: "bilibili-music-track-title",
+								ref: titleInput,
+								value: title,
+								required: true,
+								role: "combobox",
+								"aria-autocomplete": "none",
+								"aria-expanded": chapterMenuOpen,
+								"aria-controls": "bilibili-music-chapter-options",
+								"aria-activedescendant": chapterMenuOpen && activeChapterIndex >= 0 ? `bilibili-music-chapter-${activeChapterIndex}` : void 0,
+								onInput: (event) => {
+									setTitle(event.currentTarget.value);
+									setActiveChapterIndex(-1);
+								},
+								onKeyDown: (event) => {
+									if (event.key === "ArrowDown") {
+										event.preventDefault();
+										moveActiveChapter(1);
+									} else if (event.key === "ArrowUp") {
+										event.preventDefault();
+										moveActiveChapter(-1);
+									} else if (event.key === "Enter" && chapterMenuOpen && activeChapterIndex >= 0) {
+										event.preventDefault();
+										selectChapter(chapters[activeChapterIndex]);
+									} else if (event.key === "Escape" && chapterMenuOpen) {
+										event.preventDefault();
+										setChapterMenuOpen(false);
+										setActiveChapterIndex(-1);
+									}
+								}
+							}),
+							(0, preact_jsx_runtime.jsx)("button", {
+								class: `chapter-toggle ${chapterMenuOpen ? "open" : ""}`,
+								type: "button",
+								title: chapterMenuOpen ? "收起视频章节" : "展开视频章节",
+								"aria-label": chapterMenuOpen ? "收起视频章节" : "展开视频章节",
+								"aria-expanded": chapterMenuOpen,
+								"aria-controls": "bilibili-music-chapter-options",
+								onClick: () => {
+									setChapterMenuOpen((open) => {
+										const nextOpen = !open;
+										setActiveChapterIndex(nextOpen && chapters.length > 0 ? 0 : -1);
+										return nextOpen;
+									});
+									titleInput.current?.focus();
+								},
+								children: (0, preact_jsx_runtime.jsx)(ChevronDown, {
+									size: 17,
+									"aria-hidden": "true"
+								})
+							}),
+							chapterMenuOpen && (0, preact_jsx_runtime.jsx)("div", {
+								class: "chapter-options",
+								id: "bilibili-music-chapter-options",
+								role: "listbox",
+								"aria-label": "视频章节",
+								children: chapters.map((chapter, index) => (0, preact_jsx_runtime.jsxs)("button", {
+									class: `chapter-option ${index === activeChapterIndex ? "active" : ""}`,
+									id: `bilibili-music-chapter-${index}`,
+									type: "button",
+									role: "option",
+									"aria-selected": index === activeChapterIndex,
+									tabIndex: -1,
+									onPointerEnter: () => setActiveChapterIndex(index),
+									onClick: () => selectChapter(chapter),
+									children: [(0, preact_jsx_runtime.jsx)("span", { children: chapter.title }), (0, preact_jsx_runtime.jsxs)("span", { children: [
+										formatTime(chapter.startTime),
+										"–",
+										formatTime(chapter.endTime)
+									] })]
+								}, `${chapter.startTime}-${chapter.endTime}-${chapter.title}`))
+							})
+						]
 					})]
 				}),
 				(0, preact_jsx_runtime.jsxs)("div", {
@@ -1923,167 +2622,6 @@
 				})
 			]
 		});
-	}
-	function ChapterCombobox({ value, chapters, onInput, onSelect }) {
-		const rootRef = (0, preact_hooks.useRef)(null);
-		const [open, setOpen] = (0, preact_hooks.useState)(false);
-		const [activeIndex, setActiveIndex] = (0, preact_hooks.useState)(-1);
-		const listboxId = (0, preact_hooks.useRef)(`chapter-listbox-${Math.random().toString(36).slice(2)}`).current;
-		(0, preact_hooks.useEffect)(() => {
-			if (!open) return;
-			const closeOnOutsidePointer = (event) => {
-				if (!event.composedPath().includes(rootRef.current)) {
-					setOpen(false);
-					setActiveIndex(-1);
-				}
-			};
-			document.addEventListener("pointerdown", closeOnOutsidePointer);
-			return () => document.removeEventListener("pointerdown", closeOnOutsidePointer);
-		}, [open]);
-		(0, preact_hooks.useEffect)(() => {
-			if (chapters.length === 0) {
-				setOpen(false);
-				setActiveIndex(-1);
-			} else if (activeIndex >= chapters.length) setActiveIndex(chapters.length - 1);
-		}, [chapters, activeIndex]);
-		const close = () => {
-			setOpen(false);
-			setActiveIndex(-1);
-		};
-		const choose = (index) => {
-			const chapter = chapters[index];
-			if (!chapter) return;
-			onSelect(chapter);
-			close();
-		};
-		const moveActive = (direction) => {
-			if (chapters.length === 0) return;
-			setOpen(true);
-			setActiveIndex((current) => {
-				if (current < 0) return direction === 1 ? 0 : chapters.length - 1;
-				return (current + direction + chapters.length) % chapters.length;
-			});
-		};
-		return (0, preact_jsx_runtime.jsxs)("div", {
-			class: "chapter-combobox",
-			ref: rootRef,
-			children: [
-				(0, preact_jsx_runtime.jsx)("input", {
-					value,
-					required: true,
-					role: "combobox",
-					"aria-label": "标题",
-					"aria-autocomplete": "none",
-					"aria-expanded": open,
-					"aria-controls": listboxId,
-					"aria-activedescendant": open && activeIndex >= 0 ? `${listboxId}-option-${activeIndex}` : void 0,
-					onInput: (event) => onInput(event.currentTarget.value),
-					onKeyDown: (event) => {
-						switch (event.key) {
-							case "ArrowDown":
-								event.preventDefault();
-								moveActive(1);
-								break;
-							case "ArrowUp":
-								event.preventDefault();
-								moveActive(-1);
-								break;
-							case "Enter":
-								if (open && activeIndex >= 0) {
-									event.preventDefault();
-									choose(activeIndex);
-								}
-								break;
-							case "Escape":
-								if (open) {
-									event.preventDefault();
-									close();
-								}
-								break;
-						}
-					}
-				}),
-				(0, preact_jsx_runtime.jsx)("button", {
-					class: "chapter-toggle",
-					type: "button",
-					"aria-label": open ? "收起章节列表" : "展开章节列表",
-					"aria-expanded": open,
-					"aria-controls": listboxId,
-					onClick: () => {
-						if (chapters.length === 0) return;
-						setOpen((current) => !current);
-						setActiveIndex(-1);
-					},
-					children: (0, preact_jsx_runtime.jsx)(ChevronDown, {
-						class: open ? "expanded" : void 0,
-						size: 17,
-						"aria-hidden": "true"
-					})
-				}),
-				open && chapters.length > 0 && (0, preact_jsx_runtime.jsx)("div", {
-					class: "chapter-listbox",
-					id: listboxId,
-					role: "listbox",
-					children: chapters.map((chapter, index) => (0, preact_jsx_runtime.jsxs)("button", {
-						class: `chapter-option ${index === activeIndex ? "active" : ""}`,
-						id: `${listboxId}-option-${index}`,
-						type: "button",
-						role: "option",
-						"aria-selected": index === activeIndex,
-						onPointerEnter: () => setActiveIndex(index),
-						onClick: () => choose(index),
-						children: [(0, preact_jsx_runtime.jsx)("span", { children: chapter.title }), (0, preact_jsx_runtime.jsxs)("span", { children: [
-							formatTime(chapter.startTime),
-							"–",
-							formatTime(chapter.endTime)
-						] })]
-					}, `${chapter.startTime}-${chapter.endTime}-${chapter.title}`))
-				})
-			]
-		});
-	}
-	function PlayModeIcon({ mode }) {
-		switch (mode) {
-			case "list-loop": return (0, preact_jsx_runtime.jsx)(Repeat, {
-				size: 19,
-				"aria-hidden": "true"
-			});
-			case "single-loop": return (0, preact_jsx_runtime.jsx)(Repeat1, {
-				size: 19,
-				"aria-hidden": "true"
-			});
-			case "shuffle": return (0, preact_jsx_runtime.jsx)(Shuffle, {
-				size: 19,
-				"aria-hidden": "true"
-			});
-			default: return (0, preact_jsx_runtime.jsx)(ListMusic, {
-				size: 19,
-				"aria-hidden": "true"
-			});
-		}
-	}
-	function audioOnlyButtonLabel(state) {
-		switch (state.status) {
-			case "detecting": return "纯音频模式正在检测播放流；点击关闭并重载";
-			case "active": return "纯音频模式已生效；点击关闭并重载";
-			case "fallback": return `纯音频模式未生效，已回退正常视频：${audioOnlyReasonLabel(state.reason)}；点击关闭并重载`;
-			default: return "开启纯音频模式并重载页面";
-		}
-	}
-	function audioOnlyReasonLabel(reason) {
-		switch (reason) {
-			case "durl-only": return "当前视频只提供音视频混流";
-			case "missing-audio": return "DASH 清单没有可用音频";
-			case "missing-dash":
-			case "invalid-payload": return "未找到可改写的 DASH 清单";
-			case "invalid-json": return "播放清单不是有效 JSON";
-			case "unsupported-response-type": return "播放器使用了暂不支持的响应格式";
-			case "playinfo-nonconfigurable": return "首屏播放信息无法拦截";
-			case "playinfo-rewrite-failed":
-			case "fetch-rewrite-failed":
-			case "xhr-rewrite-failed": return "播放清单拦截失败";
-			default: return "当前播放格式不受支持";
-		}
 	}
 	var STORAGE_KEY$1 = "bilibili-music-player:data";
 	function createDefaultData(now = Date.now()) {

@@ -1,4 +1,5 @@
 node_modules/
+.superpowers/sdd/
 dist/
 coverage/
 playwright-report/

@@ -4,6 +4,7 @@ import {
   LAYOUT_STORAGE_KEY,
   migrateLayoutData,
   type LayoutData,
+  type OpenPanelMode,
   type LayoutTarget,
 } from "./layout-schema";
 
@@ -25,5 +26,12 @@ export class LayoutRepository {
     const layout = this.load();
     delete layout[target];
     GM_setValue(LAYOUT_STORAGE_KEY, layout);
+  }
+
+  saveLastOpenMode(lastOpenMode: OpenPanelMode): void {
+    GM_setValue(LAYOUT_STORAGE_KEY, {
+      ...this.load(),
+      lastOpenMode,
+    });
   }
 }
