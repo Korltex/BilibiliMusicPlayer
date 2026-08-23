@@ -270,6 +270,9 @@ test("minimal player keeps controls visible and persists its mode", async ({
   await expect(
     minimal.getByRole("button", { name: "播放", exact: true }),
   ).toBeDisabled();
+  await expect(
+    minimal.getByRole("button", { name: "播放", exact: true }),
+  ).toHaveCSS("opacity", "0.4");
   await expect(minimal.getByRole("button", { name: "上一首" })).toBeDisabled();
   await expect(minimal.getByRole("button", { name: "下一首" })).toBeDisabled();
   await expect(
@@ -331,6 +334,99 @@ test("minimal player keeps controls visible and persists its mode", async ({
   });
   expect(storedLayout.panel.x).toBeCloseTo(fullBeforeMinimal.x, 0);
   expect(storedLayout.panel.y).toBeCloseTo(fullBeforeMinimal.y, 0);
+});
+
+test("minimal circular progress remains distinct from the play button", async ({
+  page,
+}) => {
+  await openMinimalPlayerTestPage(page, {
+    currentTime: 0,
+    duration: 200,
+  });
+  await page.getByRole("button", { name: "打开 Bilibili 音乐播放器" }).click();
+  await page.getByRole("button", { name: "进入极简模式" }).click();
+
+  const minimal = page.getByRole("region", {
+    name: "Bilibili 音乐播放器（极简模式）",
+  });
+  const control = minimal.locator(".circular-play-control");
+  const playButton = control.getByRole("button", {
+    name: "播放",
+    exact: true,
+  });
+  const progress = control.getByRole("progressbar", { name: "播放进度" });
+  const track = control.locator(".circular-progress-track");
+  const value = control.locator(".circular-progress-value");
+
+  const readVisualContract = async () => {
+    const controlBox = (await control.boundingBox())!;
+    const buttonBox = (await playButton.boundingBox())!;
+    const styles = await control.evaluate((element) => {
+      const button = element.querySelector(".play-button")!;
+      const trackCircle = element.querySelector(".circular-progress-track")!;
+      const valueCircle = element.querySelector(".circular-progress-value")!;
+      const buttonStyle = getComputedStyle(button);
+      const trackStyle = getComputedStyle(trackCircle);
+      const valueStyle = getComputedStyle(valueCircle);
+
+      return {
+        buttonBackground: buttonStyle.backgroundColor,
+        buttonBorderColor: buttonStyle.borderColor,
+        buttonBorderWidth: buttonStyle.borderWidth,
+        trackStroke: trackStyle.stroke,
+        valueStroke: valueStyle.stroke,
+        valueStrokeLinecap: valueStyle.strokeLinecap,
+        valueStrokeWidth: valueStyle.strokeWidth,
+      };
+    });
+
+    return { buttonBox, controlBox, styles };
+  };
+
+  const desktop = await readVisualContract();
+  expect(desktop.controlBox.width).toBe(40);
+  expect(desktop.controlBox.height).toBe(40);
+  expect(desktop.buttonBox.width).toBe(32);
+  expect(desktop.buttonBox.height).toBe(32);
+  expect((desktop.controlBox.width - desktop.buttonBox.width) / 2).toBe(4);
+  expect(desktop.styles.buttonBorderWidth).toBe("2px");
+  expect(desktop.styles.buttonBorderColor).toBe("rgb(23, 24, 28)");
+  expect(desktop.styles.trackStroke).toBe("rgba(255, 255, 255, 0.18)");
+  expect(desktop.styles.valueStroke).toBe("rgb(255, 139, 173)");
+  expect(desktop.styles.valueStroke).not.toBe(desktop.styles.buttonBackground);
+  expect(desktop.styles.valueStrokeWidth).toBe("3px");
+  expect(desktop.styles.valueStrokeLinecap).toBe("round");
+
+  await playButton.hover();
+  await expect(playButton).toHaveCSS("background-color", "rgb(255, 139, 173)");
+  await expect(playButton).toHaveCSS("border-color", "rgb(23, 24, 28)");
+
+  for (const [currentTime, expectedProgress] of [
+    [0, 0],
+    [100, 50],
+    [200, 100],
+  ] as const) {
+    await page.locator("video").evaluate((media, time) => {
+      (media as HTMLVideoElement).currentTime = time;
+    }, currentTime);
+    await expect(progress).toHaveAttribute(
+      "aria-valuenow",
+      String(expectedProgress),
+    );
+    const dashProgress = await value.evaluate((element) =>
+      Number.parseFloat(getComputedStyle(element).strokeDasharray),
+    );
+    expect(dashProgress).toBeCloseTo(expectedProgress, 0);
+  }
+
+  await page.setViewportSize({ width: 320, height: 720 });
+  const narrow = await readVisualContract();
+  expect(narrow.controlBox.width).toBe(36);
+  expect(narrow.controlBox.height).toBe(36);
+  expect(narrow.buttonBox.width).toBe(28);
+  expect(narrow.buttonBox.height).toBe(28);
+  expect((narrow.controlBox.width - narrow.buttonBox.width) / 2).toBe(4);
+  await expect(track).toBeVisible();
 });
 
 test("minimal player keeps every control visible on a narrow viewport", async ({

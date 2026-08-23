@@ -426,13 +426,18 @@ button {
 .transport-minimal .play-button {
   position: relative;
   z-index: 1;
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
+  border: 2px solid var(--bg);
 }
 
 .transport-minimal .play-button svg {
   width: 18px;
   height: 18px;
+}
+
+.transport-minimal .play-button svg rect {
+  transform: translateX(-1px);
 }
 
 .transport-minimal .volume-control {
@@ -464,16 +469,17 @@ button {
 .circular-progress-track,
 .circular-progress-value {
   fill: none;
-  stroke-width: 2;
+  stroke-width: 3;
 }
 
 .circular-progress-track {
-  stroke: var(--border);
+  stroke: rgb(255 255 255 / 18%);
 }
 
 .circular-progress-value {
   stroke-dasharray: var(--play-progress) 100;
-  stroke: var(--accent);
+  stroke: var(--accent-hover);
+  stroke-linecap: round;
 }
 
 .visually-hidden {
@@ -984,8 +990,8 @@ select:focus-visible {
   }
 
   .transport-minimal .play-button {
-    width: 32px;
-    height: 32px;
+    width: 28px;
+    height: 28px;
   }
 
   .transport-minimal .volume-control {
