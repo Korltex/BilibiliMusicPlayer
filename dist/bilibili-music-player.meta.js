@@ -3,7 +3,7 @@
 // @namespace    bilibili-music-player
 // @version      0.1.6
 // @author       Korltex
-// @description  在 Bilibili 视频页面中控制原生播放器、管理音乐歌单并可选纯音频模式
+// @description  把喜欢的 Bilibili 视频整理成可播放的音乐歌单
 // @license      MIT
 // @match        https://www.bilibili.com/video/*
 // @require      https://cdn.jsdelivr.net/npm/preact@10.29.7/dist/preact.min.umd.js#sha256=vWCK8okVrPZcOCL+DYDSHpswNp61X5Ab29I+Khh2Erk=
