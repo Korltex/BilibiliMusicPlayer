@@ -52,4 +52,19 @@ describe("queue selection", () => {
       })?.id,
     ).toBe("b");
   });
+
+  it("selects the first track when moving next without a current track", () => {
+    expect(
+      selectAdjacentTrack(playlist, undefined, "list-loop", { direction: 1 })
+        ?.id,
+    ).toBe("a");
+  });
+
+  it("selects the last track when moving previous without a current track", () => {
+    expect(
+      selectAdjacentTrack(playlist, undefined, "list-loop", {
+        direction: -1,
+      })?.id,
+    ).toBe("c");
+  });
 });

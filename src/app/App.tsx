@@ -326,7 +326,11 @@ export function App({ store, engine, audioOnly }: AppProps) {
           title="删除当前歌单"
           aria-label="删除当前歌单"
           disabled={data.playlists.length <= 1}
-          onClick={() => store.removePlaylist(activePlaylist.id)}
+          onClick={() => {
+            if (window.confirm(`确定删除歌单“${activePlaylist.name}”？`)) {
+              store.removePlaylist(activePlaylist.id);
+            }
+          }}
         >
           <Trash2 size={17} aria-hidden="true" />
         </button>
@@ -431,7 +435,11 @@ export function App({ store, engine, audioOnly }: AppProps) {
                 type="button"
                 title="删除歌曲"
                 aria-label={`删除 ${track.title}`}
-                onClick={() => store.removeTrack(track.id)}
+                onClick={() => {
+                  if (window.confirm(`确定删除歌曲“${track.title}”？`)) {
+                    store.removeTrack(track.id);
+                  }
+                }}
               >
                 <Trash2 size={15} aria-hidden="true" />
               </button>

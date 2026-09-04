@@ -90,7 +90,11 @@ function mount(): void {
 
   window.addEventListener(
     "pagehide",
-    () => {
+    (event) => {
+      if (event.persisted) {
+        return;
+      }
+
       stopObservingWebFullscreen();
       stopIsolatingKeyboardEvents();
       engine.stop();

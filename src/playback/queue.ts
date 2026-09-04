@@ -17,10 +17,11 @@ export function selectAdjacentTrack(
     return undefined;
   }
 
-  const currentIndex = Math.max(
-    0,
-    tracks.findIndex((track) => track.id === currentTrackId),
-  );
+  const currentIndex = tracks.findIndex((track) => track.id === currentTrackId);
+
+  if (currentIndex === -1) {
+    return options.direction === 1 ? tracks[0] : tracks[tracks.length - 1];
+  }
 
   if (mode === "single-loop" && options.automatic) {
     return tracks[currentIndex];

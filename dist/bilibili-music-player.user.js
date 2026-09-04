@@ -2229,7 +2229,9 @@
 							title: "删除当前歌单",
 							"aria-label": "删除当前歌单",
 							disabled: data.playlists.length <= 1,
-							onClick: () => store.removePlaylist(activePlaylist.id),
+							onClick: () => {
+								if (window.confirm(`确定删除歌单“${activePlaylist.name}”？`)) store.removePlaylist(activePlaylist.id);
+							},
 							children: (0, preact_jsx_runtime.jsx)(Trash2, {
 								size: 17,
 								"aria-hidden": "true"
@@ -2329,7 +2331,9 @@
 								type: "button",
 								title: "删除歌曲",
 								"aria-label": `删除 ${track.title}`,
-								onClick: () => store.removeTrack(track.id),
+								onClick: () => {
+									if (window.confirm(`确定删除歌曲“${track.title}”？`)) store.removeTrack(track.id);
+								},
 								children: (0, preact_jsx_runtime.jsx)(Trash2, {
 									size: 15,
 									"aria-hidden": "true"
@@ -3325,7 +3329,8 @@ html[${ROOT_ATTRIBUTE}="active"] video.bpx-player-video {
 	function selectAdjacentTrack(playlist, currentTrackId, mode, options) {
 		const tracks = playlist?.tracks ?? [];
 		if (tracks.length === 0) return;
-		const currentIndex = Math.max(0, tracks.findIndex((track) => track.id === currentTrackId));
+		const currentIndex = tracks.findIndex((track) => track.id === currentTrackId);
+		if (currentIndex === -1) return options.direction === 1 ? tracks[0] : tracks[tracks.length - 1];
 		if (mode === "single-loop" && options.automatic) return tracks[currentIndex];
 		if (mode === "shuffle" && tracks.length > 1) {
 			const random = options.random ?? Math.random;
@@ -3749,7 +3754,8 @@ html[${ROOT_ATTRIBUTE}="active"] video.bpx-player-video {
 			engine,
 			audioOnly: audioOnlyController
 		}), mountPoint);
-		window.addEventListener("pagehide", () => {
+		window.addEventListener("pagehide", (event) => {
+			if (event.persisted) return;
 			stopObservingWebFullscreen();
 			stopIsolatingKeyboardEvents();
 			engine.stop();

@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
+import type { AppData } from "../../src/core/types";
 import { injectBuiltUserscript } from "../helpers/userscript";
 
 const packageVersion = (
@@ -129,6 +130,7 @@ async function installMockMedia(
 interface MinimalPlayerTestOptions {
   currentTime?: number;
   duration?: number;
+  initialData?: unknown;
   installMedia?: boolean;
   rejectFirstPlay?: boolean;
 }
@@ -138,6 +140,7 @@ async function openMinimalPlayerTestPage(
   {
     currentTime = 0,
     duration = 240,
+    initialData = null,
     installMedia = true,
     rejectFirstPlay = false,
   }: MinimalPlayerTestOptions = {},
@@ -158,12 +161,53 @@ async function openMinimalPlayerTestPage(
       `,
     });
   });
-  await installLocalStorageGm(page);
+  await installLocalStorageGm(page, initialData);
   await page.goto(MINIMAL_PLAYER_URL);
   if (installMedia) {
     await installMockMedia(page, duration, currentTime, rejectFirstPlay);
   }
   await injectBuiltUserscript(page);
+}
+
+function createDeletionTestData(): AppData {
+  return {
+    version: 1,
+    playlists: [
+      {
+        id: "playlist-a",
+        name: "歌单 A",
+        tracks: [
+          {
+            id: "track-a",
+            bvid: "BV1MinimalPlayer",
+            title: "待删除歌曲",
+            startTime: 0,
+            duration: 240,
+            addedAt: 1,
+            source: "manual",
+          },
+        ],
+        createdAt: 1,
+        updatedAt: 1,
+      },
+      {
+        id: "playlist-b",
+        name: "歌单 B",
+        tracks: [],
+        createdAt: 2,
+        updatedAt: 2,
+      },
+    ],
+    activePlaylistId: "playlist-a",
+    playMode: "list-loop",
+    volume: 1,
+    playback: {
+      playlistId: "playlist-a",
+      currentTime: 0,
+      resumeRequested: false,
+      updatedAt: 1,
+    },
+  };
 }
 
 test("displays the 0.1.6 package version in the full player", async ({
@@ -178,6 +222,87 @@ test("displays the 0.1.6 package version in the full player", async ({
     exact: true,
   });
   await expect(full.locator(".version")).toHaveText(packageVersion);
+});
+
+test("requires confirmation before deleting a track", async ({ page }) => {
+  await openMinimalPlayerTestPage(page, {
+    initialData: createDeletionTestData(),
+  });
+  await page.getByRole("button", { name: "打开 Bilibili 音乐播放器" }).click();
+
+  const deleteButton = page.getByRole("button", {
+    name: "删除 待删除歌曲",
+  });
+  const cancelledDialogPromise = page.waitForEvent("dialog");
+  const cancelledClickPromise = deleteButton.click();
+  const cancelledDialog = await cancelledDialogPromise;
+  expect(cancelledDialog.type()).toBe("confirm");
+  expect(cancelledDialog.message()).toBe("确定删除歌曲“待删除歌曲”？");
+  await cancelledDialog.dismiss();
+  await cancelledClickPromise;
+  await expect(page.getByText("待删除歌曲", { exact: true })).toBeVisible();
+
+  const acceptedDialogPromise = page.waitForEvent("dialog");
+  const acceptedClickPromise = deleteButton.click();
+  const acceptedDialog = await acceptedDialogPromise;
+  await acceptedDialog.accept();
+  await acceptedClickPromise;
+  await expect(page.getByText("待删除歌曲", { exact: true })).toHaveCount(0);
+});
+
+test("requires confirmation before deleting a playlist", async ({ page }) => {
+  await openMinimalPlayerTestPage(page, {
+    initialData: createDeletionTestData(),
+  });
+  await page.getByRole("button", { name: "打开 Bilibili 音乐播放器" }).click();
+
+  const playlistSelect = page.getByLabel("当前歌单", { exact: true });
+  const deleteButton = page.getByRole("button", { name: "删除当前歌单" });
+  const cancelledDialogPromise = page.waitForEvent("dialog");
+  const cancelledClickPromise = deleteButton.click();
+  const cancelledDialog = await cancelledDialogPromise;
+  expect(cancelledDialog.type()).toBe("confirm");
+  expect(cancelledDialog.message()).toBe("确定删除歌单“歌单 A”？");
+  await cancelledDialog.dismiss();
+  await cancelledClickPromise;
+  await expect(playlistSelect).toHaveValue("playlist-a");
+  await expect(playlistSelect.locator("option")).toHaveCount(2);
+
+  const acceptedDialogPromise = page.waitForEvent("dialog");
+  const acceptedClickPromise = deleteButton.click();
+  const acceptedDialog = await acceptedDialogPromise;
+  await acceptedDialog.accept();
+  await acceptedClickPromise;
+  await expect(playlistSelect).toHaveValue("playlist-b");
+  await expect(playlistSelect.locator("option")).toHaveCount(1);
+});
+
+test("keeps the player mounted when a page is restored from the back-forward cache", async ({
+  page,
+}) => {
+  await openMinimalPlayerTestPage(page);
+  await page.getByRole("button", { name: "打开 Bilibili 音乐播放器" }).click();
+
+  const full = page.getByRole("region", {
+    name: "Bilibili 音乐播放器",
+    exact: true,
+  });
+  await expect(full).toBeVisible();
+
+  await page.evaluate(() => {
+    window.dispatchEvent(
+      new PageTransitionEvent("pagehide", { persisted: true }),
+    );
+    window.dispatchEvent(
+      new PageTransitionEvent("pageshow", { persisted: true }),
+    );
+  });
+
+  await expect(full).toBeVisible();
+  await full.getByRole("button", { name: "播放", exact: true }).click();
+  await expect(
+    full.getByRole("button", { name: "暂停", exact: true }),
+  ).toBeVisible();
 });
 
 test("switches between full, minimal, and launcher modes", async ({ page }) => {
