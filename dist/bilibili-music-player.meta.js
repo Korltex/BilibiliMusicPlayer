@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BilibiliMusicPlayer
 // @namespace    bilibili-music-player
-// @version      0.1.6
+// @version      0.1.7
 // @author       Korltex
 // @description  把喜欢的 Bilibili 视频整理成可播放的音乐歌单
 // @license      MIT

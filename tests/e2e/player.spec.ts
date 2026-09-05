@@ -210,10 +210,10 @@ function createDeletionTestData(): AppData {
   };
 }
 
-test("displays the 0.1.6 package version in the full player", async ({
+test("displays the 0.1.7 package version in the full player", async ({
   page,
 }) => {
-  expect(packageVersion).toBe("0.1.6");
+  expect(packageVersion).toBe("0.1.7");
   await openMinimalPlayerTestPage(page);
   await page.getByRole("button", { name: "打开 Bilibili 音乐播放器" }).click();
 

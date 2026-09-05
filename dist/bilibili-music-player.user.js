@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BilibiliMusicPlayer
 // @namespace    bilibili-music-player
-// @version      0.1.6
+// @version      0.1.7
 // @author       Korltex
 // @description  把喜欢的 Bilibili 视频整理成可播放的音乐歌单
 // @license      MIT
@@ -1126,7 +1126,7 @@
 	].join("\n");
 	var _style = (b, a = document.createElement("style")) => (a.append(b), a);
 	var styles_css_default = _style(styles_default);
-	var version = "0.1.6";
+	var version = "0.1.7";
 	function SvgIcon({ size = 24, strokeWidth = 2, children, ...props }) {
 		return (0, preact_jsx_runtime.jsx)("svg", {
 			xmlns: "http://www.w3.org/2000/svg",
