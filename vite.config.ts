@@ -89,10 +89,9 @@ ${thirdPartyNotices}
     monkey({
       entry: "src/entry.tsx",
       userscript: {
-        name: "Bilibili 音乐播放器",
+        name: "BilibiliMusicPlayer",
         namespace: "bilibili-music-player",
-        description:
-          "把喜欢的 Bilibili 视频整理成可播放的音乐歌单",
+        description: "把喜欢的 Bilibili 视频整理成可播放的音乐歌单",
         author: "Korltex",
         license: "MIT",
         match: ["https://www.bilibili.com/video/*"],

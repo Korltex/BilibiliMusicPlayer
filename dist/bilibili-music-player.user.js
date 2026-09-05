@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Bilibili 音乐播放器
+// @name         BilibiliMusicPlayer
 // @namespace    bilibili-music-player
 // @version      0.1.6
 // @author       Korltex
@@ -3388,7 +3388,7 @@ html[${ROOT_ATTRIBUTE}="active"] video.bpx-player-video {
 			this.store = store;
 			this.locator = new MediaLocator((media, reason) => this.handleMediaChange(media, reason));
 			this.tabs = new TabCoordinator(() => {
-				if (this.media && !this.media.paused) this.media.pause();
+				if (this.isPlaylistContext() && this.media && !this.media.paused) this.media.pause();
 			});
 		}
 		start() {
@@ -3517,7 +3517,7 @@ html[${ROOT_ATTRIBUTE}="active"] video.bpx-player-video {
 			this.syncRuntime();
 		}
 		handlePlay = () => {
-			this.tabs.claim();
+			if (this.isPlaylistContext()) this.tabs.claim();
 			this.state.value = {
 				...this.state.peek(),
 				playing: true,
@@ -3576,8 +3576,11 @@ html[${ROOT_ATTRIBUTE}="active"] video.bpx-player-video {
 		}
 		async tryPlay() {
 			if (!this.media) return;
+			const media = this.media;
+			const wasAlreadyPlaying = !media.paused;
 			try {
-				await this.media.play();
+				await media.play();
+				if (wasAlreadyPlaying && this.media === media && this.isPlaylistContext()) this.tabs.claim();
 				this.state.value = {
 					...this.state.peek(),
 					requiresInteraction: false,

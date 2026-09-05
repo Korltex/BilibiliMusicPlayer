@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Bilibili 音乐播放器
+// @name         BilibiliMusicPlayer
 // @namespace    bilibili-music-player
 // @version      0.1.6
 // @author       Korltex

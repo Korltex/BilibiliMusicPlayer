@@ -90,7 +90,7 @@ GM_removeValueChangeListener
 
 不同 BV 的歌曲通过保存 `resumeRequested` 后导航到对应视频页。新页面定位媒体元素后恢复片段起点并尝试播放。
 
-`BroadcastChannel` 用于播放权声明。当另一个 Bilibili 标签页开始播放时，当前标签页自动暂停，避免两个页面同时出声。
+`BroadcastChannel` 仅用于插件歌单的播放权声明。只有 `playbackContext` 为 `playlist` 的标签页会声明播放权，也只有同处于 `playlist` 上下文的播放会响应声明并暂停；普通 Bilibili 视频使用 `page` 上下文，彼此以及与插件歌单播放之间都互不干扰。
 
 ## 后续扩展点
 

@@ -50,7 +50,7 @@ export class PlayerEngine {
       this.handleMediaChange(media, reason),
     );
     this.tabs = new TabCoordinator(() => {
-      if (this.media && !this.media.paused) {
+      if (this.isPlaylistContext() && this.media && !this.media.paused) {
         this.media.pause();
       }
     });
@@ -256,7 +256,9 @@ export class PlayerEngine {
   }
 
   private readonly handlePlay = (): void => {
-    this.tabs.claim();
+    if (this.isPlaylistContext()) {
+      this.tabs.claim();
+    }
     this.state.value = {
       ...this.state.peek(),
       playing: true,
@@ -362,8 +364,18 @@ export class PlayerEngine {
       return;
     }
 
+    const media = this.media;
+    const wasAlreadyPlaying = !media.paused;
+
     try {
-      await this.media.play();
+      await media.play();
+      if (
+        wasAlreadyPlaying &&
+        this.media === media &&
+        this.isPlaylistContext()
+      ) {
+        this.tabs.claim();
+      }
       this.state.value = {
         ...this.state.peek(),
         requiresInteraction: false,
