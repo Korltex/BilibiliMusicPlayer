@@ -210,6 +210,49 @@ function createDeletionTestData(): AppData {
   };
 }
 
+async function openPlayingDeletionTestPage(page: Page): Promise<void> {
+  await openMinimalPlayerTestPage(page, {
+    initialData: createDeletionTestData(),
+  });
+  await page.getByRole("button", { name: "打开 Bilibili 音乐播放器" }).click();
+  await page.locator(".track-main").click();
+  await expect(
+    page.getByRole("button", { name: "暂停", exact: true }),
+  ).toBeVisible();
+}
+
+async function expectFullVideoContinuesPlaying(page: Page): Promise<void> {
+  const panel = page.getByRole("region", {
+    name: "Bilibili 音乐播放器",
+    exact: true,
+  });
+
+  await expect(
+    page.getByRole("button", { name: "暂停", exact: true }),
+  ).toBeVisible();
+  await expect(panel.locator(".now-playing-copy strong")).toHaveText(
+    "极简播放器测试",
+  );
+  await expect(panel.locator(".playlist-context-chip")).toHaveCount(0);
+  await expect
+    .poll(() =>
+      page
+        .locator("video")
+        .evaluate((media) => (media as HTMLVideoElement).paused),
+    )
+    .toBe(false);
+  expect(new URL(page.url()).searchParams.has("bili_music")).toBe(false);
+}
+
+async function readStoredAppData(page: Page): Promise<AppData> {
+  return page.evaluate(() => {
+    const raw = localStorage.getItem(
+      "__bili_music__:bilibili-music-player:data",
+    );
+    return JSON.parse(raw!) as AppData;
+  });
+}
+
 test("displays the 0.1.7 package version in the full player", async ({
   page,
 }) => {
@@ -275,6 +318,125 @@ test("requires confirmation before deleting a playlist", async ({ page }) => {
   await acceptedClickPromise;
   await expect(playlistSelect).toHaveValue("playlist-b");
   await expect(playlistSelect.locator("option")).toHaveCount(1);
+});
+
+test("continues as full-video playback after selecting another playlist", async ({
+  page,
+}) => {
+  await openPlayingDeletionTestPage(page);
+
+  await page.getByLabel("当前歌单", { exact: true }).selectOption("playlist-b");
+
+  await expectFullVideoContinuesPlaying(page);
+  const stored = await readStoredAppData(page);
+  expect(stored.activePlaylistId).toBe("playlist-b");
+  expect(stored.playback).toMatchObject({
+    playlistId: "playlist-b",
+    currentTime: 0,
+    resumeRequested: false,
+  });
+  expect(stored.playback.trackId).toBeUndefined();
+});
+
+test("continues as full-video playback after creating a playlist", async ({
+  page,
+}) => {
+  await openPlayingDeletionTestPage(page);
+
+  await page.getByRole("button", { name: "新建歌单" }).click();
+  await page.getByLabel("歌单名称").fill("新歌单");
+  await page.getByTitle("保存歌单").click();
+
+  await expectFullVideoContinuesPlaying(page);
+  const stored = await readStoredAppData(page);
+  const activePlaylist = stored.playlists.find(
+    (playlist) => playlist.id === stored.activePlaylistId,
+  );
+  expect(activePlaylist?.name).toBe("新歌单");
+  expect(stored.playback).toMatchObject({
+    playlistId: stored.activePlaylistId,
+    currentTime: 0,
+    resumeRequested: false,
+  });
+  expect(stored.playback.trackId).toBeUndefined();
+});
+
+test("continues as full-video playback after deleting the active playlist", async ({
+  page,
+}) => {
+  await openPlayingDeletionTestPage(page);
+  page.once("dialog", (dialog) => dialog.accept());
+
+  await page.getByRole("button", { name: "删除当前歌单" }).click();
+
+  await expectFullVideoContinuesPlaying(page);
+  const stored = await readStoredAppData(page);
+  expect(stored.activePlaylistId).toBe("playlist-b");
+  expect(stored.playlists.map((playlist) => playlist.id)).toEqual([
+    "playlist-b",
+  ]);
+  expect(stored.playback).toMatchObject({
+    playlistId: "playlist-b",
+    currentTime: 0,
+    resumeRequested: false,
+  });
+  expect(stored.playback.trackId).toBeUndefined();
+});
+
+test("continues as full-video playback after deleting the current track", async ({
+  page,
+}) => {
+  await openPlayingDeletionTestPage(page);
+  page.once("dialog", (dialog) => dialog.accept());
+
+  await page.getByRole("button", { name: "删除 待删除歌曲" }).click();
+
+  await expectFullVideoContinuesPlaying(page);
+  const stored = await readStoredAppData(page);
+  expect(stored.playlists[0].tracks).toHaveLength(0);
+  expect(stored.playback.trackId).toBeUndefined();
+  expect(stored.playback.currentTime).toBe(0);
+  expect(stored.playback.resumeRequested).toBe(false);
+});
+
+test("keeps playlist playback when deleting a non-current track", async ({
+  page,
+}) => {
+  const data = createDeletionTestData();
+  data.playlists[0].tracks.push({
+    id: "track-b",
+    bvid: "BV1MinimalPlayer",
+    title: "非当前歌曲",
+    startTime: 60,
+    duration: 240,
+    addedAt: 2,
+    source: "manual",
+  });
+  await openMinimalPlayerTestPage(page, { initialData: data });
+  await page.getByRole("button", { name: "打开 Bilibili 音乐播放器" }).click();
+  await page.locator(".track-main").first().click();
+  await expect(
+    page.getByRole("button", { name: "暂停", exact: true }),
+  ).toBeVisible();
+  page.once("dialog", (dialog) => dialog.accept());
+
+  await page.getByRole("button", { name: "删除 非当前歌曲" }).click();
+
+  const panel = page.getByRole("region", {
+    name: "Bilibili 音乐播放器",
+    exact: true,
+  });
+  await expect(panel.locator(".now-playing-copy strong")).toHaveText(
+    "待删除歌曲",
+  );
+  await expect(panel.locator(".playlist-context-chip")).toBeVisible();
+  await expect(panel.locator(".track-row.active")).toHaveCount(1);
+  expect(new URL(page.url()).searchParams.get("bili_music")).toBe("1");
+  const stored = await readStoredAppData(page);
+  expect(stored.playback.trackId).toBe("track-a");
+  expect(stored.playlists[0].tracks.map((track) => track.id)).toEqual([
+    "track-a",
+  ]);
 });
 
 test("keeps the player mounted when a page is restored from the back-forward cache", async ({

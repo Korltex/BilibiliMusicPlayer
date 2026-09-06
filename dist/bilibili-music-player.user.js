@@ -3382,6 +3382,8 @@ html[${ROOT_ATTRIBUTE}="active"] video.bpx-player-video {
 		mediaEvents;
 		positionSavedAt = 0;
 		segmentAdvancing = false;
+		previousData;
+		stopStoreObservation;
 		locator;
 		tabs;
 		constructor(store) {
@@ -3394,12 +3396,26 @@ html[${ROOT_ATTRIBUTE}="active"] video.bpx-player-video {
 		start() {
 			this.store.start();
 			this.setPlaybackContext(this.shouldUsePlaylistContext() ? "playlist" : "page");
+			this.previousData = this.store.data.peek();
+			this.stopStoreObservation = (0, _preact_signals.effect)(() => {
+				const data = this.store.data.value;
+				const previousData = this.previousData;
+				this.previousData = data;
+				if (!previousData || !this.isPlaylistContext()) return;
+				const activePlaylistChanged = previousData.activePlaylistId !== data.activePlaylistId;
+				const previousTrackId = previousData.playback.trackId;
+				const currentTrackRemoved = Boolean(previousTrackId && !data.playlists.some((playlist) => playlist.tracks.some((track) => track.id === previousTrackId)));
+				if (activePlaylistChanged || currentTrackRemoved) this.exitPlaylistPlayback();
+			});
 			this.locator.start();
 			this.installMediaSessionHandlers();
 			window.addEventListener("pagehide", this.savePosition);
 		}
 		stop() {
 			this.savePosition();
+			this.stopStoreObservation?.();
+			this.stopStoreObservation = void 0;
+			this.previousData = void 0;
 			this.mediaEvents?.abort();
 			this.locator.stop();
 			this.tabs.close();

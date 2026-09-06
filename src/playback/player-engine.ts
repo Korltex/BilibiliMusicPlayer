@@ -1,4 +1,4 @@
-import { signal } from "@preact/signals";
+import { effect, signal } from "@preact/signals";
 import type { AppStore } from "../app/store";
 import {
   getBvid,
@@ -8,6 +8,7 @@ import {
 import { MediaLocator, type MediaChangeReason } from "../bili/media-locator";
 import { clamp } from "../core/time";
 import type {
+  AppData,
   NowPlayingState,
   PlayMode,
   PlaybackContext,
@@ -42,6 +43,8 @@ export class PlayerEngine {
   private mediaEvents?: AbortController;
   private positionSavedAt = 0;
   private segmentAdvancing = false;
+  private previousData?: AppData;
+  private stopStoreObservation?: () => void;
   private readonly locator: MediaLocator;
   private readonly tabs: TabCoordinator;
 
@@ -61,6 +64,30 @@ export class PlayerEngine {
     this.setPlaybackContext(
       this.shouldUsePlaylistContext() ? "playlist" : "page",
     );
+    this.previousData = this.store.data.peek();
+    this.stopStoreObservation = effect(() => {
+      const data = this.store.data.value;
+      const previousData = this.previousData;
+      this.previousData = data;
+
+      if (!previousData || !this.isPlaylistContext()) {
+        return;
+      }
+
+      const activePlaylistChanged =
+        previousData.activePlaylistId !== data.activePlaylistId;
+      const previousTrackId = previousData.playback.trackId;
+      const currentTrackRemoved = Boolean(
+        previousTrackId &&
+        !data.playlists.some((playlist) =>
+          playlist.tracks.some((track) => track.id === previousTrackId),
+        ),
+      );
+
+      if (activePlaylistChanged || currentTrackRemoved) {
+        this.exitPlaylistPlayback();
+      }
+    });
     this.locator.start();
     this.installMediaSessionHandlers();
     window.addEventListener("pagehide", this.savePosition);
@@ -68,6 +95,9 @@ export class PlayerEngine {
 
   stop(): void {
     this.savePosition();
+    this.stopStoreObservation?.();
+    this.stopStoreObservation = undefined;
+    this.previousData = undefined;
     this.mediaEvents?.abort();
     this.locator.stop();
     this.tabs.close();
