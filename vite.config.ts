@@ -89,9 +89,20 @@ ${thirdPartyNotices}
     monkey({
       entry: "src/entry.tsx",
       userscript: {
-        name: "BilibiliMusicPlayer",
+        name: {
+          "": "Bilibili Music Player",
+          en: "Bilibili Music Player",
+          "zh-CN": "Bilibili 音乐播放器",
+          "zh-TW": "Bilibili 音樂播放器",
+        },
+
+        description: {
+          "": "A music playlist player for Bilibili videos.",
+          en: "A music playlist player for Bilibili videos.",
+          "zh-CN": "将喜欢的 Bilibili 视频整理成可播放的音乐歌单。",
+        },
+
         namespace: "bilibili-music-player",
-        description: "把喜欢的 Bilibili 视频整理成可播放的音乐歌单",
         author: "Korltex",
         license: "MIT",
         match: ["https://www.bilibili.com/video/*"],
