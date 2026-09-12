@@ -8,15 +8,14 @@ import {
 import { MediaLocator, type MediaChangeReason } from "../bili/media-locator";
 import { clamp } from "../core/time";
 import type {
-  AppData,
   NowPlayingState,
   PlayMode,
   PlaybackContext,
+  PlaybackSession,
   RuntimePlayerState,
   Track,
 } from "../core/types";
 import { selectAdjacentTrack } from "./queue";
-import { TabCoordinator } from "./tab-coordinator";
 
 const INITIAL_NOW_PLAYING_STATE: NowPlayingState = {
   title: "未连接到 Bilibili 播放器",
@@ -43,20 +42,14 @@ export class PlayerEngine {
   private mediaEvents?: AbortController;
   private positionSavedAt = 0;
   private segmentAdvancing = false;
-  private previousData?: AppData;
+  private previousSession?: PlaybackSession;
   private stopStoreObservation?: () => void;
   private readonly locator: MediaLocator;
-  private readonly tabs: TabCoordinator;
 
   constructor(private readonly store: AppStore) {
     this.locator = new MediaLocator((media, reason) =>
       this.handleMediaChange(media, reason),
     );
-    this.tabs = new TabCoordinator(() => {
-      if (this.isPlaylistContext() && this.media && !this.media.paused) {
-        this.media.pause();
-      }
-    });
   }
 
   start(): void {
@@ -64,19 +57,20 @@ export class PlayerEngine {
     this.setPlaybackContext(
       this.shouldUsePlaylistContext() ? "playlist" : "page",
     );
-    this.previousData = this.store.data.peek();
+    this.previousSession = this.store.session.peek();
     this.stopStoreObservation = effect(() => {
       const data = this.store.data.value;
-      const previousData = this.previousData;
-      this.previousData = data;
+      const session = this.store.session.value;
+      const previousSession = this.previousSession;
+      this.previousSession = session;
 
-      if (!previousData || !this.isPlaylistContext()) {
+      if (!previousSession || !this.isPlaylistContext()) {
         return;
       }
 
       const activePlaylistChanged =
-        previousData.activePlaylistId !== data.activePlaylistId;
-      const previousTrackId = previousData.playback.trackId;
+        previousSession.activePlaylistId !== session.activePlaylistId;
+      const previousTrackId = previousSession.playback.trackId;
       const currentTrackRemoved = Boolean(
         previousTrackId &&
         !data.playlists.some((playlist) =>
@@ -97,10 +91,9 @@ export class PlayerEngine {
     this.savePosition();
     this.stopStoreObservation?.();
     this.stopStoreObservation = undefined;
-    this.previousData = undefined;
+    this.previousSession = undefined;
     this.mediaEvents?.abort();
     this.locator.stop();
-    this.tabs.close();
     this.store.stop();
     window.removeEventListener("pagehide", this.savePosition);
   }
@@ -120,11 +113,11 @@ export class PlayerEngine {
       return;
     }
 
-    const data = this.store.data.peek();
-    const track = this.store.findTrack(data.playback.trackId);
+    const session = this.store.session.peek();
+    const track = this.store.findTrack(session.playback.trackId);
     if (
       this.isPlaylistContext() &&
-      data.playback.resumeRequested &&
+      session.playback.resumeRequested &&
       track &&
       !this.isCurrentPage(track)
     ) {
@@ -164,7 +157,7 @@ export class PlayerEngine {
   }
 
   exitPlaylistPlayback(): void {
-    if (this.store.data.peek().playback.resumeRequested) {
+    if (this.store.session.peek().playback.resumeRequested) {
       this.store.consumeResumeRequest();
     }
     this.exitPlaylistContext();
@@ -186,13 +179,14 @@ export class PlayerEngine {
 
   next(automatic = false): void {
     const data = this.store.data.peek();
+    const session = this.store.session.peek();
     const playlist = data.playlists.find(
-      (item) => item.id === data.playback.playlistId,
+      (item) => item.id === session.playback.playlistId,
     );
     const track = selectAdjacentTrack(
       playlist,
-      data.playback.trackId,
-      data.playMode,
+      session.playback.trackId,
+      session.playMode,
       { direction: 1, automatic },
     );
 
@@ -209,13 +203,14 @@ export class PlayerEngine {
 
   previous(): void {
     const data = this.store.data.peek();
+    const session = this.store.session.peek();
     const playlist = data.playlists.find(
-      (item) => item.id === data.playback.playlistId,
+      (item) => item.id === session.playback.playlistId,
     );
     const track = selectAdjacentTrack(
       playlist,
-      data.playback.trackId,
-      data.playMode,
+      session.playback.trackId,
+      session.playMode,
       { direction: -1 },
     );
 
@@ -243,7 +238,7 @@ export class PlayerEngine {
     if (
       media &&
       this.isPlaylistContext() &&
-      this.store.data.peek().playback.resumeRequested
+      this.store.session.peek().playback.resumeRequested
     ) {
       void this.resumeRequestedTrack();
     }
@@ -286,9 +281,6 @@ export class PlayerEngine {
   }
 
   private readonly handlePlay = (): void => {
-    if (this.isPlaylistContext()) {
-      this.tabs.claim();
-    }
     this.state.value = {
       ...this.state.peek(),
       playing: true,
@@ -326,7 +318,7 @@ export class PlayerEngine {
     this.syncRuntime();
     if (
       this.isPlaylistContext() &&
-      this.store.data.peek().playback.resumeRequested
+      this.store.session.peek().playback.resumeRequested
     ) {
       void this.resumeRequestedTrack();
     }
@@ -358,8 +350,8 @@ export class PlayerEngine {
 
   private async resumeRequestedTrack(): Promise<void> {
     const media = this.media;
-    const data = this.store.data.peek();
-    const track = this.store.findTrack(data.playback.trackId);
+    const session = this.store.session.peek();
+    const track = this.store.findTrack(session.playback.trackId);
     if (
       !this.isPlaylistContext() ||
       !media ||
@@ -374,9 +366,10 @@ export class PlayerEngine {
     }
 
     const resumeTime =
-      data.playback.currentTime >= track.startTime &&
-      (track.endTime === undefined || data.playback.currentTime < track.endTime)
-        ? data.playback.currentTime
+      session.playback.currentTime >= track.startTime &&
+      (track.endTime === undefined ||
+        session.playback.currentTime < track.endTime)
+        ? session.playback.currentTime
         : track.startTime;
 
     media.currentTime = clamp(
@@ -394,18 +387,8 @@ export class PlayerEngine {
       return;
     }
 
-    const media = this.media;
-    const wasAlreadyPlaying = !media.paused;
-
     try {
-      await media.play();
-      if (
-        wasAlreadyPlaying &&
-        this.media === media &&
-        this.isPlaylistContext()
-      ) {
-        this.tabs.claim();
-      }
+      await this.media.play();
       this.state.value = {
         ...this.state.peek(),
         requiresInteraction: false,
@@ -443,7 +426,9 @@ export class PlayerEngine {
       return undefined;
     }
 
-    const track = this.store.findTrack(this.store.data.peek().playback.trackId);
+    const track = this.store.findTrack(
+      this.store.session.peek().playback.trackId,
+    );
     return track && this.isCurrentPage(track) ? track : undefined;
   }
 
@@ -456,7 +441,9 @@ export class PlayerEngine {
       return false;
     }
 
-    const track = this.store.findTrack(this.store.data.peek().playback.trackId);
+    const track = this.store.findTrack(
+      this.store.session.peek().playback.trackId,
+    );
     return Boolean(track && this.isCurrentPage(track));
   }
 

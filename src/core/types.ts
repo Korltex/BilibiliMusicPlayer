@@ -32,6 +32,12 @@ export interface PlaybackSnapshot {
   updatedAt: number;
 }
 
+export interface PlaybackSession {
+  activePlaylistId: string;
+  playMode: PlayMode;
+  playback: PlaybackSnapshot;
+}
+
 export interface AppData {
   version: 1;
   playlists: Playlist[];

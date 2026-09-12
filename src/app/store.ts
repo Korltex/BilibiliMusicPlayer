@@ -1,32 +1,50 @@
 import { signal } from "@preact/signals";
 import { createId } from "../core/id";
-import type { AppData, PlayMode, Playlist, Track } from "../core/types";
+import type {
+  AppData,
+  PlaybackSession,
+  PlayMode,
+  Playlist,
+  Track,
+} from "../core/types";
+import {
+  createPlaybackSession,
+  PlaybackSessionRepository,
+} from "../storage/playback-session";
 import { AppRepository } from "../storage/repository";
 import { createDefaultData } from "../storage/schema";
 
 export class AppStore {
   readonly data = signal<AppData>(createDefaultData());
+  readonly session = signal<PlaybackSession>(
+    createPlaybackSession(this.data.peek()),
+  );
 
   private readonly repository = new AppRepository();
+  private readonly sessionRepository = new PlaybackSessionRepository();
   private unsubscribe?: () => void;
 
   start(): void {
-    this.data.value = this.repository.load();
+    const data = this.repository.load();
+    this.data.value = data;
+    this.session.value = this.sessionRepository.load(data);
     this.unsubscribe = this.repository.subscribe((data) => {
       this.data.value = data;
+      this.reconcileSession(data);
     });
   }
 
   stop(): void {
     this.unsubscribe?.();
+    this.unsubscribe = undefined;
   }
 
   get activePlaylist(): Playlist {
     const data = this.data.peek();
+    const { activePlaylistId } = this.session.peek();
     return (
-      data.playlists.find(
-        (playlist) => playlist.id === data.activePlaylistId,
-      ) ?? data.playlists[0]
+      data.playlists.find((playlist) => playlist.id === activePlaylistId) ??
+      data.playlists[0]
     );
   }
 
@@ -56,19 +74,11 @@ export class AppStore {
       updatedAt: now,
     };
 
-    this.commit((data) => ({
+    this.commitLibrary((data) => ({
       ...data,
       playlists: [...data.playlists, playlist],
-      activePlaylistId: playlist.id,
-      playback: {
-        ...data.playback,
-        playlistId: playlist.id,
-        trackId: undefined,
-        currentTime: 0,
-        resumeRequested: false,
-        updatedAt: now,
-      },
     }));
+    this.selectPlaylist(playlist.id);
   }
 
   removePlaylist(playlistId: string): void {
@@ -77,30 +87,12 @@ export class AppStore {
       return;
     }
 
-    this.commit((data) => {
-      const playlists = data.playlists.filter(
+    this.commitLibrary((data) => ({
+      ...data,
+      playlists: data.playlists.filter(
         (playlist) => playlist.id !== playlistId,
-      );
-      const activePlaylistId =
-        data.activePlaylistId === playlistId
-          ? playlists[0].id
-          : data.activePlaylistId;
-
-      return {
-        ...data,
-        playlists,
-        activePlaylistId,
-        playback:
-          data.playback.playlistId === playlistId
-            ? {
-                playlistId: activePlaylistId,
-                currentTime: 0,
-                resumeRequested: false,
-                updatedAt: Date.now(),
-              }
-            : data.playback,
-      };
-    });
+      ),
+    }));
   }
 
   selectPlaylist(playlistId: string): void {
@@ -108,8 +100,8 @@ export class AppStore {
       return;
     }
 
-    this.commit((data) => ({
-      ...data,
+    this.commitSession((session) => ({
+      ...session,
       activePlaylistId: playlistId,
       playback: {
         playlistId,
@@ -121,10 +113,11 @@ export class AppStore {
   }
 
   addTrack(track: Track): void {
-    this.commit((data) => ({
+    const { activePlaylistId } = this.session.peek();
+    this.commitLibrary((data) => ({
       ...data,
       playlists: data.playlists.map((playlist) =>
-        playlist.id === data.activePlaylistId
+        playlist.id === activePlaylistId
           ? {
               ...playlist,
               tracks: [...playlist.tracks, track],
@@ -136,10 +129,11 @@ export class AppStore {
   }
 
   updateTrack(track: Track): void {
-    this.commit((data) => ({
+    const { activePlaylistId } = this.session.peek();
+    this.commitLibrary((data) => ({
       ...data,
       playlists: data.playlists.map((playlist) =>
-        playlist.id === data.activePlaylistId
+        playlist.id === activePlaylistId
           ? {
               ...playlist,
               tracks: playlist.tracks.map((item) =>
@@ -153,10 +147,11 @@ export class AppStore {
   }
 
   removeTrack(trackId: string): void {
-    this.commit((data) => ({
+    const { activePlaylistId } = this.session.peek();
+    this.commitLibrary((data) => ({
       ...data,
       playlists: data.playlists.map((playlist) =>
-        playlist.id === data.activePlaylistId
+        playlist.id === activePlaylistId
           ? {
               ...playlist,
               tracks: playlist.tracks.filter((track) => track.id !== trackId),
@@ -164,35 +159,26 @@ export class AppStore {
             }
           : playlist,
       ),
-      playback:
-        data.playback.trackId === trackId
-          ? {
-              ...data.playback,
-              trackId: undefined,
-              currentTime: 0,
-              resumeRequested: false,
-              updatedAt: Date.now(),
-            }
-          : data.playback,
     }));
   }
 
   setPlayMode(playMode: PlayMode): void {
-    this.commit((data) => ({ ...data, playMode }));
+    this.commitSession((session) => ({ ...session, playMode }));
   }
 
   setVolume(volume: number): void {
-    this.commit((data) => ({
+    this.commitLibrary((data) => ({
       ...data,
       volume: Math.min(1, Math.max(0, volume)),
     }));
   }
 
   requestTrack(track: Track, currentTime = track.startTime): void {
-    this.commit((data) => ({
-      ...data,
+    const { activePlaylistId } = this.session.peek();
+    this.commitSession((session) => ({
+      ...session,
       playback: {
-        playlistId: data.activePlaylistId,
+        playlistId: activePlaylistId,
         trackId: track.id,
         currentTime,
         resumeRequested: true,
@@ -202,10 +188,10 @@ export class AppStore {
   }
 
   consumeResumeRequest(): void {
-    this.commit((data) => ({
-      ...data,
+    this.commitSession((session) => ({
+      ...session,
       playback: {
-        ...data.playback,
+        ...session.playback,
         resumeRequested: false,
         updatedAt: Date.now(),
       },
@@ -213,25 +199,74 @@ export class AppStore {
   }
 
   savePosition(currentTime: number): void {
-    const playback = this.data.peek().playback;
+    const playback = this.session.peek().playback;
     if (!playback.trackId) {
       return;
     }
 
-    this.commit((data) => ({
-      ...data,
+    this.commitSession((session) => ({
+      ...session,
       playback: {
-        ...data.playback,
+        ...session.playback,
         currentTime,
         updatedAt: Date.now(),
       },
     }));
   }
 
-  private commit(updater: (data: AppData) => AppData): void {
+  private commitLibrary(updater: (data: AppData) => AppData): void {
     const next = updater(this.data.peek());
     this.data.value = next;
+    this.reconcileSession(next);
     this.repository.save(next);
+  }
+
+  private commitSession(
+    updater: (session: PlaybackSession) => PlaybackSession,
+  ): void {
+    const next = updater(this.session.peek());
+    this.session.value = next;
+    this.sessionRepository.save(next);
+  }
+
+  private reconcileSession(data: AppData): void {
+    const session = this.session.peek();
+    const activePlaylist =
+      data.playlists.find(
+        (playlist) => playlist.id === session.activePlaylistId,
+      ) ?? data.playlists[0];
+    const trackStillExists = session.playback.trackId
+      ? activePlaylist.tracks.some(
+          (track) => track.id === session.playback.trackId,
+        )
+      : true;
+
+    const activePlaylistChanged =
+      activePlaylist.id !== session.activePlaylistId;
+    const playbackNeedsReset = activePlaylistChanged || !trackStillExists;
+    if (
+      !playbackNeedsReset &&
+      session.playback.playlistId === activePlaylist.id
+    ) {
+      return;
+    }
+
+    const now = Date.now();
+    this.commitSession((current) => ({
+      ...current,
+      activePlaylistId: activePlaylist.id,
+      playback: playbackNeedsReset
+        ? {
+            playlistId: activePlaylist.id,
+            currentTime: 0,
+            resumeRequested: false,
+            updatedAt: now,
+          }
+        : {
+            ...current.playback,
+            playlistId: activePlaylist.id,
+          },
+    }));
   }
 }
 

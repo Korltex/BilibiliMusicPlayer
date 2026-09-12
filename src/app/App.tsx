@@ -55,11 +55,13 @@ export function App({ store, engine, audioOnly }: AppProps) {
   const panelDrag = useDraggablePosition("panel");
 
   const data = store.data.value;
+  const session = store.session.value;
   const runtime = engine.state.value;
   const audioOnlyState = audioOnly.state.value;
   const activePlaylist =
-    data.playlists.find((playlist) => playlist.id === data.activePlaylistId) ??
-    data.playlists[0];
+    data.playlists.find(
+      (playlist) => playlist.id === session.activePlaylistId,
+    ) ?? data.playlists[0];
   const nowPlaying = runtime.nowPlaying;
   const progressMinimum = nowPlaying.startTime;
   const progressMaximum =
@@ -85,7 +87,7 @@ export function App({ store, engine, audioOnly }: AppProps) {
   };
 
   const cyclePlayMode = () => {
-    const currentIndex = PLAY_MODES.indexOf(data.playMode);
+    const currentIndex = PLAY_MODES.indexOf(session.playMode);
     engine.setPlayMode(PLAY_MODES[(currentIndex + 1) % PLAY_MODES.length]);
   };
 
@@ -127,7 +129,7 @@ export function App({ store, engine, audioOnly }: AppProps) {
   if (displayMode === "minimal") {
     return (
       <MinimalPlayer
-        playMode={data.playMode}
+        playMode={session.playMode}
         runtime={runtime}
         audioOnlyState={audioOnlyState}
         drag={panelDrag}
@@ -263,7 +265,7 @@ export function App({ store, engine, audioOnly }: AppProps) {
 
       <PlayerControls
         variant="full"
-        playMode={data.playMode}
+        playMode={session.playMode}
         runtime={runtime}
         audioOnlyState={audioOnlyState}
         onToggleAudioOnly={() =>

@@ -6,6 +6,7 @@ const API_URL = "https://www.bilibili.com/x/player/playurl";
 const BINARY_URL = "https://www.bilibili.com/test-binary";
 const STORAGE_PREFIX = "__bili_music_e2e__:";
 const AUDIO_ONLY_KEY = "bilibili-music-player:audio-only";
+const SESSION_KEY = "bilibili-music-player:playback-session";
 
 test("rewrites initial __playinfo__ and hides only the video picture", async ({
   page,
@@ -232,6 +233,15 @@ test("falls back to visible video in full and minimal players for durl-only play
     {
       storageKey: `${STORAGE_PREFIX}bilibili-music-player:data`,
       value: playlistDataForAudioPage(),
+    },
+  );
+  await page.addInitScript(
+    ({ storageKey, value }) => {
+      sessionStorage.setItem(storageKey, JSON.stringify(value));
+    },
+    {
+      storageKey: SESSION_KEY,
+      value: playbackSessionForAudioPage(),
     },
   );
   await installAtDocumentStart(page, true);
@@ -525,6 +535,21 @@ function playlistDataForAudioPage() {
     playback: {
       playlistId,
       trackId,
+      currentTime: 0,
+      resumeRequested: false,
+      updatedAt: now,
+    },
+  };
+}
+
+function playbackSessionForAudioPage() {
+  const now = Date.now();
+  return {
+    activePlaylistId: "playlist-audio",
+    playMode: "sequence",
+    playback: {
+      playlistId: "playlist-audio",
+      trackId: "track-audio",
       currentTime: 0,
       resumeRequested: false,
       updatedAt: now,

@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
-import type { AppData } from "../../src/core/types";
+import type { AppData, PlaybackSession } from "../../src/core/types";
 import { injectBuiltUserscript } from "../helpers/userscript";
 
 const packageVersion = (
@@ -253,6 +253,15 @@ async function readStoredAppData(page: Page): Promise<AppData> {
   });
 }
 
+async function readPlaybackSession(page: Page): Promise<PlaybackSession> {
+  return page.evaluate(() => {
+    const raw = sessionStorage.getItem(
+      "bilibili-music-player:playback-session",
+    );
+    return JSON.parse(raw!) as PlaybackSession;
+  });
+}
+
 test("displays the 0.1.7 package version in the full player", async ({
   page,
 }) => {
@@ -328,14 +337,14 @@ test("continues as full-video playback after selecting another playlist", async 
   await page.getByLabel("当前歌单", { exact: true }).selectOption("playlist-b");
 
   await expectFullVideoContinuesPlaying(page);
-  const stored = await readStoredAppData(page);
-  expect(stored.activePlaylistId).toBe("playlist-b");
-  expect(stored.playback).toMatchObject({
+  const session = await readPlaybackSession(page);
+  expect(session.activePlaylistId).toBe("playlist-b");
+  expect(session.playback).toMatchObject({
     playlistId: "playlist-b",
     currentTime: 0,
     resumeRequested: false,
   });
-  expect(stored.playback.trackId).toBeUndefined();
+  expect(session.playback.trackId).toBeUndefined();
 });
 
 test("continues as full-video playback after creating a playlist", async ({
@@ -350,15 +359,17 @@ test("continues as full-video playback after creating a playlist", async ({
   await expectFullVideoContinuesPlaying(page);
   const stored = await readStoredAppData(page);
   const activePlaylist = stored.playlists.find(
-    (playlist) => playlist.id === stored.activePlaylistId,
+    (playlist) => playlist.name === "新歌单",
   );
   expect(activePlaylist?.name).toBe("新歌单");
-  expect(stored.playback).toMatchObject({
-    playlistId: stored.activePlaylistId,
+  const session = await readPlaybackSession(page);
+  expect(session.activePlaylistId).toBe(activePlaylist?.id);
+  expect(session.playback).toMatchObject({
+    playlistId: activePlaylist?.id,
     currentTime: 0,
     resumeRequested: false,
   });
-  expect(stored.playback.trackId).toBeUndefined();
+  expect(session.playback.trackId).toBeUndefined();
 });
 
 test("continues as full-video playback after deleting the active playlist", async ({
@@ -371,16 +382,17 @@ test("continues as full-video playback after deleting the active playlist", asyn
 
   await expectFullVideoContinuesPlaying(page);
   const stored = await readStoredAppData(page);
-  expect(stored.activePlaylistId).toBe("playlist-b");
   expect(stored.playlists.map((playlist) => playlist.id)).toEqual([
     "playlist-b",
   ]);
-  expect(stored.playback).toMatchObject({
+  const session = await readPlaybackSession(page);
+  expect(session.activePlaylistId).toBe("playlist-b");
+  expect(session.playback).toMatchObject({
     playlistId: "playlist-b",
     currentTime: 0,
     resumeRequested: false,
   });
-  expect(stored.playback.trackId).toBeUndefined();
+  expect(session.playback.trackId).toBeUndefined();
 });
 
 test("continues as full-video playback after deleting the current track", async ({
@@ -394,9 +406,10 @@ test("continues as full-video playback after deleting the current track", async 
   await expectFullVideoContinuesPlaying(page);
   const stored = await readStoredAppData(page);
   expect(stored.playlists[0].tracks).toHaveLength(0);
-  expect(stored.playback.trackId).toBeUndefined();
-  expect(stored.playback.currentTime).toBe(0);
-  expect(stored.playback.resumeRequested).toBe(false);
+  const session = await readPlaybackSession(page);
+  expect(session.playback.trackId).toBeUndefined();
+  expect(session.playback.currentTime).toBe(0);
+  expect(session.playback.resumeRequested).toBe(false);
 });
 
 test("keeps playlist playback when deleting a non-current track", async ({
@@ -433,7 +446,8 @@ test("keeps playlist playback when deleting a non-current track", async ({
   await expect(panel.locator(".track-row.active")).toHaveCount(1);
   expect(new URL(page.url()).searchParams.get("bili_music")).toBe("1");
   const stored = await readStoredAppData(page);
-  expect(stored.playback.trackId).toBe("track-a");
+  const session = await readPlaybackSession(page);
+  expect(session.playback.trackId).toBe("track-a");
   expect(stored.playlists[0].tracks.map((track) => track.id)).toEqual([
     "track-a",
   ]);

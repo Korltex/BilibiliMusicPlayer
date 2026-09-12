@@ -1982,7 +1982,7 @@
 			]
 		});
 	}
-	var PLAY_MODES = [
+	var PLAY_MODES$1 = [
 		"sequence",
 		"list-loop",
 		"single-loop",
@@ -1997,9 +1997,10 @@
 		const launcherDrag = useDraggablePosition("launcher");
 		const panelDrag = useDraggablePosition("panel");
 		const data = store.data.value;
+		const session = store.session.value;
 		const runtime = engine.state.value;
 		const audioOnlyState = audioOnly.state.value;
-		const activePlaylist = data.playlists.find((playlist) => playlist.id === data.activePlaylistId) ?? data.playlists[0];
+		const activePlaylist = data.playlists.find((playlist) => playlist.id === session.activePlaylistId) ?? data.playlists[0];
 		const nowPlaying = runtime.nowPlaying;
 		const progressMinimum = nowPlaying.startTime;
 		const progressMaximum = nowPlaying.endTime ?? (runtime.duration > 0 ? runtime.duration : nowPlaying.storedDuration);
@@ -2014,8 +2015,8 @@
 			setCreatingPlaylist(false);
 		};
 		const cyclePlayMode = () => {
-			const currentIndex = PLAY_MODES.indexOf(data.playMode);
-			engine.setPlayMode(PLAY_MODES[(currentIndex + 1) % PLAY_MODES.length]);
+			const currentIndex = PLAY_MODES$1.indexOf(session.playMode);
+			engine.setPlayMode(PLAY_MODES$1[(currentIndex + 1) % PLAY_MODES$1.length]);
 		};
 		const showPanel = (mode) => {
 			if (displayMode !== "launcher" && displayMode !== mode) panelDrag.saveCurrentPosition();
@@ -2046,7 +2047,7 @@
 			})
 		});
 		if (displayMode === "minimal") return (0, preact_jsx_runtime.jsx)(MinimalPlayer, {
-			playMode: data.playMode,
+			playMode: session.playMode,
 			runtime,
 			audioOnlyState,
 			drag: panelDrag,
@@ -2182,7 +2183,7 @@
 				}),
 				(0, preact_jsx_runtime.jsx)(PlayerControls, {
 					variant: "full",
-					playMode: data.playMode,
+					playMode: session.playMode,
 					runtime,
 					audioOnlyState,
 					onToggleAudioOnly: () => audioOnly.toggle(engine.currentMedia?.currentTime ?? runtime.currentTime),
@@ -2638,6 +2639,84 @@
 			]
 		});
 	}
+	var PLAYBACK_SESSION_KEY = "bilibili-music-player:playback-session";
+	var PLAY_MODES = [
+		"sequence",
+		"list-loop",
+		"single-loop",
+		"shuffle"
+	];
+	function createPlaybackSession(data, now = Date.now()) {
+		const activePlaylistId = resolvePlaylistId(data, data.activePlaylistId);
+		return {
+			activePlaylistId,
+			playMode: isPlayMode(data.playMode) ? data.playMode : "list-loop",
+			playback: createPlaybackSnapshot(activePlaylistId, now)
+		};
+	}
+	function migratePlaybackSession(raw, data, now = Date.now()) {
+		if (!raw || typeof raw !== "object") return createPlaybackSession(data, now);
+		const candidate = raw;
+		const activePlaylistId = resolvePlaylistId(data, candidate.activePlaylistId);
+		const playlist = data.playlists.find((item) => item.id === activePlaylistId);
+		const playback = migratePlaybackSnapshot(candidate.playback, playlist, now);
+		return {
+			activePlaylistId,
+			playMode: isPlayMode(candidate.playMode) ? candidate.playMode : "list-loop",
+			playback
+		};
+	}
+	var PlaybackSessionRepository = class {
+		memory;
+		load(data) {
+			try {
+				const raw = sessionStorage.getItem(PLAYBACK_SESSION_KEY);
+				const session = migratePlaybackSession(raw === null ? void 0 : JSON.parse(raw), data);
+				this.memory = session;
+				return session;
+			} catch {
+				const session = this.memory ?? createPlaybackSession(data);
+				this.memory = session;
+				return session;
+			}
+		}
+		save(session) {
+			this.memory = session;
+			try {
+				sessionStorage.setItem(PLAYBACK_SESSION_KEY, JSON.stringify(session));
+			} catch {}
+		}
+	};
+	function resolvePlaylistId(data, candidate) {
+		if (typeof candidate === "string" && data.playlists.some((playlist) => playlist.id === candidate)) return candidate;
+		if (data.playlists.some((playlist) => playlist.id === data.activePlaylistId)) return data.activePlaylistId;
+		return data.playlists[0].id;
+	}
+	function migratePlaybackSnapshot(raw, playlist, now) {
+		const candidate = raw;
+		const currentTime = candidate?.currentTime;
+		const updatedAt = candidate?.updatedAt;
+		const trackId = typeof candidate?.trackId === "string" && playlist.tracks.some((track) => track.id === candidate.trackId) ? candidate.trackId : void 0;
+		if (!trackId) return createPlaybackSnapshot(playlist.id, now);
+		return {
+			playlistId: playlist.id,
+			trackId,
+			currentTime: typeof currentTime === "number" && Number.isFinite(currentTime) ? Math.max(0, currentTime) : 0,
+			resumeRequested: candidate?.resumeRequested === true,
+			updatedAt: typeof updatedAt === "number" ? updatedAt : now
+		};
+	}
+	function createPlaybackSnapshot(playlistId, now) {
+		return {
+			playlistId,
+			currentTime: 0,
+			resumeRequested: false,
+			updatedAt: now
+		};
+	}
+	function isPlayMode(value) {
+		return typeof value === "string" && PLAY_MODES.includes(value);
+	}
 	var STORAGE_KEY$1 = "bilibili-music-player:data";
 	function createDefaultData(now = Date.now()) {
 		const playlist = {
@@ -2700,20 +2779,27 @@
 	};
 	var AppStore = class {
 		data = (0, _preact_signals.signal)(createDefaultData());
+		session = (0, _preact_signals.signal)(createPlaybackSession(this.data.peek()));
 		repository = new AppRepository();
+		sessionRepository = new PlaybackSessionRepository();
 		unsubscribe;
 		start() {
-			this.data.value = this.repository.load();
+			const data = this.repository.load();
+			this.data.value = data;
+			this.session.value = this.sessionRepository.load(data);
 			this.unsubscribe = this.repository.subscribe((data) => {
 				this.data.value = data;
+				this.reconcileSession(data);
 			});
 		}
 		stop() {
 			this.unsubscribe?.();
+			this.unsubscribe = void 0;
 		}
 		get activePlaylist() {
 			const data = this.data.peek();
-			return data.playlists.find((playlist) => playlist.id === data.activePlaylistId) ?? data.playlists[0];
+			const { activePlaylistId } = this.session.peek();
+			return data.playlists.find((playlist) => playlist.id === activePlaylistId) ?? data.playlists[0];
 		}
 		findTrack(trackId) {
 			if (!trackId) return;
@@ -2730,42 +2816,23 @@
 				createdAt: now,
 				updatedAt: now
 			};
-			this.commit((data) => ({
+			this.commitLibrary((data) => ({
 				...data,
-				playlists: [...data.playlists, playlist],
-				activePlaylistId: playlist.id,
-				playback: {
-					...data.playback,
-					playlistId: playlist.id,
-					trackId: void 0,
-					currentTime: 0,
-					resumeRequested: false,
-					updatedAt: now
-				}
+				playlists: [...data.playlists, playlist]
 			}));
+			this.selectPlaylist(playlist.id);
 		}
 		removePlaylist(playlistId) {
 			if (this.data.peek().playlists.length <= 1) return;
-			this.commit((data) => {
-				const playlists = data.playlists.filter((playlist) => playlist.id !== playlistId);
-				const activePlaylistId = data.activePlaylistId === playlistId ? playlists[0].id : data.activePlaylistId;
-				return {
-					...data,
-					playlists,
-					activePlaylistId,
-					playback: data.playback.playlistId === playlistId ? {
-						playlistId: activePlaylistId,
-						currentTime: 0,
-						resumeRequested: false,
-						updatedAt: Date.now()
-					} : data.playback
-				};
-			});
+			this.commitLibrary((data) => ({
+				...data,
+				playlists: data.playlists.filter((playlist) => playlist.id !== playlistId)
+			}));
 		}
 		selectPlaylist(playlistId) {
 			if (!this.data.peek().playlists.some((item) => item.id === playlistId)) return;
-			this.commit((data) => ({
-				...data,
+			this.commitSession((session) => ({
+				...session,
 				activePlaylistId: playlistId,
 				playback: {
 					playlistId,
@@ -2776,9 +2843,10 @@
 			}));
 		}
 		addTrack(track) {
-			this.commit((data) => ({
+			const { activePlaylistId } = this.session.peek();
+			this.commitLibrary((data) => ({
 				...data,
-				playlists: data.playlists.map((playlist) => playlist.id === data.activePlaylistId ? {
+				playlists: data.playlists.map((playlist) => playlist.id === activePlaylistId ? {
 					...playlist,
 					tracks: [...playlist.tracks, track],
 					updatedAt: Date.now()
@@ -2786,9 +2854,10 @@
 			}));
 		}
 		updateTrack(track) {
-			this.commit((data) => ({
+			const { activePlaylistId } = this.session.peek();
+			this.commitLibrary((data) => ({
 				...data,
-				playlists: data.playlists.map((playlist) => playlist.id === data.activePlaylistId ? {
+				playlists: data.playlists.map((playlist) => playlist.id === activePlaylistId ? {
 					...playlist,
 					tracks: playlist.tracks.map((item) => item.id === track.id ? track : item),
 					updatedAt: Date.now()
@@ -2796,39 +2865,34 @@
 			}));
 		}
 		removeTrack(trackId) {
-			this.commit((data) => ({
+			const { activePlaylistId } = this.session.peek();
+			this.commitLibrary((data) => ({
 				...data,
-				playlists: data.playlists.map((playlist) => playlist.id === data.activePlaylistId ? {
+				playlists: data.playlists.map((playlist) => playlist.id === activePlaylistId ? {
 					...playlist,
 					tracks: playlist.tracks.filter((track) => track.id !== trackId),
 					updatedAt: Date.now()
-				} : playlist),
-				playback: data.playback.trackId === trackId ? {
-					...data.playback,
-					trackId: void 0,
-					currentTime: 0,
-					resumeRequested: false,
-					updatedAt: Date.now()
-				} : data.playback
+				} : playlist)
 			}));
 		}
 		setPlayMode(playMode) {
-			this.commit((data) => ({
-				...data,
+			this.commitSession((session) => ({
+				...session,
 				playMode
 			}));
 		}
 		setVolume(volume) {
-			this.commit((data) => ({
+			this.commitLibrary((data) => ({
 				...data,
 				volume: Math.min(1, Math.max(0, volume))
 			}));
 		}
 		requestTrack(track, currentTime = track.startTime) {
-			this.commit((data) => ({
-				...data,
+			const { activePlaylistId } = this.session.peek();
+			this.commitSession((session) => ({
+				...session,
 				playback: {
-					playlistId: data.activePlaylistId,
+					playlistId: activePlaylistId,
 					trackId: track.id,
 					currentTime,
 					resumeRequested: true,
@@ -2837,30 +2901,57 @@
 			}));
 		}
 		consumeResumeRequest() {
-			this.commit((data) => ({
-				...data,
+			this.commitSession((session) => ({
+				...session,
 				playback: {
-					...data.playback,
+					...session.playback,
 					resumeRequested: false,
 					updatedAt: Date.now()
 				}
 			}));
 		}
 		savePosition(currentTime) {
-			if (!this.data.peek().playback.trackId) return;
-			this.commit((data) => ({
-				...data,
+			if (!this.session.peek().playback.trackId) return;
+			this.commitSession((session) => ({
+				...session,
 				playback: {
-					...data.playback,
+					...session.playback,
 					currentTime,
 					updatedAt: Date.now()
 				}
 			}));
 		}
-		commit(updater) {
+		commitLibrary(updater) {
 			const next = updater(this.data.peek());
 			this.data.value = next;
+			this.reconcileSession(next);
 			this.repository.save(next);
+		}
+		commitSession(updater) {
+			const next = updater(this.session.peek());
+			this.session.value = next;
+			this.sessionRepository.save(next);
+		}
+		reconcileSession(data) {
+			const session = this.session.peek();
+			const activePlaylist = data.playlists.find((playlist) => playlist.id === session.activePlaylistId) ?? data.playlists[0];
+			const trackStillExists = session.playback.trackId ? activePlaylist.tracks.some((track) => track.id === session.playback.trackId) : true;
+			const playbackNeedsReset = activePlaylist.id !== session.activePlaylistId || !trackStillExists;
+			if (!playbackNeedsReset && session.playback.playlistId === activePlaylist.id) return;
+			const now = Date.now();
+			this.commitSession((current) => ({
+				...current,
+				activePlaylistId: activePlaylist.id,
+				playback: playbackNeedsReset ? {
+					playlistId: activePlaylist.id,
+					currentTime: 0,
+					resumeRequested: false,
+					updatedAt: now
+				} : {
+					...current.playback,
+					playlistId: activePlaylist.id
+				}
+			}));
 		}
 	};
 	var appStore = new AppStore();
@@ -3345,26 +3436,6 @@ html[${ROOT_ATTRIBUTE}="active"] video.bpx-player-video {
 		if (nextIndex >= 0 && nextIndex < tracks.length) return tracks[nextIndex];
 		if (mode === "list-loop" || mode === "single-loop") return tracks[(nextIndex + tracks.length) % tracks.length];
 	}
-	var CHANNEL_NAME = "bilibili-music-player";
-	var TabCoordinator = class {
-		id = crypto.randomUUID();
-		channel = typeof BroadcastChannel === "undefined" ? void 0 : new BroadcastChannel(CHANNEL_NAME);
-		constructor(onOtherTabClaimed) {
-			if (this.channel) this.channel.onmessage = (event) => {
-				const message = event.data;
-				if (message.type === "claim" && message.tabId !== this.id) onOtherTabClaimed();
-			};
-		}
-		claim() {
-			this.channel?.postMessage({
-				type: "claim",
-				tabId: this.id
-			});
-		}
-		close() {
-			this.channel?.close();
-		}
-	};
 	var INITIAL_RUNTIME_STATE = {
 		mediaReady: false,
 		playing: false,
@@ -3387,28 +3458,25 @@ html[${ROOT_ATTRIBUTE}="active"] video.bpx-player-video {
 		mediaEvents;
 		positionSavedAt = 0;
 		segmentAdvancing = false;
-		previousData;
+		previousSession;
 		stopStoreObservation;
 		locator;
-		tabs;
 		constructor(store) {
 			this.store = store;
 			this.locator = new MediaLocator((media, reason) => this.handleMediaChange(media, reason));
-			this.tabs = new TabCoordinator(() => {
-				if (this.isPlaylistContext() && this.media && !this.media.paused) this.media.pause();
-			});
 		}
 		start() {
 			this.store.start();
 			this.setPlaybackContext(this.shouldUsePlaylistContext() ? "playlist" : "page");
-			this.previousData = this.store.data.peek();
+			this.previousSession = this.store.session.peek();
 			this.stopStoreObservation = (0, _preact_signals.effect)(() => {
 				const data = this.store.data.value;
-				const previousData = this.previousData;
-				this.previousData = data;
-				if (!previousData || !this.isPlaylistContext()) return;
-				const activePlaylistChanged = previousData.activePlaylistId !== data.activePlaylistId;
-				const previousTrackId = previousData.playback.trackId;
+				const session = this.store.session.value;
+				const previousSession = this.previousSession;
+				this.previousSession = session;
+				if (!previousSession || !this.isPlaylistContext()) return;
+				const activePlaylistChanged = previousSession.activePlaylistId !== session.activePlaylistId;
+				const previousTrackId = previousSession.playback.trackId;
 				const currentTrackRemoved = Boolean(previousTrackId && !data.playlists.some((playlist) => playlist.tracks.some((track) => track.id === previousTrackId)));
 				if (activePlaylistChanged || currentTrackRemoved) this.exitPlaylistPlayback();
 			});
@@ -3420,10 +3488,9 @@ html[${ROOT_ATTRIBUTE}="active"] video.bpx-player-video {
 			this.savePosition();
 			this.stopStoreObservation?.();
 			this.stopStoreObservation = void 0;
-			this.previousData = void 0;
+			this.previousSession = void 0;
 			this.mediaEvents?.abort();
 			this.locator.stop();
-			this.tabs.close();
 			this.store.stop();
 			window.removeEventListener("pagehide", this.savePosition);
 		}
@@ -3439,9 +3506,9 @@ html[${ROOT_ATTRIBUTE}="active"] video.bpx-player-video {
 				this.media.pause();
 				return;
 			}
-			const data = this.store.data.peek();
-			const track = this.store.findTrack(data.playback.trackId);
-			if (this.isPlaylistContext() && data.playback.resumeRequested && track && !this.isCurrentPage(track)) {
+			const session = this.store.session.peek();
+			const track = this.store.findTrack(session.playback.trackId);
+			if (this.isPlaylistContext() && session.playback.resumeRequested && track && !this.isCurrentPage(track)) {
 				this.playTrack(track);
 				return;
 			}
@@ -3467,7 +3534,7 @@ html[${ROOT_ATTRIBUTE}="active"] video.bpx-player-video {
 			this.store.setPlayMode(mode);
 		}
 		exitPlaylistPlayback() {
-			if (this.store.data.peek().playback.resumeRequested) this.store.consumeResumeRequest();
+			if (this.store.session.peek().playback.resumeRequested) this.store.consumeResumeRequest();
 			this.exitPlaylistContext();
 		}
 		playTrack(track) {
@@ -3483,7 +3550,8 @@ html[${ROOT_ATTRIBUTE}="active"] video.bpx-player-video {
 		}
 		next(automatic = false) {
 			const data = this.store.data.peek();
-			const track = selectAdjacentTrack(data.playlists.find((item) => item.id === data.playback.playlistId), data.playback.trackId, data.playMode, {
+			const session = this.store.session.peek();
+			const track = selectAdjacentTrack(data.playlists.find((item) => item.id === session.playback.playlistId), session.playback.trackId, session.playMode, {
 				direction: 1,
 				automatic
 			});
@@ -3498,7 +3566,8 @@ html[${ROOT_ATTRIBUTE}="active"] video.bpx-player-video {
 		}
 		previous() {
 			const data = this.store.data.peek();
-			const track = selectAdjacentTrack(data.playlists.find((item) => item.id === data.playback.playlistId), data.playback.trackId, data.playMode, { direction: -1 });
+			const session = this.store.session.peek();
+			const track = selectAdjacentTrack(data.playlists.find((item) => item.id === session.playback.playlistId), session.playback.trackId, session.playMode, { direction: -1 });
 			if (track) this.playTrack(track);
 		}
 		handleMediaChange(media, reason) {
@@ -3508,7 +3577,7 @@ html[${ROOT_ATTRIBUTE}="active"] video.bpx-player-video {
 				this.refreshPageMetadata();
 				window.setTimeout(() => this.refreshPageMetadata(), 1e3);
 			}
-			if (media && this.isPlaylistContext() && this.store.data.peek().playback.resumeRequested) this.resumeRequestedTrack();
+			if (media && this.isPlaylistContext() && this.store.session.peek().playback.resumeRequested) this.resumeRequestedTrack();
 		}
 		bindMedia(media) {
 			this.mediaEvents?.abort();
@@ -3538,7 +3607,6 @@ html[${ROOT_ATTRIBUTE}="active"] video.bpx-player-video {
 			this.syncRuntime();
 		}
 		handlePlay = () => {
-			if (this.isPlaylistContext()) this.tabs.claim();
 			this.state.value = {
 				...this.state.peek(),
 				playing: true,
@@ -3565,7 +3633,7 @@ html[${ROOT_ATTRIBUTE}="active"] video.bpx-player-video {
 		};
 		handleLoadedMetadata = () => {
 			this.syncRuntime();
-			if (this.isPlaylistContext() && this.store.data.peek().playback.resumeRequested) this.resumeRequestedTrack();
+			if (this.isPlaylistContext() && this.store.session.peek().playback.resumeRequested) this.resumeRequestedTrack();
 		};
 		handleEnded = () => {
 			if (this.getActiveTrack()) this.next(true);
@@ -3585,11 +3653,11 @@ html[${ROOT_ATTRIBUTE}="active"] video.bpx-player-video {
 		};
 		async resumeRequestedTrack() {
 			const media = this.media;
-			const data = this.store.data.peek();
-			const track = this.store.findTrack(data.playback.trackId);
+			const session = this.store.session.peek();
+			const track = this.store.findTrack(session.playback.trackId);
 			if (!this.isPlaylistContext() || !media || !track || !this.isCurrentPage(track)) return;
 			if (media.readyState === 0) return;
-			const resumeTime = data.playback.currentTime >= track.startTime && (track.endTime === void 0 || data.playback.currentTime < track.endTime) ? data.playback.currentTime : track.startTime;
+			const resumeTime = session.playback.currentTime >= track.startTime && (track.endTime === void 0 || session.playback.currentTime < track.endTime) ? session.playback.currentTime : track.startTime;
 			media.currentTime = clamp(resumeTime, 0, Number.isFinite(media.duration) ? media.duration : resumeTime);
 			this.refreshPageMetadata();
 			this.store.consumeResumeRequest();
@@ -3597,11 +3665,8 @@ html[${ROOT_ATTRIBUTE}="active"] video.bpx-player-video {
 		}
 		async tryPlay() {
 			if (!this.media) return;
-			const media = this.media;
-			const wasAlreadyPlaying = !media.paused;
 			try {
-				await media.play();
-				if (wasAlreadyPlaying && this.media === media && this.isPlaylistContext()) this.tabs.claim();
+				await this.media.play();
 				this.state.value = {
 					...this.state.peek(),
 					requiresInteraction: false,
@@ -3634,7 +3699,7 @@ html[${ROOT_ATTRIBUTE}="active"] video.bpx-player-video {
 		}
 		getActiveTrack() {
 			if (!this.isPlaylistContext()) return;
-			const track = this.store.findTrack(this.store.data.peek().playback.trackId);
+			const track = this.store.findTrack(this.store.session.peek().playback.trackId);
 			return track && this.isCurrentPage(track) ? track : void 0;
 		}
 		isPlaylistContext() {
@@ -3642,7 +3707,7 @@ html[${ROOT_ATTRIBUTE}="active"] video.bpx-player-video {
 		}
 		shouldUsePlaylistContext() {
 			if (!hasPlaylistRouteMarker()) return false;
-			const track = this.store.findTrack(this.store.data.peek().playback.trackId);
+			const track = this.store.findTrack(this.store.session.peek().playback.trackId);
 			return Boolean(track && this.isCurrentPage(track));
 		}
 		setPlaybackContext(playbackContext) {
