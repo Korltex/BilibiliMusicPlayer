@@ -48,8 +48,18 @@ function viewportSize() {
   };
 }
 
+export interface DraggablePositionOptions {
+  /**
+   * 没有已保存坐标时，把 CSS 默认停靠位置固化成左上角坐标。
+   * 面板默认按右下角停靠（`bottom`），内容变矮时顶边会跟着往下走；
+   * 固化后顶边不动，只有底边随内容高度伸缩。
+   */
+  pinDefaultAnchor?: boolean;
+}
+
 export function useDraggablePosition(
   target: LayoutTarget,
+  { pinDefaultAnchor = false }: DraggablePositionOptions = {},
 ): DraggablePositionBinding {
   const [element, setElement] = useState<HTMLElement | null>(null);
   const [position, setPosition] = useState<ViewportPosition | undefined>(
@@ -64,17 +74,24 @@ export function useDraggablePosition(
     );
   }, []);
 
-  const clampCurrentPosition = useCallback(() => {
+  const syncPosition = useCallback(() => {
     if (!element) {
       return;
     }
 
     setPosition((currentPosition) => {
-      if (!currentPosition) {
+      const bounds = element.getBoundingClientRect();
+      // 元素不可见（例如网页全屏时宿主被隐藏）时量不到真实尺寸，保持现状。
+      if (bounds.width === 0 && bounds.height === 0) {
         return currentPosition;
       }
 
-      const bounds = element.getBoundingClientRect();
+      if (!currentPosition) {
+        return pinDefaultAnchor
+          ? { x: bounds.left, y: bounds.top }
+          : currentPosition;
+      }
+
       const nextPosition = clampPosition(
         currentPosition,
         { width: bounds.width, height: bounds.height },
@@ -85,24 +102,27 @@ export function useDraggablePosition(
         ? currentPosition
         : nextPosition;
     });
-  }, [element]);
+  }, [element, pinDefaultAnchor]);
 
-  useLayoutEffect(clampCurrentPosition, [clampCurrentPosition]);
+  // 坐标为空的两种情况都要重新固化默认停靠点：首次挂载、以及「重置位置」之后。
+  const pinnedDefaultAnchor = pinDefaultAnchor && position === undefined;
+
+  useLayoutEffect(syncPosition, [pinnedDefaultAnchor, syncPosition]);
 
   useEffect(() => {
     if (!element) {
       return;
     }
 
-    window.addEventListener("resize", clampCurrentPosition);
-    const resizeObserver = new ResizeObserver(clampCurrentPosition);
+    window.addEventListener("resize", syncPosition);
+    const resizeObserver = new ResizeObserver(syncPosition);
     resizeObserver.observe(element);
 
     return () => {
-      window.removeEventListener("resize", clampCurrentPosition);
+      window.removeEventListener("resize", syncPosition);
       resizeObserver.disconnect();
     };
-  }, [clampCurrentPosition, element]);
+  }, [syncPosition, element]);
 
   const onPointerDown = useCallback(
     (event: DragPointerEvent) => {

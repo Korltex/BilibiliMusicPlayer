@@ -2372,7 +2372,7 @@
 			height: window.innerHeight
 		};
 	}
-	function useDraggablePosition(target) {
+	function useDraggablePosition(target, { pinDefaultAnchor = false } = {}) {
 		const [element, setElement] = (0, preact_hooks.useState)(null);
 		const [position, setPosition] = (0, preact_hooks.useState)(() => layoutRepository$1.load()[target]);
 		const activeDrag = (0, preact_hooks.useRef)();
@@ -2380,29 +2380,33 @@
 		const ref = (0, preact_hooks.useCallback)((nextElement) => {
 			setElement((currentElement) => currentElement === nextElement ? currentElement : nextElement);
 		}, []);
-		const clampCurrentPosition = (0, preact_hooks.useCallback)(() => {
+		const syncPosition = (0, preact_hooks.useCallback)(() => {
 			if (!element) return;
 			setPosition((currentPosition) => {
-				if (!currentPosition) return currentPosition;
 				const bounds = element.getBoundingClientRect();
+				if (bounds.width === 0 && bounds.height === 0) return currentPosition;
+				if (!currentPosition) return pinDefaultAnchor ? {
+					x: bounds.left,
+					y: bounds.top
+				} : currentPosition;
 				const nextPosition = clampPosition(currentPosition, {
 					width: bounds.width,
 					height: bounds.height
 				}, viewportSize());
 				return positionsEqual(currentPosition, nextPosition) ? currentPosition : nextPosition;
 			});
-		}, [element]);
-		(0, preact_hooks.useLayoutEffect)(clampCurrentPosition, [clampCurrentPosition]);
+		}, [element, pinDefaultAnchor]);
+		(0, preact_hooks.useLayoutEffect)(syncPosition, [pinDefaultAnchor && position === void 0, syncPosition]);
 		(0, preact_hooks.useEffect)(() => {
 			if (!element) return;
-			window.addEventListener("resize", clampCurrentPosition);
-			const resizeObserver = new ResizeObserver(clampCurrentPosition);
+			window.addEventListener("resize", syncPosition);
+			const resizeObserver = new ResizeObserver(syncPosition);
 			resizeObserver.observe(element);
 			return () => {
-				window.removeEventListener("resize", clampCurrentPosition);
+				window.removeEventListener("resize", syncPosition);
 				resizeObserver.disconnect();
 			};
-		}, [clampCurrentPosition, element]);
+		}, [syncPosition, element]);
 		const onPointerDown = (0, preact_hooks.useCallback)((event) => {
 			if (!element || !event.isPrimary || event.pointerType === "mouse" && event.button !== 0) return;
 			const bounds = element.getBoundingClientRect();
@@ -2795,7 +2799,7 @@
 		const [editorTrack, setEditorTrack] = (0, preact_hooks.useState)();
 		const [importOpen, setImportOpen] = (0, preact_hooks.useState)(false);
 		const launcherDrag = useDraggablePosition("launcher");
-		const panelDrag = useDraggablePosition("panel");
+		const panelDrag = useDraggablePosition("panel", { pinDefaultAnchor: true });
 		const data = store.data.value;
 		const session = store.session.value;
 		const runtime = engine.state.value;

@@ -56,7 +56,8 @@ export function App({ store, engine, audioOnly }: AppProps) {
   const [editorTrack, setEditorTrack] = useState<Track | "new">();
   const [importOpen, setImportOpen] = useState(false);
   const launcherDrag = useDraggablePosition("launcher");
-  const panelDrag = useDraggablePosition("panel");
+  // 播放器面板顶边固定：歌单内容变少时只收起底边，面板不整体上移/下移。
+  const panelDrag = useDraggablePosition("panel", { pinDefaultAnchor: true });
 
   const data = store.data.value;
   const session = store.session.value;

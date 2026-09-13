@@ -17,19 +17,19 @@
 
 ## 2. 事实卡（AI 速查）
 
-| 项目 | 值 |
-| --- | --- |
-| 产物形态 | 单个用户脚本 `dist/bilibili-music-player.user.js`（`dist/` 已被 git 跟踪） |
-| 技术栈 | TypeScript（strict）+ Preact 10 + `@preact/signals` + Vite + `vite-plugin-monkey` |
-| 包名 / 版本 | `bilibili-music-player` / `0.1.8`（`package.json`，用户脚本头部 `@version` 必须与之一致） |
-| 作者 / 许可 | Korltex / MIT |
-| 匹配范围 | `https://www.bilibili.com/video/*` 与 `https://space.bilibili.com/*`（后者只在空间收藏页 `favlist` 挂载 UI，其它空间页保持惰性） |
-| 注入时机 | `@run-at document-start`；`@noframes` |
-| 外部运行时 | Preact / preact-hooks / jsx-runtime / signals-core / signals，全部走 jsDelivr 固定版本 URL + `#sha256=…` 子资源校验（清单见 `scripts/userscript-runtime.json`） |
-| 运行环境 API | `$` 虚拟模块提供的 `GM_getValue` / `GM_setValue` / `GM_addValueChangeListener` / `GM_removeValueChangeListener` / `unsafeWindow` |
+| 项目         | 值                                                                                                                                                                            |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 产物形态     | 单个用户脚本 `dist/bilibili-music-player.user.js`（`dist/` 已被 git 跟踪）                                                                                                    |
+| 技术栈       | TypeScript（strict）+ Preact 10 + `@preact/signals` + Vite + `vite-plugin-monkey`                                                                                             |
+| 包名 / 版本  | `bilibili-music-player` / `0.1.8`（`package.json`，用户脚本头部 `@version` 必须与之一致）                                                                                     |
+| 作者 / 许可  | Korltex / MIT                                                                                                                                                                 |
+| 匹配范围     | `https://www.bilibili.com/video/*` 与 `https://space.bilibili.com/*`（后者只在空间收藏页 `favlist` 挂载 UI，其它空间页保持惰性）                                              |
+| 注入时机     | `@run-at document-start`；`@noframes`                                                                                                                                         |
+| 外部运行时   | Preact / preact-hooks / jsx-runtime / signals-core / signals，全部走 jsDelivr 固定版本 URL + `#sha256=…` 子资源校验（清单见 `scripts/userscript-runtime.json`）               |
+| 运行环境 API | `$` 虚拟模块提供的 `GM_getValue` / `GM_setValue` / `GM_addValueChangeListener` / `GM_removeValueChangeListener` / `unsafeWindow`                                              |
 | 包管理器命令 | `npm run build`（`tsc --noEmit` → `vite build` → 构建审计）、`npm test`（Vitest）、`npm run test:e2e`（Playwright，需先 build）、`npm run test:e2e:real`（真实 B 站烟雾测试） |
-| 代码规模 | `src/` 约 26 个文件；核心是 `src/playback/player-engine.ts`、`src/app/App.tsx`、`src/app/store.ts` |
-| 主要语言 | 源码注释与 UI 文案为简体中文；UI 文案在 `vite.config.ts` 中声明了 `zh-CN` / `zh-TW` / `en` 三语元数据 |
+| 代码规模     | `src/` 约 26 个文件；核心是 `src/playback/player-engine.ts`、`src/app/App.tsx`、`src/app/store.ts`                                                                            |
+| 主要语言     | 源码注释与 UI 文案为简体中文；UI 文案在 `vite.config.ts` 中声明了 `zh-CN` / `zh-TW` / `en` 三语元数据                                                                         |
 
 ---
 
@@ -174,12 +174,12 @@ B 站是 SPA，`<video>` 会被替换。`MediaLocator` 用三条互补的路径�
 
 ### 6.6 存储分层、多标签页与远端变更
 
-| 数据 | 位置 | 键 | 作用域 |
-| --- | --- | --- | --- |
-| 歌单、歌曲、音量 | GM 存储 | `bilibili-music-player:data` | 所有标签页共享 |
-| 当前歌单、播放模式、当前歌曲、进度、恢复请求 | `sessionStorage` | `bilibili-music-player:playback-session` | **单个标签页**，关闭标签页即消失 |
-| UI 位置、上次打开模式 | GM 存储 | `bilibili-music-player:layout` | 所有标签页共享 |
-| 纯音频开关 | GM 存储 | `bilibili-music-player:audio-only` | 启动期偏好，**不进入歌单数据结构** |
+| 数据                                         | 位置             | 键                                       | 作用域                             |
+| -------------------------------------------- | ---------------- | ---------------------------------------- | ---------------------------------- |
+| 歌单、歌曲、音量                             | GM 存储          | `bilibili-music-player:data`             | 所有标签页共享                     |
+| 当前歌单、播放模式、当前歌曲、进度、恢复请求 | `sessionStorage` | `bilibili-music-player:playback-session` | **单个标签页**，关闭标签页即消失   |
+| UI 位置、上次打开模式                        | GM 存储          | `bilibili-music-player:layout`           | 所有标签页共享                     |
+| 纯音频开关                                   | GM 存储          | `bilibili-music-player:audio-only`       | 启动期偏好，**不进入歌单数据结构** |
 
 `AppRepository.subscribe()` 用 `GM_addValueChangeListener` **只处理 `remote === true`** 的变更（避免自己写入触发回环）。收到远端歌单变更后，`PlayerEngine` 里的 `effect()` 会检查：若「活动歌单被切换」或「正在播放的歌曲已在所有歌单中被删除」，就安全退出歌单播放（清掉 `resumeRequested`、把上下文切回 `"page"`、移除 URL 标记）。其它歌单的增删改不影响本标签页播放。
 
@@ -191,7 +191,7 @@ B 站是 SPA，`<video>` 会被替换。`MediaLocator` 用三条互补的路径�
 
 三种显示形态，状态在组件内：`launcher`（圆形悬浮按钮）→ `full`（完整面板）→ `minimal`（单行极简播放器，宽 ≤400px）。形态切换**不改变任何播放状态**（不暂停、不跳时间、不改模式/音量/纯音频）。上次打开的形态持久化在布局存储里，默认 `full`。
 
-`useDraggablePosition("launcher" | "panel")` 实现指针拖动：4px 阈值区分点击与拖动、`setPointerCapture`、实时按视口钳制坐标（`clampPosition`）、结束后写入布局存储，并提供 `consumeSuppressedClick()` 防止拖动末尾误触发点击。完整面板与极简播放器**共用 `panel` 坐标**；标题栏的「重置位置」按钮清空两处坐标。发生 `resize` 或元素尺寸变化时用 `ResizeObserver` 重新钳制。
+`useDraggablePosition("launcher" | "panel")` 实现指针拖动：4px 阈值区分点击与拖动、`setPointerCapture`、实时按视口钳制坐标（`clampPosition`）、结束后写入布局存储，并提供 `consumeSuppressedClick()` 防止拖动末尾误触发点击。完整面板与极简播放器**共用 `panel` 坐标**；标题栏的「重置位置」按钮清空两处坐标。发生 `resize` 或元素尺寸变化时用 `ResizeObserver` 重新钳制。`panel` 额外开启 `pinDefaultAnchor`：没有已保存坐标时（首次打开或重置后）把 CSS 默认的右下角停靠位置量成显式左上角坐标，此后**面板顶边固定**，歌单内容变多/变少只让底边向下延伸或向上收起；「重置位置」后重新固化，布局存储里不会写入这组默认坐标。
 
 `App` 里还包含歌曲编辑器（`TrackEditor`）：可改标题、起止时间，并用 `fetchVideoChapters()` 调用 B 站公开接口（`/x/web-interface/view` 解析 cid → `/x/player/wbi/v2` 取 `view_points`）识别视频章节。章节以可键盘操作的下拉列表（combobox）呈现，**选中某章即把歌名与起止时间填入表单，保存后成为一首歌（一次一首，不是批量导入）**；没有章节时仍可完全手动填写。章节解析（`parseVideoChapters`）是纯函数，只接受 `content` + 合法 `from`/`to` 的条目，封面 `http:` 会被升成 `https:`。
 
@@ -264,15 +264,15 @@ B 站是 SPA，`<video>` 会被替换。`MediaLocator` 用三条互补的路径�
 
 ## 12. 术语表（中英对照）
 
-| 中文 | 代码标识符 | 含义 |
-| --- | --- | --- |
-| 用户脚本 | userscript | 由篡改猴注入页面的 JS，产物为单个 `.user.js` |
-| 歌单 | `Playlist` | 用户创建、跨标签页共享的歌曲集合 |
-| 歌曲 / 片段 | `Track` | 一个视频或视频中的一段时间（`startTime`~`endTime`） |
-| 播放会话 | `PlaybackSession` | 单标签页的当前歌单、播放模式、当前歌曲与进度 |
-| 播放上下文 | `playbackContext` | `page`（普通视频）或 `playlist`（插件歌单） |
-| 播放引擎 | `PlayerEngine` | 协调媒体元素、存储与 UI 的状态机 |
-| 纯音频模式 | audio-only | 改写播放清单去掉视频分片、只听声音 |
-| 失败开放 | fail-open | 任何异常都保持原样并回退，而不是破坏页面 |
-| 共享数据 | `AppData` | 写入 GM 存储、广播给所有标签页的数据 |
-| 布局数据 | `LayoutData` | 悬浮按钮/面板坐标与上次打开形态 |
+| 中文        | 代码标识符        | 含义                                                |
+| ----------- | ----------------- | --------------------------------------------------- |
+| 用户脚本    | userscript        | 由篡改猴注入页面的 JS，产物为单个 `.user.js`        |
+| 歌单        | `Playlist`        | 用户创建、跨标签页共享的歌曲集合                    |
+| 歌曲 / 片段 | `Track`           | 一个视频或视频中的一段时间（`startTime`~`endTime`） |
+| 播放会话    | `PlaybackSession` | 单标签页的当前歌单、播放模式、当前歌曲与进度        |
+| 播放上下文  | `playbackContext` | `page`（普通视频）或 `playlist`（插件歌单）         |
+| 播放引擎    | `PlayerEngine`    | 协调媒体元素、存储与 UI 的状态机                    |
+| 纯音频模式  | audio-only        | 改写播放清单去掉视频分片、只听声音                  |
+| 失败开放    | fail-open         | 任何异常都保持原样并回退，而不是破坏页面            |
+| 共享数据    | `AppData`         | 写入 GM 存储、广播给所有标签页的数据                |
+| 布局数据    | `LayoutData`      | 悬浮按钮/面板坐标与上次打开形态                     |

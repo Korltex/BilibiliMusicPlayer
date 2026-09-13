@@ -16,6 +16,8 @@ const NORMAL_PLAYBACK_URL = "https://www.bilibili.com/video/BV1NormalPlayback/";
 const WEB_FULLSCREEN_URL = "https://www.bilibili.com/video/BV1WebFullscreen/";
 const DRAGGABLE_UI_URL = "https://www.bilibili.com/video/BV1DraggableUi/";
 const INTEGER_TIME_URL = "https://www.bilibili.com/video/BV1IntegerTime/";
+const PANEL_TOP_ANCHOR_URL =
+  "https://www.bilibili.com/video/BV1PanelTopAnchor/";
 const LEGACY_TIME_URL = "https://www.bilibili.com/video/BV1LegacyTime/";
 const EDITOR_SWITCH_URL = "https://www.bilibili.com/video/BV1EditorSwitch/";
 const FULL_VIDEO_RANGE_URL =
@@ -1926,6 +1928,89 @@ test("drags and persists the launcher and player panel", async ({ page }) => {
   const resetLauncher = (await launcher.boundingBox())!;
   expect(1440 - resetLauncher.x - resetLauncher.width).toBeCloseTo(24, 0);
   expect(900 - resetLauncher.y - resetLauncher.height).toBeCloseTo(76, 0);
+});
+
+test("keeps the player panel top edge fixed when the playlist gets shorter", async ({
+  page,
+}) => {
+  const now = 1_000;
+  await page.route(PANEL_TOP_ANCHOR_URL, async (route) => {
+    await route.fulfill({
+      contentType: "text/html; charset=utf-8",
+      body: `
+        <!doctype html>
+        <html>
+          <head><title>面板顶边固定测试_哔哩哔哩_bilibili</title></head>
+          <body>
+            <h1 class="video-title" title="面板顶边固定测试">面板顶边固定测试</h1>
+            <video></video>
+          </body>
+        </html>
+      `,
+    });
+  });
+  await installLocalStorageGm(page, {
+    version: 1,
+    playlists: [
+      {
+        id: "playlist-default",
+        name: "默认歌单",
+        tracks: Array.from({ length: 7 }, (_, index) => ({
+          id: `track-${index + 1}`,
+          bvid: "BV1PanelTopAnchor",
+          title: `歌曲 ${index + 1}`,
+          startTime: index * 10,
+          duration: 180,
+          addedAt: now + index,
+          source: "manual",
+        })),
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: "playlist-test",
+        name: "Test",
+        tracks: [],
+        createdAt: now,
+        updatedAt: now,
+      },
+    ],
+    activePlaylistId: "playlist-default",
+    playMode: "sequence",
+    volume: 1,
+    playback: {
+      playlistId: "playlist-default",
+      currentTime: 0,
+      resumeRequested: false,
+      updatedAt: now,
+    },
+  });
+
+  await page.goto(PANEL_TOP_ANCHOR_URL);
+  await installMockMedia(page, 180);
+  await injectBuiltUserscript(page);
+  await page.getByRole("button", { name: "打开 Bilibili 音乐播放器" }).click();
+
+  const panel = page.locator(".player-panel");
+  const playlistSelect = panel.getByLabel("当前歌单", { exact: true });
+  await expect(panel.locator(".track-row")).toHaveCount(7);
+  const tallBounds = (await panel.boundingBox())!;
+
+  await playlistSelect.selectOption("playlist-test");
+  await expect(panel.getByText("歌单还是空的")).toBeVisible();
+  const emptyBounds = (await panel.boundingBox())!;
+
+  expect(emptyBounds.height).toBeLessThan(tallBounds.height);
+  expect(emptyBounds.y).toBeCloseTo(tallBounds.y, 0);
+  expect(emptyBounds.y + emptyBounds.height).toBeLessThan(
+    tallBounds.y + tallBounds.height,
+  );
+
+  await playlistSelect.selectOption("playlist-default");
+  await expect(panel.locator(".track-row")).toHaveCount(7);
+  const restoredBounds = (await panel.boundingBox())!;
+
+  expect(restoredBounds.y).toBeCloseTo(tallBounds.y, 0);
 });
 
 test("uses whole seconds for new track boundaries", async ({ page }) => {
