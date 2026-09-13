@@ -262,10 +262,10 @@ async function readPlaybackSession(page: Page): Promise<PlaybackSession> {
   });
 }
 
-test("displays the 0.1.7 package version in the full player", async ({
+test("displays the 0.1.8 package version in the full player", async ({
   page,
 }) => {
-  expect(packageVersion).toBe("0.1.7");
+  expect(packageVersion).toBe("0.1.8");
   await openMinimalPlayerTestPage(page);
   await page.getByRole("button", { name: "打开 Bilibili 音乐播放器" }).click();
 
@@ -495,21 +495,25 @@ test("switches between full, minimal, and launcher modes", async ({ page }) => {
   });
   const fullBeforeMinimal = (await full.boundingBox())!;
   const headerButtons = full.locator(".header-actions > button");
-  await expect(headerButtons).toHaveCount(3);
+  await expect(headerButtons).toHaveCount(4);
   await expect(headerButtons.nth(0)).toHaveAttribute(
     "aria-label",
-    "重置图标和播放器位置",
+    "导入 Bilibili 收藏夹",
   );
   await expect(headerButtons.nth(1)).toHaveAttribute(
     "aria-label",
-    "进入极简模式",
+    "重置图标和播放器位置",
   );
   await expect(headerButtons.nth(2)).toHaveAttribute(
+    "aria-label",
+    "进入极简模式",
+  );
+  await expect(headerButtons.nth(3)).toHaveAttribute(
     "aria-label",
     "收起播放器",
   );
 
-  await headerButtons.nth(1).click();
+  await headerButtons.nth(2).click();
   const minimal = page.getByRole("region", {
     name: "Bilibili 音乐播放器（极简模式）",
   });

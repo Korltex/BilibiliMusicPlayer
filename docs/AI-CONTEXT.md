@@ -21,9 +21,9 @@
 | --- | --- |
 | 产物形态 | 单个用户脚本 `dist/bilibili-music-player.user.js`（`dist/` 已被 git 跟踪） |
 | 技术栈 | TypeScript（strict）+ Preact 10 + `@preact/signals` + Vite + `vite-plugin-monkey` |
-| 包名 / 版本 | `bilibili-music-player` / `0.1.7`（`package.json`，用户脚本头部 `@version` 必须与之一致） |
+| 包名 / 版本 | `bilibili-music-player` / `0.1.8`（`package.json`，用户脚本头部 `@version` 必须与之一致） |
 | 作者 / 许可 | Korltex / MIT |
-| 匹配范围 | 仅 `https://www.bilibili.com/video/*`（`@match` 只有这一条） |
+| 匹配范围 | `https://www.bilibili.com/video/*` 与 `https://space.bilibili.com/*`（后者只在空间收藏页 `favlist` 挂载 UI，其它空间页保持惰性） |
 | 注入时机 | `@run-at document-start`；`@noframes` |
 | 外部运行时 | Preact / preact-hooks / jsx-runtime / signals-core / signals，全部走 jsDelivr 固定版本 URL + `#sha256=…` 子资源校验（清单见 `scripts/userscript-runtime.json`） |
 | 运行环境 API | `$` 虚拟模块提供的 `GM_getValue` / `GM_setValue` / `GM_addValueChangeListener` / `GM_removeValueChangeListener` / `unsafeWindow` |
@@ -63,10 +63,15 @@ src/
 ├── bili/                        B 站页面适配层（唯一允许接触页面细节的地方）
 │   ├── media-locator.ts         发现并跟踪当前媒体元素
 │   ├── metadata.ts              读取 bvid / 分P / 标题 / UP 主 / 封面，构造 Track
+│   ├── page-route.ts            纯函数：判定页面路由（视频页 / 空间收藏页 / 其它），决定是否挂载 UI
 │   ├── chapters.ts              调用 B 站公开 API 拉取视频章节（亮点）
 │   ├── audio-only-controller.ts 纯音频模式的开关、状态机与页面表现
 │   ├── audio-only-interceptor.ts `__playinfo__` / fetch / XHR 拦截安装
 │   └── playurl-rewriter.ts      纯函数：把 playurl 响应改写成「仅音频」（可单测）
+├── sources/                     外部来源（收藏夹 / 视频合集）→ `Track` 的适配层
+│   ├── bilibili-fav.ts          解析链接（收藏夹/合集）、收藏夹分页拉取、失效过滤、映射为 Track（可单测）
+│   ├── bilibili-season.ts       视频合集 season 拉取与映射（另一套接口 `seasons_archives_list`）
+│   └── http.ts                  适配层共用的随机限流、可中止 sleep、响应读取
 ├── core/                        无副作用基础件：types.ts / id.ts / time.ts
 ├── playback/                    播放逻辑（不碰 DOM 细节、不碰存储实现）
 │   ├── player-engine.ts         状态机 + 媒体事件绑定 + 跨视频/恢复播放 + Media Session
@@ -78,7 +83,7 @@ src/
     ├── layout-schema.ts / layout.ts  UI 位置与上次打开模式（GM key: bilibili-music-player:layout）
 ```
 
-依赖方向是单向的：`app → playback → bili/storage/core`，`storage` 与 `playback/queue`、`bili/playurl-rewriter` 都是可单测的纯逻辑层。**新增功能时优先把逻辑放进纯函数模块，而不是塞进组件。**
+依赖方向是单向的：`app → playback → bili/storage/core`，`app → sources`（外部来源适配层，被 `app` 使用），`storage` 与 `playback/queue`、`bili/playurl-rewriter`、`sources/bilibili-fav` 都是可单测的纯逻辑层。**新增功能时优先把逻辑放进纯函数模块，而不是塞进组件。**
 
 ---
 
@@ -120,7 +125,9 @@ RuntimePlayerState { mediaReady, playing, currentTime, duration, volume, muted,
 
 ### 6.1 启动与挂载（`src/entry.tsx`）
 
-脚本在 `document-start` 执行。第一步就调用 `audioOnlyController.start()`——因为纯音频模式必须在页面脚本运行前决定是否安装拦截器。随后在 `documentElement` 上创建宿主 `div#bilibili-music-player-host`，挂 `shadowRoot`，把内联样式与 `#bilibili-music-player-root` 一起塞进去，再 `render(<App/>)`。UI 与页面样式完全隔离。
+脚本在 `document-start` 执行。**先判定页面路由**（`bili/page-route.ts`）：只有在视频页才调用 `audioOnlyController.start()`——纯音频模式必须在页面脚本运行前决定是否安装拦截器。随后在 `documentElement` 上创建宿主 `div#bilibili-music-player-host`，挂 `shadowRoot`，把内联样式与 `#bilibili-music-player-root` 一起塞进去，再 `render(<App/>)`。UI 与页面样式完全隔离。
+
+**路由门控**：只有视频页与空间收藏页（`space.bilibili.com/<mid>/favlist`）会挂载 UI。其它空间页保持惰性——只留一个 300ms 的 URL 轮询，等 SPA 路由切到收藏页再挂载（从空间首页点「收藏」也能直接出现按钮，无需刷新）。挂载后同一个轮询会同步宿主上的 `data-outside-route`，离开支持的路由时用 CSS 隐藏 UI。在收藏页这类**没有播放器**的页面上，点悬浮按钮会直接进入完整面板并打开导入收藏夹弹窗。
 
 同时做三件事：① 用 `MutationObserver` 监听 `.bpx-player-container[data-screen="web"]`，进入 B 站网页全屏时给宿主加 `data-web-fullscreen` 以隐藏自己的 UI；② 在挂载点上 `stopPropagation` 掉 `keydown`/`keyup`，避免播放器输入触发 B 站快捷键；③ 在 `pagehide`（且非 bfcache 恢复）时停止引擎并卸载。
 
@@ -219,7 +226,7 @@ B 站是 SPA，`<video>` 会被替换。`MediaLocator` 用三条互补的路径�
 3. `externalGlobals`：把 preact 等模块映射到 CDN 暴露的全局变量，所以框架不进产物（也避免体积超标）。
 4. 自定义插件 `readableCssOutput()`：把 Vite 内联的样式字符串展开成逐行字符串数组，并要求**恰好存在一个**内联样式表，否则构建报错。
 
-`scripts/audit-userscript.mjs` 的校验项（构建即门禁）：`@require` 顺序/版本/哈希、`@match` 只能是一条 video 规则、`@version` 与 `package.json` 一致、MIT 许可声明、依赖必须是精确版本、禁止打包 `lucide-preact`、体积 ≤2MB、`THIRD_PARTY_NOTICES.txt` 全文内联、最长行 ≤1000、关键业务符号（`installAudioOnlyInterceptors`/`rewritePlayurlPayload`/`PlayerEngine`）必须保留、禁止 `eval`/`new Function`/动态 script、禁止框架开发态标记、CSS 必须可读。
+`scripts/audit-userscript.mjs` 的校验项（构建即门禁）：`@require` 顺序/版本/哈希、`@match` 必须恰好是 video 页 + space 页两条且顺序固定、`@version` 与 `package.json` 一致、MIT 许可声明、依赖必须是精确版本、禁止打包 `lucide-preact`、体积 ≤2MB、`THIRD_PARTY_NOTICES.txt` 全文内联、最长行 ≤1000、关键业务符号（`installAudioOnlyInterceptors`/`rewritePlayurlPayload`/`PlayerEngine`）必须保留、禁止 `eval`/`new Function`/动态 script、禁止框架开发态标记、CSS 必须可读。
 
 `npm run verify:cdn` 会访问 jsDelivr 校验这些 URL 仍然可用且哈希匹配。
 
@@ -236,8 +243,8 @@ B 站是 SPA，`<video>` 会被替换。`MediaLocator` 用三条互补的路径�
 ## 10. 明确的非目标（防止「幻觉式需求」）
 
 - 不下载、不转码、不缓存音视频；不提供离线播放。
-- 不跨站点工作：`@match` 只有 B 站 `/video/` 页面。
-- 不修改 B 站账号数据（收藏、投币等）；只读取公开的视频/章节接口（`/x/web-interface/view`、`/x/player/wbi/v2`）。
+- 不跨站点工作：`@match` 只有 B 站 `/video/` 页面与 `space.bilibili.com` 空间页（后者只在收藏页 `favlist` 显示 UI，其它空间页脚本惰性加载、不渲染任何东西）。
+- 不修改 B 站账号数据（收藏、投币等）；只读取公开的视频/章节接口（`/x/web-interface/view`、`/x/player/wbi/v2`）、当前登录用户的收藏夹内容（`/x/v3/fav/*`）以及公开的视频合集（`/x/polymer/web-space/seasons_archives_list`）——全部只读、不写回 B 站。
 - 不收集、不上传任何用户数据。
 - 不试图绕过会员/区域限制：能被改写的只有页面本来就能拿到的清单。
 - 纯音频模式不承诺总是生效；抢不到拦截时机或结构不匹配时**必须**回退并如实提示。

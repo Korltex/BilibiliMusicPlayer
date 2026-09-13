@@ -4,13 +4,14 @@
 // @name:zh-CN         Bilibili 音乐播放器
 // @name:zh-TW         Bilibili 音樂播放器
 // @namespace          bilibili-music-player
-// @version            0.1.7
+// @version            0.1.8
 // @author             Korltex
 // @description        A music playlist player for Bilibili videos.
 // @description:en     A music playlist player for Bilibili videos.
 // @description:zh-CN  将喜欢的 Bilibili 视频整理成可播放的音乐歌单。
 // @license            MIT
 // @match              https://www.bilibili.com/video/*
+// @match              https://space.bilibili.com/*
 // @require            https://cdn.jsdelivr.net/npm/preact@10.29.7/dist/preact.min.umd.js#sha256=vWCK8okVrPZcOCL+DYDSHpswNp61X5Ab29I+Khh2Erk=
 // @require            https://cdn.jsdelivr.net/npm/preact@10.29.7/hooks/dist/hooks.umd.js#sha256=XCkjjl3JnfMG1/f/8DhZGjl8/Pq7Wfgfve9D1nCqBWY=
 // @require            https://cdn.jsdelivr.net/npm/preact@10.29.7/jsx-runtime/dist/jsxRuntime.umd.js#sha256=viwpXhBqgKvdcE++nq539c5Fuc8yTKsXTqZ1NvV1daY=
@@ -129,6 +130,10 @@
 		"}",
 		"",
 		":host([data-web-fullscreen]) {",
+		"  display: none !important;",
+		"}",
+		"",
+		":host([data-outside-route]) {",
 		"  display: none !important;",
 		"}",
 		"",
@@ -312,6 +317,7 @@
 		".brand {",
 		"  display: flex;",
 		"  min-width: 0;",
+		"  flex: 1 1 auto;",
 		"  align-items: center;",
 		"  gap: 8px;",
 		"}",
@@ -327,6 +333,7 @@
 		"  display: grid;",
 		"  width: 26px;",
 		"  height: 26px;",
+		"  flex: 0 0 auto;",
 		"  place-items: center;",
 		"  border-radius: 6px;",
 		"  color: #fff;",
@@ -334,10 +341,14 @@
 		"}",
 		"",
 		".brand strong {",
+		"  overflow: hidden;",
+		"  text-overflow: ellipsis;",
+		"  white-space: nowrap;",
 		"  font-size: 14px;",
 		"}",
 		"",
 		".version {",
+		"  flex: 0 0 auto;",
 		"  color: var(--muted);",
 		"  font-size: 11px;",
 		"}",
@@ -1075,6 +1086,136 @@
 		"  color: var(--muted);",
 		"}",
 		"",
+		".import-fav-modal {",
+		"  position: absolute;",
+		"  inset: 0;",
+		"  z-index: 10;",
+		"  display: grid;",
+		"  place-items: center;",
+		"  padding: 16px;",
+		"  background: rgb(0 0 0 / 45%);",
+		"}",
+		"",
+		".import-fav-card {",
+		"  display: flex;",
+		"  width: 100%;",
+		"  max-width: 320px;",
+		"  max-height: 100%;",
+		"  overflow: auto;",
+		"  flex-direction: column;",
+		"  gap: 10px;",
+		"  border: 1px solid var(--border);",
+		"  border-radius: 8px;",
+		"  padding: 14px;",
+		"  background: var(--bg);",
+		"  box-shadow: 0 18px 60px rgb(0 0 0 / 42%);",
+		"}",
+		"",
+		".import-fav-card p {",
+		"  margin: 0;",
+		"}",
+		"",
+		".import-fav-form {",
+		"  display: flex;",
+		"  flex-direction: column;",
+		"  gap: 10px;",
+		"}",
+		"",
+		".import-fav-form input {",
+		"  min-width: 0;",
+		"  height: 34px;",
+		"  border: 1px solid var(--border);",
+		"  border-radius: 6px;",
+		"  padding: 0 9px;",
+		"  color: var(--text);",
+		"  outline: none;",
+		"  background: var(--surface);",
+		"}",
+		"",
+		".import-fav-form input:focus {",
+		"  border-color: var(--accent);",
+		"}",
+		"",
+		".import-fav-actions {",
+		"  display: flex;",
+		"  justify-content: flex-end;",
+		"  gap: 6px;",
+		"}",
+		"",
+		".import-fav-button {",
+		"  display: inline-flex;",
+		"  height: 32px;",
+		"  align-items: center;",
+		"  justify-content: center;",
+		"  border: 0;",
+		"  border-radius: 6px;",
+		"  padding: 0 12px;",
+		"  cursor: pointer;",
+		"}",
+		"",
+		".import-fav-button.primary {",
+		"  color: #fff;",
+		"  background: var(--accent);",
+		"}",
+		"",
+		".import-fav-button.primary:hover {",
+		"  background: var(--accent-hover);",
+		"}",
+		"",
+		".import-fav-button.secondary {",
+		"  color: var(--text);",
+		"  background: var(--surface);",
+		"}",
+		"",
+		".import-fav-button.secondary:hover {",
+		"  background: var(--surface-hover);",
+		"}",
+		"",
+		".import-fav-button:disabled {",
+		"  cursor: not-allowed;",
+		"  opacity: 0.4;",
+		"}",
+		"",
+		".import-fav-status,",
+		".import-fav-importing,",
+		".import-fav-done {",
+		"  display: flex;",
+		"  flex-direction: column;",
+		"  gap: 10px;",
+		"  color: var(--muted);",
+		"}",
+		"",
+		".import-fav-warning {",
+		"  color: var(--danger);",
+		"}",
+		"",
+		".import-fav-error {",
+		"  display: flex;",
+		"  flex-direction: column;",
+		"  gap: 10px;",
+		"  color: var(--danger);",
+		"}",
+		"",
+		".import-progress-track {",
+		"  overflow: hidden;",
+		"  height: 8px;",
+		"  border-radius: 999px;",
+		"  background: var(--surface-hover);",
+		"}",
+		"",
+		".import-progress-fill {",
+		"  height: 100%;",
+		"  border-radius: 999px;",
+		"  background: var(--accent);",
+		"  transition: width 120ms ease;",
+		"}",
+		"",
+		".import-progress-text {",
+		"  color: var(--muted);",
+		"  font-size: 12px;",
+		"  font-variant-numeric: tabular-nums;",
+		"}",
+		"",
 		"@media (max-width: 520px) {",
 		"  .player-panel {",
 		"    right: 12px;",
@@ -1131,7 +1272,7 @@
 	].join("\n");
 	var _style = (b, a = document.createElement("style")) => (a.append(b), a);
 	var styles_css_default = _style(styles_default);
-	var version = "0.1.7";
+	var version = "0.1.8";
 	function SvgIcon({ size = 24, strokeWidth = 2, children, ...props }) {
 		return (0, preact_jsx_runtime.jsx)("svg", {
 			xmlns: "http://www.w3.org/2000/svg",
@@ -1317,6 +1458,12 @@
 			children: [(0, preact_jsx_runtime.jsx)("path", { d: "M21 4v16" }), (0, preact_jsx_runtime.jsx)("path", { d: "M6.029 4.285A2 2 0 0 0 3 6v12a2 2 0 0 0 3.029 1.715l9.997-5.998a2 2 0 0 0 .003-3.432z" })]
 		});
 	}
+	function Star(props) {
+		return (0, preact_jsx_runtime.jsx)(SvgIcon, {
+			...props,
+			children: (0, preact_jsx_runtime.jsx)("path", { d: "M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" })
+		});
+	}
 	function Trash2(props) {
 		return (0, preact_jsx_runtime.jsxs)(SvgIcon, {
 			...props,
@@ -1364,6 +1511,629 @@
 			...props,
 			children: [(0, preact_jsx_runtime.jsx)("path", { d: "M18 6 6 18" }), (0, preact_jsx_runtime.jsx)("path", { d: "m6 6 12 12" })]
 		});
+	}
+	function readRecord$1(value) {
+		return value !== null && typeof value === "object" ? value : void 0;
+	}
+	function createAbortError() {
+		return Object.assign(new Error("已中止导入"), { name: "AbortError" });
+	}
+	function sleep(ms, signal) {
+		return new Promise((resolve, reject) => {
+			if (signal?.aborted) {
+				reject(createAbortError());
+				return;
+			}
+			const onAbort = () => {
+				clearTimeout(timer);
+				reject(createAbortError());
+			};
+			const timer = setTimeout(() => {
+				signal?.removeEventListener("abort", onAbort);
+				resolve();
+			}, ms);
+			signal?.addEventListener("abort", onAbort, { once: true });
+		});
+	}
+	function randomDelay(signal) {
+		return sleep(800 + Math.random() * 700, signal);
+	}
+	function asNetworkError(error, fallback) {
+		return error instanceof Error ? error : new Error(fallback);
+	}
+	var FAV_LIST_URL = "https://api.bilibili.com/x/v3/fav/resource/list";
+	var PAGE_SIZE$1 = 20;
+	function favoritePlaylistId(fid) {
+		return `favorite-${fid}`;
+	}
+	function favoriteTrackId(fid, bvid, page) {
+		return `favorite-${fid}-${bvid}-${page && page > 1 ? page : 1}`;
+	}
+	function parseFavUrl(url) {
+		const input = url.trim();
+		if (!input) return { kind: "unknown" };
+		let parsed;
+		try {
+			parsed = new URL(input);
+		} catch {
+			return { kind: "unknown" };
+		}
+		const host = parsed.hostname.toLowerCase();
+		if (host !== "bilibili.com" && !host.endsWith(".bilibili.com")) return { kind: "unknown" };
+		const ownerMid = readOwnerMid(parsed);
+		if (parsed.searchParams.get("ctype") === "21") {
+			const seasonId = parsed.searchParams.get("fid");
+			if (seasonId && /^\d+$/.test(seasonId)) return {
+				kind: "season",
+				target: {
+					seasonId,
+					...ownerMid ? { mid: ownerMid } : {}
+				}
+			};
+			return { kind: "unknown" };
+		}
+		if (parsed.searchParams.has("sid") || /\/lists(\/|$)/i.test(parsed.pathname)) return {
+			kind: "unsupported",
+			message: "这是合集/列表页链接，请改用收藏页 favlist 里的链接。"
+		};
+		const fid = parsed.searchParams.get("fid");
+		if (fid && /^\d+$/.test(fid)) return {
+			kind: "folder",
+			target: {
+				fid,
+				...ownerMid ? { ownerMid } : {}
+			}
+		};
+		const mediaListMatch = parsed.pathname.match(/\/medialist\/detail\/ml(\d+)/i);
+		if (mediaListMatch) return {
+			kind: "folder",
+			target: { fid: mediaListMatch[1] }
+		};
+		return { kind: "unknown" };
+	}
+	function readOwnerMid(url) {
+		if (url.hostname.toLowerCase() !== "space.bilibili.com") return;
+		return url.pathname.match(/^\/(\d+)\//)?.[1];
+	}
+	function mapFavToTrack(fid, media, now = Date.now()) {
+		const item = readRecord$1(media);
+		if (!item) return;
+		const type = item.type;
+		const bvid = item.bvid;
+		if (type !== 2 || typeof bvid !== "string" || !bvid.trim()) return;
+		const attr = item.attr;
+		if (typeof attr === "number" && attr !== 0) return;
+		const title = typeof item.title === "string" ? item.title.trim() : "";
+		const page = typeof item.page === "number" && Number.isInteger(item.page) && item.page > 1 ? item.page : void 0;
+		const uploader = readRecord$1(item.upper)?.name;
+		const rawCover = item.cover;
+		const cover = typeof rawCover === "string" && rawCover.trim() ? rawCover.trim().replace(/^http:/i, "https:") : void 0;
+		const duration = typeof item.duration === "number" && Number.isFinite(item.duration) && item.duration > 0 ? item.duration : 0;
+		return {
+			id: favoriteTrackId(fid, bvid, page),
+			bvid,
+			...page !== void 0 ? { page } : {},
+			title: title || bvid,
+			...typeof uploader === "string" && uploader.trim() ? { uploader: uploader.trim() } : {},
+			...cover ? { cover } : {},
+			startTime: 0,
+			duration,
+			addedAt: now,
+			source: "favorite"
+		};
+	}
+	async function fetchFavFolderInfo(fid, options = {}) {
+		const page = await requestFavPage(fid, 1, options);
+		const name = readTitle(page.info);
+		if (!name) throw new Error("收藏夹不存在或链接无效");
+		const ownerMid = readMid$1(page.info);
+		return {
+			name,
+			mediaCount: readMediaCount(page.info),
+			...ownerMid ? { ownerMid } : {}
+		};
+	}
+	async function fetchFavFolder(fid, options = {}) {
+		const delay = options.delay ?? randomDelay;
+		const tracks = [];
+		let name = "";
+		let total = 0;
+		let skipped = 0;
+		let pn = 1;
+		for (;;) {
+			if (options.signal?.aborted) throw createAbortError();
+			const page = await requestFavPage(fid, pn, options);
+			if (pn === 1) {
+				name = readTitle(page.info);
+				total = readMediaCount(page.info);
+			}
+			for (const media of page.medias) {
+				const track = mapFavToTrack(fid, media);
+				if (track) tracks.push(track);
+				else skipped += 1;
+			}
+			const loaded = tracks.length;
+			options.onProgress?.({
+				loaded,
+				total: total || loaded,
+				skipped
+			});
+			if (!page.hasMore) break;
+			await delay(options.signal);
+			pn += 1;
+		}
+		return {
+			name,
+			tracks,
+			skipped
+		};
+	}
+	async function requestFavPage(fid, pn, options) {
+		const fetcher = options.fetcher ?? fetch;
+		const url = new URL(FAV_LIST_URL);
+		url.searchParams.set("media_id", fid);
+		url.searchParams.set("ps", String(PAGE_SIZE$1));
+		url.searchParams.set("pn", String(pn));
+		url.searchParams.set("platform", "web");
+		let response;
+		try {
+			response = await fetcher(url, {
+				credentials: "include",
+				signal: options.signal
+			});
+		} catch (error) {
+			throw asNetworkError(error, "网络异常，导入失败");
+		}
+		if (response.status === 412) throw new Error("请求过于频繁，已触发 B 站风控，请稍后再试");
+		if (!response.ok) throw new Error(`网络异常（HTTP ${response.status}）`);
+		let payload;
+		try {
+			payload = await response.json();
+		} catch {
+			throw new Error("网络异常，导入失败");
+		}
+		const root = readRecord$1(payload);
+		if (root?.code !== 0) throw new Error(favCodeMessage(root?.code, root?.message));
+		const data = readRecord$1(root?.data);
+		const info = readRecord$1(data?.info);
+		assertFavOwner(info, pn, options);
+		return {
+			info,
+			medias: Array.isArray(data?.medias) ? data.medias : [],
+			hasMore: data?.has_more === true
+		};
+	}
+	function assertFavOwner(info, pn, options) {
+		if (pn !== 1 || options.expectedOwnerMid === void 0) return;
+		const folderMid = readMid$1(info);
+		if (folderMid !== void 0 && folderMid !== options.expectedOwnerMid) throw new Error("链接与收藏夹不匹配：解析出的收藏夹不属于该 UP 主，可能不是收藏夹链接。已停止导入。");
+	}
+	function readTitle(info) {
+		return typeof info?.title === "string" ? info.title.trim() : "";
+	}
+	function readMediaCount(info) {
+		const value = info?.media_count;
+		return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 0;
+	}
+	function readMid$1(info) {
+		const raw = info?.mid ?? readRecord$1(info?.upper)?.mid;
+		if (typeof raw === "number" && Number.isFinite(raw)) return String(raw);
+		if (typeof raw === "string" && /^\d+$/.test(raw.trim())) return raw.trim();
+	}
+	function favCodeMessage(code, message) {
+		if (code === -101) return "需要登录 Bilibili 账号";
+		if (code === -403) return "收藏夹为私密或无权访问";
+		if (code === -400) return "收藏夹不存在或链接无效";
+		return `收藏夹获取失败：${typeof message === "string" && message.trim() && message !== "0" ? message.trim() : "导入失败"}`;
+	}
+	var SEASON_ARCHIVES_URL = "https://api.bilibili.com/x/polymer/web-space/seasons_archives_list";
+	var PAGE_SIZE = 30;
+	var MAX_PAGES = 200;
+	var FALLBACK_MID = "1";
+	function seasonPlaylistId(seasonId) {
+		return `season-${seasonId}`;
+	}
+	function seasonTrackId(seasonId, bvid) {
+		return `season-${seasonId}-${bvid}`;
+	}
+	function mapSeasonArchiveToTrack(seasonId, archive, now = Date.now()) {
+		const item = readRecord$1(archive);
+		if (!item) return;
+		const bvid = item.bvid;
+		if (typeof bvid !== "string" || !bvid.trim()) return;
+		const title = typeof item.title === "string" ? item.title.trim() : "";
+		const rawCover = item.pic;
+		const cover = typeof rawCover === "string" && rawCover.trim() ? rawCover.trim().replace(/^http:/i, "https:") : void 0;
+		const duration = typeof item.duration === "number" && Number.isFinite(item.duration) && item.duration > 0 ? item.duration : 0;
+		return {
+			id: seasonTrackId(seasonId, bvid),
+			bvid,
+			title: title || bvid,
+			...cover ? { cover } : {},
+			startTime: 0,
+			duration,
+			addedAt: now,
+			source: "favorite"
+		};
+	}
+	async function fetchSeasonInfo(seasonId, options = {}) {
+		const page = await requestSeasonPage(seasonId, 1, options);
+		const name = readSeasonName(page.meta);
+		if (!name) throw new Error("合集不存在或链接无效");
+		const ownerMid = readMid(page.meta);
+		return {
+			name,
+			total: readTotal(page.meta, page.page),
+			...ownerMid ? { ownerMid } : {}
+		};
+	}
+	async function fetchSeason(seasonId, options = {}) {
+		const delay = options.delay ?? randomDelay;
+		const tracks = [];
+		let name = "";
+		let total = 0;
+		let skipped = 0;
+		let pageNum = 1;
+		for (;;) {
+			if (options.signal?.aborted) throw createAbortError();
+			const page = await requestSeasonPage(seasonId, pageNum, options);
+			if (pageNum === 1) {
+				name = readSeasonName(page.meta);
+				total = readTotal(page.meta, page.page);
+			}
+			for (const archive of page.archives) {
+				const track = mapSeasonArchiveToTrack(seasonId, archive);
+				if (track) tracks.push(track);
+				else skipped += 1;
+			}
+			const loaded = tracks.length;
+			options.onProgress?.({
+				loaded,
+				total: total || loaded
+			});
+			if (total > 0 && loaded + skipped >= total) break;
+			if (page.archives.length === 0 || pageNum >= MAX_PAGES) break;
+			await delay(options.signal);
+			pageNum += 1;
+		}
+		return {
+			name,
+			tracks,
+			skipped
+		};
+	}
+	async function requestSeasonPage(seasonId, pageNum, options) {
+		const fetcher = options.fetcher ?? fetch;
+		const url = new URL(SEASON_ARCHIVES_URL);
+		url.searchParams.set("mid", options.mid ?? FALLBACK_MID);
+		url.searchParams.set("season_id", seasonId);
+		url.searchParams.set("sort_reverse", "false");
+		url.searchParams.set("page_num", String(pageNum));
+		url.searchParams.set("page_size", String(PAGE_SIZE));
+		let response;
+		try {
+			response = await fetcher(url, {
+				credentials: "include",
+				signal: options.signal
+			});
+		} catch (error) {
+			throw asNetworkError(error, "网络异常，导入失败");
+		}
+		if (response.status === 412) throw new Error("请求过于频繁，已触发 B 站风控，请稍后再试");
+		if (!response.ok) throw new Error(`网络异常（HTTP ${response.status}）`);
+		let payload;
+		try {
+			payload = await response.json();
+		} catch {
+			throw new Error("网络异常，导入失败");
+		}
+		const root = readRecord$1(payload);
+		if (root?.code !== 0) throw new Error(seasonCodeMessage(root?.code, root?.message));
+		const data = readRecord$1(root?.data);
+		return {
+			meta: readRecord$1(data?.meta),
+			page: readRecord$1(data?.page),
+			archives: Array.isArray(data?.archives) ? data.archives : []
+		};
+	}
+	function readSeasonName(meta) {
+		const title = typeof meta?.title === "string" ? meta.title.trim() : "";
+		if (title) return title;
+		return typeof meta?.name === "string" ? meta.name.trim() : "";
+	}
+	function readTotal(meta, page) {
+		return toCount(meta?.total) || toCount(page?.total);
+	}
+	function toCount(value) {
+		return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 0;
+	}
+	function readMid(meta) {
+		const raw = meta?.mid;
+		if (typeof raw === "number" && Number.isFinite(raw)) return String(raw);
+		if (typeof raw === "string" && /^\d+$/.test(raw.trim())) return raw.trim();
+	}
+	function seasonCodeMessage(code, message) {
+		if (code === -101) return "需要登录 Bilibili 账号";
+		if (code === -352 || code === -412) return "请求被 B 站风控拦截，请稍后再试或刷新页面";
+		if (code === -404 || code === 11010) return "合集不存在或链接无效";
+		return `合集获取失败：${typeof message === "string" && message.trim() && message !== "0" ? message.trim() : "导入失败"}`;
+	}
+	function ImportFavModal({ store, onClose }) {
+		const [phase, setPhase] = (0, preact_hooks.useState)("input");
+		const [url, setUrl] = (0, preact_hooks.useState)("");
+		const [source, setSource] = (0, preact_hooks.useState)();
+		const [info, setInfo] = (0, preact_hooks.useState)();
+		const [progress, setProgress] = (0, preact_hooks.useState)();
+		const [summary, setSummary] = (0, preact_hooks.useState)("");
+		const [error, setError] = (0, preact_hooks.useState)("");
+		const controller = (0, preact_hooks.useRef)(null);
+		const playlistId = source ? source.kind === "folder" ? favoritePlaylistId(source.target.fid) : seasonPlaylistId(source.target.seasonId) : void 0;
+		const existingPlaylist = playlistId ? store.data.value.playlists.find((item) => item.id === playlistId) : void 0;
+		const resetController = () => {
+			controller.current?.abort();
+			controller.current = null;
+		};
+		const close = () => {
+			resetController();
+			onClose();
+		};
+		const backToInput = () => {
+			resetController();
+			setSource(void 0);
+			setInfo(void 0);
+			setProgress(void 0);
+			setError("");
+			setPhase("input");
+		};
+		const parse = async (event) => {
+			event.preventDefault();
+			const parsed = parseFavUrl(url);
+			if (parsed.kind === "unsupported") {
+				setError(parsed.message);
+				setPhase("error");
+				return;
+			}
+			if (parsed.kind !== "folder" && parsed.kind !== "season") {
+				setError("无法解析链接，请粘贴 B 站收藏夹或合集链接（如 https://space.bilibili.com/…/favlist?fid=…）");
+				setPhase("error");
+				return;
+			}
+			resetController();
+			const next = new AbortController();
+			controller.current = next;
+			setError("");
+			setPhase("confirming");
+			try {
+				if (parsed.kind === "folder") {
+					setSource({
+						kind: "folder",
+						target: parsed.target
+					});
+					const result = await fetchFavFolderInfo(parsed.target.fid, {
+						signal: next.signal,
+						expectedOwnerMid: parsed.target.ownerMid
+					});
+					setInfo({
+						name: result.name,
+						count: result.mediaCount
+					});
+				} else {
+					setSource({
+						kind: "season",
+						target: parsed.target
+					});
+					const result = await fetchSeasonInfo(parsed.target.seasonId, {
+						signal: next.signal,
+						mid: parsed.target.mid
+					});
+					setInfo({
+						name: result.name,
+						count: result.total
+					});
+				}
+				setPhase("confirm");
+			} catch (err) {
+				if (!next.signal.aborted) {
+					setError(readMessage(err));
+					setPhase("error");
+				}
+			}
+		};
+		const runImport = async () => {
+			if (!source || !info) return;
+			resetController();
+			const next = new AbortController();
+			controller.current = next;
+			setError("");
+			setProgress(void 0);
+			setPhase("importing");
+			try {
+				const result = source.kind === "folder" ? await fetchFavFolder(source.target.fid, {
+					signal: next.signal,
+					expectedOwnerMid: source.target.ownerMid,
+					onProgress: (value) => setProgress({
+						loaded: value.loaded,
+						total: value.total
+					})
+				}) : await fetchSeason(source.target.seasonId, {
+					signal: next.signal,
+					mid: source.target.mid,
+					onProgress: (value) => setProgress({
+						loaded: value.loaded,
+						total: value.total
+					})
+				});
+				const playlist = {
+					id: source.kind === "folder" ? favoritePlaylistId(source.target.fid) : seasonPlaylistId(source.target.seasonId),
+					name: info.name,
+					tracks: result.tracks,
+					createdAt: existingPlaylist?.createdAt ?? Date.now(),
+					updatedAt: Date.now()
+				};
+				store.importPlaylist(playlist);
+				setSummary(`成功导入 ${result.tracks.length} 个视频，已跳过 ${result.skipped} 个失效视频`);
+				setPhase("done");
+			} catch (err) {
+				if (next.signal.aborted) setPhase("input");
+				else {
+					setError(readMessage(err));
+					setPhase("error");
+				}
+			}
+		};
+		const abortImport = () => {
+			controller.current?.abort();
+		};
+		const percent = progress && progress.total > 0 ? Math.min(100, Math.round(progress.loaded / progress.total * 100)) : 0;
+		const progressText = progress ? `正在导入… ${progress.loaded}/${progress.total > 0 ? progress.total : "?"}（${percent}%）` : "正在导入…";
+		return (0, preact_jsx_runtime.jsx)("div", {
+			class: "import-fav-modal",
+			role: "dialog",
+			"aria-modal": "true",
+			"aria-label": "导入 Bilibili 收藏夹",
+			children: (0, preact_jsx_runtime.jsxs)("div", {
+				class: "import-fav-card",
+				children: [
+					(0, preact_jsx_runtime.jsxs)("div", {
+						class: "editor-heading",
+						children: [(0, preact_jsx_runtime.jsx)("strong", { children: "导入收藏夹 / 合集" }), (0, preact_jsx_runtime.jsx)("button", {
+							class: "icon-button",
+							type: "button",
+							title: "关闭",
+							"aria-label": "关闭",
+							onClick: close,
+							children: (0, preact_jsx_runtime.jsx)(X, {
+								size: 16,
+								"aria-hidden": "true"
+							})
+						})]
+					}),
+					phase === "input" && (0, preact_jsx_runtime.jsxs)("form", {
+						class: "import-fav-form",
+						onSubmit: parse,
+						children: [(0, preact_jsx_runtime.jsx)("input", {
+							value: url,
+							placeholder: "粘贴收藏夹或合集链接，如 https://space.bilibili.com/…/favlist?fid=…",
+							"aria-label": "收藏夹链接",
+							autoFocus: true,
+							onInput: (event) => setUrl(event.currentTarget.value)
+						}), (0, preact_jsx_runtime.jsxs)("div", {
+							class: "import-fav-actions",
+							children: [(0, preact_jsx_runtime.jsx)("button", {
+								class: "import-fav-button secondary",
+								type: "button",
+								onClick: close,
+								children: "取消"
+							}), (0, preact_jsx_runtime.jsx)("button", {
+								class: "import-fav-button primary",
+								type: "submit",
+								disabled: !url.trim(),
+								children: "解析"
+							})]
+						})]
+					}),
+					phase === "confirming" && (0, preact_jsx_runtime.jsx)("div", {
+						class: "import-fav-status",
+						children: "正在获取信息…"
+					}),
+					phase === "confirm" && info && (0, preact_jsx_runtime.jsxs)("div", {
+						class: "import-fav-confirm",
+						children: [
+							(0, preact_jsx_runtime.jsxs)("p", { children: [
+								"即将导入歌单「",
+								info.name,
+								"」，共 ",
+								info.count,
+								" 条内容"
+							] }),
+							existingPlaylist && (0, preact_jsx_runtime.jsx)("p", {
+								class: "import-fav-warning",
+								children: "本地已存在该歌单，覆盖导入将替换其中的歌曲"
+							}),
+							(0, preact_jsx_runtime.jsxs)("div", {
+								class: "import-fav-actions",
+								children: [(0, preact_jsx_runtime.jsx)("button", {
+									class: "import-fav-button secondary",
+									type: "button",
+									onClick: close,
+									children: "取消"
+								}), (0, preact_jsx_runtime.jsx)("button", {
+									class: "import-fav-button primary",
+									type: "button",
+									onClick: () => void runImport(),
+									children: existingPlaylist ? "覆盖导入" : "导入"
+								})]
+							})
+						]
+					}),
+					phase === "importing" && (0, preact_jsx_runtime.jsxs)("div", {
+						class: "import-fav-importing",
+						children: [
+							(0, preact_jsx_runtime.jsx)("div", {
+								class: "import-progress",
+								role: "progressbar",
+								"aria-label": "导入进度",
+								"aria-valuemin": 0,
+								"aria-valuemax": 100,
+								"aria-valuenow": percent,
+								children: (0, preact_jsx_runtime.jsx)("div", {
+									class: "import-progress-track",
+									children: (0, preact_jsx_runtime.jsx)("div", {
+										class: "import-progress-fill",
+										style: { width: `${percent}%` }
+									})
+								})
+							}),
+							(0, preact_jsx_runtime.jsx)("div", {
+								class: "import-progress-text",
+								children: progressText
+							}),
+							(0, preact_jsx_runtime.jsx)("div", {
+								class: "import-fav-actions",
+								children: (0, preact_jsx_runtime.jsx)("button", {
+									class: "import-fav-button secondary",
+									type: "button",
+									onClick: abortImport,
+									children: "中止导入"
+								})
+							})
+						]
+					}),
+					phase === "done" && (0, preact_jsx_runtime.jsxs)("div", {
+						class: "import-fav-done",
+						children: [(0, preact_jsx_runtime.jsx)("p", { children: summary }), (0, preact_jsx_runtime.jsx)("div", {
+							class: "import-fav-actions",
+							children: (0, preact_jsx_runtime.jsx)("button", {
+								class: "import-fav-button primary",
+								type: "button",
+								onClick: close,
+								children: "完成"
+							})
+						})]
+					}),
+					phase === "error" && (0, preact_jsx_runtime.jsxs)("div", {
+						class: "import-fav-error",
+						children: [(0, preact_jsx_runtime.jsx)("p", { children: error }), (0, preact_jsx_runtime.jsxs)("div", {
+							class: "import-fav-actions",
+							children: [(0, preact_jsx_runtime.jsx)("button", {
+								class: "import-fav-button secondary",
+								type: "button",
+								onClick: close,
+								children: "取消"
+							}), (0, preact_jsx_runtime.jsx)("button", {
+								class: "import-fav-button primary",
+								type: "button",
+								onClick: backToInput,
+								children: "返回"
+							})]
+						})]
+					})
+				]
+			})
+		});
+	}
+	function readMessage(error) {
+		return error instanceof Error && error.message ? error.message : "导入失败，请重试";
 	}
 	function createId(prefix) {
 		return `${prefix}-${typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`}`;
@@ -1495,6 +2265,35 @@
 	}
 	function validPositiveInteger(value) {
 		return typeof value === "number" && Number.isInteger(value) && value > 0;
+	}
+	var VIDEO_PATH = /^\/video\//i;
+	var FAVLIST_PATH = /^\/\d+\/favlist\/?$/i;
+	function getPageRoute(url = location.href) {
+		const parsed = safeUrl(url);
+		if (!parsed) return "other";
+		const host = parsed.hostname.toLowerCase();
+		if (isBilibiliHost(host) && VIDEO_PATH.test(parsed.pathname)) return "video";
+		if (host === "space.bilibili.com" && isFavlistPath(parsed)) return "favlist";
+		return "other";
+	}
+	function isVideoPage(url = location.href) {
+		return getPageRoute(url) === "video";
+	}
+	function supportsPlayerUi(url = location.href) {
+		return getPageRoute(url) !== "other";
+	}
+	function isFavlistPath(parsed) {
+		return FAVLIST_PATH.test(parsed.pathname) || parsed.hash.includes("favlist");
+	}
+	function isBilibiliHost(host) {
+		return host === "bilibili.com" || host.endsWith(".bilibili.com");
+	}
+	function safeUrl(url) {
+		try {
+			return new URL(url);
+		} catch {
+			return;
+		}
 	}
 	var _GM_addValueChangeListener = (() => typeof GM_addValueChangeListener != "undefined" ? GM_addValueChangeListener : void 0)();
 	var _GM_getValue = (() => typeof GM_getValue != "undefined" ? GM_getValue : void 0)();
@@ -1994,6 +2793,7 @@
 		const [creatingPlaylist, setCreatingPlaylist] = (0, preact_hooks.useState)(false);
 		const [newPlaylistName, setNewPlaylistName] = (0, preact_hooks.useState)("");
 		const [editorTrack, setEditorTrack] = (0, preact_hooks.useState)();
+		const [importOpen, setImportOpen] = (0, preact_hooks.useState)(false);
 		const launcherDrag = useDraggablePosition("launcher");
 		const panelDrag = useDraggablePosition("panel");
 		const data = store.data.value;
@@ -2037,6 +2837,11 @@
 			onClick: (event) => {
 				if (launcherDrag.consumeSuppressedClick()) {
 					event.preventDefault();
+					return;
+				}
+				if (!isVideoPage()) {
+					setDisplayMode("full");
+					setImportOpen(true);
 					return;
 				}
 				showPanel(layoutRepository.load().lastOpenMode);
@@ -2095,6 +2900,17 @@
 					}), (0, preact_jsx_runtime.jsxs)("div", {
 						class: "header-actions",
 						children: [
+							(0, preact_jsx_runtime.jsx)("button", {
+								class: "icon-button",
+								type: "button",
+								title: "导入 Bilibili 收藏夹",
+								"aria-label": "导入 Bilibili 收藏夹",
+								onClick: () => setImportOpen(true),
+								children: (0, preact_jsx_runtime.jsx)(Star, {
+									size: 18,
+									"aria-hidden": "true"
+								})
+							}),
 							(0, preact_jsx_runtime.jsx)("button", {
 								class: "icon-button reset-position-button",
 								type: "button",
@@ -2347,6 +3163,10 @@
 							})
 						]
 					}, track.id))
+				}),
+				importOpen && (0, preact_jsx_runtime.jsx)(ImportFavModal, {
+					store,
+					onClose: () => setImportOpen(false)
 				})
 			]
 		});
@@ -2819,6 +3639,14 @@
 			this.commitLibrary((data) => ({
 				...data,
 				playlists: [...data.playlists, playlist]
+			}));
+			this.selectPlaylist(playlist.id);
+		}
+		importPlaylist(playlist) {
+			const exists = this.data.peek().playlists.some((item) => item.id === playlist.id);
+			this.commitLibrary((data) => ({
+				...data,
+				playlists: exists ? data.playlists.map((item) => item.id === playlist.id ? playlist : item) : [...data.playlists, playlist]
 			}));
 			this.selectPlaylist(playlist.id);
 		}
@@ -3794,7 +4622,8 @@ html[${ROOT_ATTRIBUTE}="active"] video.bpx-player-video {
 	var HOST_ID = "bilibili-music-player-host";
 	var BILIBILI_PLAYER_SELECTOR = ".bpx-player-container";
 	var BILIBILI_WEB_FULLSCREEN_SELECTOR = `${BILIBILI_PLAYER_SELECTOR}[data-screen="web"]`;
-	audioOnlyController.start();
+	var ROUTE_POLL_INTERVAL = 300;
+	if (getPageRoute() === "video") audioOnlyController.start();
 	function containsBilibiliPlayer(node) {
 		return node instanceof Element && (node.matches(BILIBILI_PLAYER_SELECTOR) || node.querySelector(BILIBILI_PLAYER_SELECTOR) !== null);
 	}
@@ -3825,8 +4654,13 @@ html[${ROOT_ATTRIBUTE}="active"] video.bpx-player-video {
 			mountPoint.removeEventListener("keyup", stopPropagation);
 		};
 	}
+	var mounted = false;
 	function mount() {
-		if (document.getElementById(HOST_ID)) return;
+		if (mounted) return;
+		if (document.getElementById(HOST_ID)) {
+			mounted = true;
+			return;
+		}
 		const host = document.createElement("div");
 		host.id = HOST_ID;
 		const shadowRoot = host.attachShadow({ mode: "open" });
@@ -3843,14 +4677,40 @@ html[${ROOT_ATTRIBUTE}="active"] video.bpx-player-video {
 			engine,
 			audioOnly: audioOnlyController
 		}), mountPoint);
+		mounted = true;
+		syncRouteVisibility(host);
+		let currentHref = location.href;
+		const routeWatcher = window.setInterval(() => {
+			if (location.href === currentHref) return;
+			currentHref = location.href;
+			syncRouteVisibility(host);
+		}, ROUTE_POLL_INTERVAL);
 		window.addEventListener("pagehide", (event) => {
 			if (event.persisted) return;
+			window.clearInterval(routeWatcher);
 			stopObservingWebFullscreen();
 			stopIsolatingKeyboardEvents();
 			engine.stop();
 			(0, preact.render)(null, mountPoint);
 		}, { once: true });
 	}
-	if (document.documentElement) mount();
-	else document.addEventListener("readystatechange", mount, { once: true });
+	function syncRouteVisibility(host) {
+		host.toggleAttribute("data-outside-route", !supportsPlayerUi());
+	}
+	function start() {
+		if (supportsPlayerUi()) {
+			mount();
+			return;
+		}
+		let currentHref = location.href;
+		const pendingRouteWatcher = window.setInterval(() => {
+			if (location.href === currentHref) return;
+			currentHref = location.href;
+			if (!supportsPlayerUi()) return;
+			window.clearInterval(pendingRouteWatcher);
+			mount();
+		}, ROUTE_POLL_INTERVAL);
+	}
+	if (document.documentElement) start();
+	else document.addEventListener("readystatechange", start, { once: true });
 })(preact, preactHooks, jsxRuntime, preactSignals);

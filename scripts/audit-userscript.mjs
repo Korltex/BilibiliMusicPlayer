@@ -52,6 +52,11 @@ assert(
   "runtime manifest is not in dependency order",
 );
 
+const requiredMatches = [
+  "https://www.bilibili.com/video/*",
+  "https://space.bilibili.com/*",
+];
+
 for (const source of [userscript, metadata]) {
   assert(
     JSON.stringify(metadataValues(source, "require")) ===
@@ -59,9 +64,9 @@ for (const source of [userscript, metadata]) {
     "@require entries must use the declared order, exact versions, and local SHA-256 digests",
   );
   assert(
-    metadataValues(source, "match").join() ===
-      "https://www.bilibili.com/video/*",
-    "the userscript must remain limited to Bilibili /video/ pages",
+    JSON.stringify(metadataValues(source, "match")) ===
+      JSON.stringify(requiredMatches),
+    "@match entries must be exactly the Bilibili video page and the space pages",
   );
   assert(
     metadataValues(source, "version").join() === packageJson.version,

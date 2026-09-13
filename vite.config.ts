@@ -105,7 +105,10 @@ ${thirdPartyNotices}
         namespace: "bilibili-music-player",
         author: "Korltex",
         license: "MIT",
-        match: ["https://www.bilibili.com/video/*"],
+        match: [
+          "https://www.bilibili.com/video/*",
+          "https://space.bilibili.com/*",
+        ],
         require: requireUrls,
         "run-at": "document-start",
         noframes: true,

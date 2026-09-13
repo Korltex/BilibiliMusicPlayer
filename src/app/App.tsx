@@ -10,10 +10,12 @@ import {
   Plus,
   RotateCcw,
   Save,
+  Star,
   Trash2,
   Volume2,
   X,
 } from "./icons";
+import { ImportFavModal } from "./ImportFavModal";
 import type { AppStore } from "./store";
 import type { PlayerEngine } from "../playback/player-engine";
 import type { AudioOnlyController } from "../bili/audio-only-controller";
@@ -22,6 +24,7 @@ import {
   readCurrentVideoMetadata,
 } from "../bili/metadata";
 import { fetchVideoChapters, type VideoChapter } from "../bili/chapters";
+import { isVideoPage } from "../bili/page-route";
 import { formatTime, toEndSecond, toStartSecond } from "../core/time";
 import type { PlayMode, Track } from "../core/types";
 import { useDraggablePosition } from "./use-draggable-position";
@@ -51,6 +54,7 @@ export function App({ store, engine, audioOnly }: AppProps) {
   const [creatingPlaylist, setCreatingPlaylist] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState("");
   const [editorTrack, setEditorTrack] = useState<Track | "new">();
+  const [importOpen, setImportOpen] = useState(false);
   const launcherDrag = useDraggablePosition("launcher");
   const panelDrag = useDraggablePosition("panel");
 
@@ -118,6 +122,14 @@ export function App({ store, engine, audioOnly }: AppProps) {
             return;
           }
 
+          if (!isVideoPage()) {
+            // 收藏页等没有播放器的页面：直接进入完整面板并打开导入弹窗，
+            // 且不覆盖用户记住的面板形态。
+            setDisplayMode("full");
+            setImportOpen(true);
+            return;
+          }
+
           showPanel(layoutRepository.load().lastOpenMode);
         }}
       >
@@ -181,6 +193,15 @@ export function App({ store, engine, audioOnly }: AppProps) {
           <span class="version">{version}</span>
         </div>
         <div class="header-actions">
+          <button
+            class="icon-button"
+            type="button"
+            title="导入 Bilibili 收藏夹"
+            aria-label="导入 Bilibili 收藏夹"
+            onClick={() => setImportOpen(true)}
+          >
+            <Star size={18} aria-hidden="true" />
+          </button>
           <button
             class="icon-button reset-position-button"
             type="button"
@@ -449,6 +470,10 @@ export function App({ store, engine, audioOnly }: AppProps) {
           ))
         )}
       </div>
+
+      {importOpen && (
+        <ImportFavModal store={store} onClose={() => setImportOpen(false)} />
+      )}
     </section>
   );
 }

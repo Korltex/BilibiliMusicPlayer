@@ -3,13 +3,18 @@ import style from "./styles.css?style";
 import { App } from "./app/App";
 import { appStore } from "./app/store";
 import { audioOnlyController } from "./bili/audio-only-controller";
+import { getPageRoute, supportsPlayerUi } from "./bili/page-route";
 import { PlayerEngine } from "./playback/player-engine";
 
 const HOST_ID = "bilibili-music-player-host";
 const BILIBILI_PLAYER_SELECTOR = ".bpx-player-container";
 const BILIBILI_WEB_FULLSCREEN_SELECTOR = `${BILIBILI_PLAYER_SELECTOR}[data-screen="web"]`;
+const ROUTE_POLL_INTERVAL = 300;
 
-audioOnlyController.start();
+// 纯音频模式必须在页面脚本运行前决定是否安装拦截器，因此只在视频页启动。
+if (getPageRoute() === "video") {
+  audioOnlyController.start();
+}
 
 function containsBilibiliPlayer(node: Node): boolean {
   return (
@@ -66,8 +71,15 @@ function isolateKeyboardEvents(mountPoint: HTMLElement): () => void {
   };
 }
 
+let mounted = false;
+
 function mount(): void {
+  if (mounted) {
+    return;
+  }
+
   if (document.getElementById(HOST_ID)) {
+    mounted = true;
     return;
   }
 
@@ -88,6 +100,20 @@ function mount(): void {
     mountPoint,
   );
 
+  mounted = true;
+  syncRouteVisibility(host);
+
+  // SPA 路由变化：在空间页之间跳转时同步显示/隐藏 UI。
+  let currentHref = location.href;
+  const routeWatcher = window.setInterval(() => {
+    if (location.href === currentHref) {
+      return;
+    }
+
+    currentHref = location.href;
+    syncRouteVisibility(host);
+  }, ROUTE_POLL_INTERVAL);
+
   window.addEventListener(
     "pagehide",
     (event) => {
@@ -95,6 +121,7 @@ function mount(): void {
         return;
       }
 
+      window.clearInterval(routeWatcher);
       stopObservingWebFullscreen();
       stopIsolatingKeyboardEvents();
       engine.stop();
@@ -104,8 +131,35 @@ function mount(): void {
   );
 }
 
+function syncRouteVisibility(host: HTMLElement): void {
+  host.toggleAttribute("data-outside-route", !supportsPlayerUi());
+}
+
+function start(): void {
+  if (supportsPlayerUi()) {
+    mount();
+    return;
+  }
+
+  // 其它 space 页保持惰性：只等路由真正切到收藏页再挂载。
+  let currentHref = location.href;
+  const pendingRouteWatcher = window.setInterval(() => {
+    if (location.href === currentHref) {
+      return;
+    }
+
+    currentHref = location.href;
+    if (!supportsPlayerUi()) {
+      return;
+    }
+
+    window.clearInterval(pendingRouteWatcher);
+    mount();
+  }, ROUTE_POLL_INTERVAL);
+}
+
 if (document.documentElement) {
-  mount();
+  start();
 } else {
-  document.addEventListener("readystatechange", mount, { once: true });
+  document.addEventListener("readystatechange", start, { once: true });
 }

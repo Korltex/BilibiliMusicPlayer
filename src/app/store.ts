@@ -81,6 +81,22 @@ export class AppStore {
     this.selectPlaylist(playlist.id);
   }
 
+  importPlaylist(playlist: Playlist): void {
+    const exists = this.data
+      .peek()
+      .playlists.some((item) => item.id === playlist.id);
+
+    this.commitLibrary((data) => ({
+      ...data,
+      playlists: exists
+        ? data.playlists.map((item) =>
+            item.id === playlist.id ? playlist : item,
+          )
+        : [...data.playlists, playlist],
+    }));
+    this.selectPlaylist(playlist.id);
+  }
+
   removePlaylist(playlistId: string): void {
     const current = this.data.peek();
     if (current.playlists.length <= 1) {
