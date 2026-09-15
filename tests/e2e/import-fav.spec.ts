@@ -6,6 +6,7 @@ const VIDEO_URL = "https://www.bilibili.com/video/BV1ImportFav/";
 const FAV_API_GLOB = "https://api.bilibili.com/x/v3/fav/resource/list**";
 const SEASON_API_GLOB =
   "https://api.bilibili.com/x/polymer/web-space/seasons_archives_list**";
+const VIEW_API_GLOB = "https://api.bilibili.com/x/web-interface/view**";
 
 async function installLocalStorageGm(page: Page): Promise<void> {
   await page.addInitScript(() => {
@@ -58,7 +59,47 @@ async function readStoredAppData(page: Page): Promise<AppData> {
   });
 }
 
-function favMedia(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+/** 按 bvid 分发 `/x/web-interface/view` 的响应。 */
+async function routeViews(
+  page: Page,
+  viewers: Record<string, unknown>,
+): Promise<void> {
+  await page.route(VIEW_API_GLOB, async (route) => {
+    const bvid = new URL(route.request().url()).searchParams.get("bvid") ?? "";
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify(
+        viewers[bvid] ?? { code: -404, message: "啥都木有" },
+      ),
+    });
+  });
+}
+
+function viewPayload(
+  bvid: string,
+  title: string,
+  parts: { cid: number; page: number; part: string; duration: number }[],
+  overrides: Record<string, unknown> = {},
+): unknown {
+  return {
+    code: 0,
+    data: {
+      bvid,
+      title,
+      pic: "http://i2.hdslb.com/cover.jpg",
+      duration: parts.reduce((sum, item) => sum + item.duration, 0),
+      owner: { mid: 3546619314178489, name: "测试UP" },
+      pages: parts,
+      ...overrides,
+    },
+  };
+}
+
+const ONE_PART = [{ cid: 111, page: 1, part: "正片", duration: 120 }];
+
+function favMedia(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
   return {
     id: 1,
     type: 2,
@@ -73,7 +114,39 @@ function favMedia(overrides: Record<string, unknown> = {}): Record<string, unkno
   };
 }
 
-test("imports a favorite folder as a new playlist", async ({ page }) => {
+function seasonPayload(
+  archives: Record<string, unknown>[],
+  meta: Record<string, unknown> = {},
+): unknown {
+  return {
+    code: 0,
+    data: {
+      meta: {
+        mid: 1,
+        name: "合集·我的合集",
+        title: "我的合集",
+        season_id: 8888,
+        total: archives.length,
+        ...meta,
+      },
+      archives,
+      page: { page_num: 1, page_size: 30, total: archives.length },
+    },
+  };
+}
+
+function archive(bvid: string, title: string): Record<string, unknown> {
+  return {
+    bvid,
+    title,
+    duration: 120,
+    pic: "http://i2.hdslb.com/season.jpg",
+  };
+}
+
+test("imports a favorite folder and splits its multi-part videos", async ({
+  page,
+}) => {
   await page.route(FAV_API_GLOB, async (route) => {
     await route.fulfill({
       contentType: "application/json",
@@ -93,9 +166,10 @@ test("imports a favorite folder as a new playlist", async ({ page }) => {
               id: 3,
               title: "歌曲二",
               cover: "http://i0.hdslb.com/cover-b.jpg",
-              duration: 90,
+              duration: 300,
               upper: { name: "UP主二" },
               bvid: "BV1ImportB",
+              page: 2,
             }),
           ],
           has_more: false,
@@ -103,13 +177,19 @@ test("imports a favorite folder as a new playlist", async ({ page }) => {
       }),
     });
   });
+  await routeViews(page, {
+    BV1ImportB: viewPayload("BV1ImportB", "歌曲二", [
+      { cid: 111, page: 1, part: "第一段", duration: 100 },
+      { cid: 222, page: 2, part: "第二段", duration: 200 },
+    ]),
+  });
 
   await openImportTestPage(page);
 
-  await page.getByRole("button", { name: "导入 Bilibili 收藏夹" }).click();
-  const modal = page.getByRole("dialog", { name: "导入 Bilibili 收藏夹" });
+  await page.getByRole("button", { name: "批量导入" }).click();
+  const modal = page.getByRole("dialog", { name: "批量导入" });
   await modal
-    .getByLabel("收藏夹链接")
+    .getByLabel("导入链接")
     .fill("https://space.bilibili.com/1/favlist?fid=2015788186");
   await modal.getByRole("button", { name: "解析" }).click();
 
@@ -118,7 +198,7 @@ test("imports a favorite folder as a new playlist", async ({ page }) => {
   ).toBeVisible();
   await modal.getByRole("button", { name: "导入" }).click();
 
-  await expect(modal.getByText(/成功导入 2 个视频，已跳过 1 个/)).toBeVisible();
+  await expect(modal.getByText(/成功导入 3 个视频，已跳过 1 个/)).toBeVisible();
 
   const stored = await readStoredAppData(page);
   const playlist = stored.playlists.find(
@@ -128,10 +208,27 @@ test("imports a favorite folder as a new playlist", async ({ page }) => {
   expect(playlist?.tracks.map((track) => track.bvid)).toEqual([
     "BV1ImportA",
     "BV1ImportB",
+    "BV1ImportB",
+  ]);
+  // 单P 用列表元数据；多P 按分P 拆分，标题为 `原视频标题 [P1] 分P标题`。
+  expect(playlist?.tracks.map((track) => track.title)).toEqual([
+    "歌曲一",
+    "歌曲二 [P1] 第一段",
+    "歌曲二 [P2] 第二段",
+  ]);
+  expect(playlist?.tracks.map((track) => track.duration)).toEqual([
+    120, 100, 200,
+  ]);
+  expect(playlist?.tracks.map((track) => track.id)).toEqual([
+    "favorite-2015788186-BV1ImportA-p1",
+    "favorite-2015788186-BV1ImportB-p1",
+    "favorite-2015788186-BV1ImportB-p2",
   ]);
   expect(playlist?.tracks.every((track) => track.source === "favorite")).toBe(
     true,
   );
+  expect(playlist?.tracks[1]).toMatchObject({ cid: 111 });
+  expect(playlist?.tracks[2]).toMatchObject({ cid: 222, page: 2 });
 
   await modal.getByRole("button", { name: "完成" }).click();
   await expect(page.getByLabel("当前歌单", { exact: true })).toHaveValue(
@@ -158,27 +255,21 @@ test("re-importing the same folder overwrites instead of duplicating", async ({
 
   await openImportTestPage(page);
 
-  const importButton = page.getByRole("button", {
-    name: "导入 Bilibili 收藏夹",
-  });
+  const importButton = page.getByRole("button", { name: "批量导入" });
 
   await importButton.click();
-  const firstModal = page.getByRole("dialog", {
-    name: "导入 Bilibili 收藏夹",
-  });
+  const firstModal = page.getByRole("dialog", { name: "批量导入" });
   await firstModal
-    .getByLabel("收藏夹链接")
+    .getByLabel("导入链接")
     .fill("https://space.bilibili.com/1/favlist?fid=2015788186");
   await firstModal.getByRole("button", { name: "解析" }).click();
   await firstModal.getByRole("button", { name: "导入" }).click();
   await firstModal.getByRole("button", { name: "完成" }).click();
 
   await importButton.click();
-  const secondModal = page.getByRole("dialog", {
-    name: "导入 Bilibili 收藏夹",
-  });
+  const secondModal = page.getByRole("dialog", { name: "批量导入" });
   await secondModal
-    .getByLabel("收藏夹链接")
+    .getByLabel("导入链接")
     .fill("https://space.bilibili.com/1/favlist?fid=2015788186");
   await secondModal.getByRole("button", { name: "解析" }).click();
 
@@ -207,10 +298,10 @@ test("shows a readable error and keeps the panel intact on rate limiting", async
 
   await openImportTestPage(page);
 
-  await page.getByRole("button", { name: "导入 Bilibili 收藏夹" }).click();
-  const modal = page.getByRole("dialog", { name: "导入 Bilibili 收藏夹" });
+  await page.getByRole("button", { name: "批量导入" }).click();
+  const modal = page.getByRole("dialog", { name: "批量导入" });
   await modal
-    .getByLabel("收藏夹链接")
+    .getByLabel("导入链接")
     .fill("https://space.bilibili.com/1/favlist?fid=123");
   await modal.getByRole("button", { name: "解析" }).click();
 
@@ -218,7 +309,6 @@ test("shows a readable error and keeps the panel intact on rate limiting", async
     modal.getByText("请求过于频繁，已触发 B 站风控，请稍后再试"),
   ).toBeVisible();
 
-  // 面板未被破坏：歌单下拉框仍然存在。
   await expect(page.getByLabel("当前歌单", { exact: true })).toBeVisible();
 });
 
@@ -237,17 +327,16 @@ test("rejects a list-page link without calling any import API", async ({
 
   await openImportTestPage(page);
 
-  await page.getByRole("button", { name: "导入 Bilibili 收藏夹" }).click();
-  const modal = page.getByRole("dialog", { name: "导入 Bilibili 收藏夹" });
+  await page.getByRole("button", { name: "批量导入" }).click();
+  const modal = page.getByRole("dialog", { name: "批量导入" });
   await modal
-    .getByLabel("收藏夹链接")
+    .getByLabel("导入链接")
     .fill("https://space.bilibili.com/1/lists?sid=3221717&type=season");
   await modal.getByRole("button", { name: "解析" }).click();
 
   await expect(
     modal.getByText("这是合集/列表页链接，请改用收藏页 favlist 里的链接。"),
   ).toBeVisible();
-  // 明确拒绝：不应该发出任何导入接口请求。
   expect(apiRequests).toBe(0);
   await expect(page.getByLabel("当前歌单", { exact: true })).toBeVisible();
 });
@@ -256,61 +345,46 @@ test("imports a collection (season) as a new playlist", async ({ page }) => {
   await page.route(SEASON_API_GLOB, async (route) => {
     await route.fulfill({
       contentType: "application/json",
-      body: JSON.stringify({
-        code: 0,
-        data: {
-          meta: {
-            mid: 174041198,
-            name: "合集·奇妙串烧",
-            title: "奇妙串烧",
-            season_id: 5471,
-            total: 2,
-          },
-          archives: [
-            {
-              bvid: "BV1SeasonA",
-              title: "合集歌曲一",
-              duration: 144,
-              pic: "http://i2.hdslb.com/season-a.jpg",
-            },
-            {
-              bvid: "BV1SeasonB",
-              title: "合集歌曲二",
-              duration: 283,
-              pic: "http://i2.hdslb.com/season-b.jpg",
-            },
-          ],
-          page: { page_num: 1, page_size: 30, total: 2 },
-        },
-      }),
+      body: JSON.stringify(
+        seasonPayload([
+          archive("BV1SeasonA", "合集歌曲一"),
+          archive("BV1SeasonB", "合集歌曲二"),
+        ]),
+      ),
     });
+  });
+  await routeViews(page, {
+    BV1SeasonA: viewPayload("BV1SeasonA", "接口标题一", ONE_PART),
+    BV1SeasonB: viewPayload("BV1SeasonB", "接口标题二", ONE_PART),
   });
 
   await openImportTestPage(page);
 
-  await page.getByRole("button", { name: "导入 Bilibili 收藏夹" }).click();
-  const modal = page.getByRole("dialog", { name: "导入 Bilibili 收藏夹" });
+  await page.getByRole("button", { name: "批量导入" }).click();
+  const modal = page.getByRole("dialog", { name: "批量导入" });
   await modal
-    .getByLabel("收藏夹链接")
+    .getByLabel("导入链接")
     .fill(
       "https://space.bilibili.com/1776113786/favlist?fid=5471&ftype=collect&ctype=21",
     );
   await modal.getByRole("button", { name: "解析" }).click();
 
-  // 歌单名取 meta.title（不带「合集·」前缀）。
   await expect(
-    modal.getByText(/即将导入歌单「奇妙串烧」，共 2 条内容/),
+    modal.getByText(/即将导入歌单「我的合集」，共 2 条内容/),
   ).toBeVisible();
   await modal.getByRole("button", { name: "导入" }).click();
   await expect(modal.getByText(/成功导入 2 个视频，已跳过 0 个/)).toBeVisible();
 
   const stored = await readStoredAppData(page);
   const playlist = stored.playlists.find((item) => item.id === "season-5471");
-  expect(playlist?.name).toBe("奇妙串烧");
+  expect(playlist?.name).toBe("我的合集");
   expect(playlist?.tracks.map((track) => track.bvid)).toEqual([
     "BV1SeasonA",
     "BV1SeasonB",
   ]);
+  expect(playlist?.tracks.every((track) => track.source === "collection")).toBe(
+    true,
+  );
 
   await modal.getByRole("button", { name: "完成" }).click();
   await expect(page.getByLabel("当前歌单", { exact: true })).toHaveValue(
@@ -330,10 +404,10 @@ test("surfaces risk control when the season API is blocked", async ({
 
   await openImportTestPage(page);
 
-  await page.getByRole("button", { name: "导入 Bilibili 收藏夹" }).click();
-  const modal = page.getByRole("dialog", { name: "导入 Bilibili 收藏夹" });
+  await page.getByRole("button", { name: "批量导入" }).click();
+  const modal = page.getByRole("dialog", { name: "批量导入" });
   await modal
-    .getByLabel("收藏夹链接")
+    .getByLabel("导入链接")
     .fill(
       "https://space.bilibili.com/1776113786/favlist?fid=5471&ftype=collect&ctype=21",
     );
@@ -362,16 +436,172 @@ test("stops the import when the folder belongs to another uploader", async ({
 
   await openImportTestPage(page);
 
-  await page.getByRole("button", { name: "导入 Bilibili 收藏夹" }).click();
-  const modal = page.getByRole("dialog", { name: "导入 Bilibili 收藏夹" });
+  await page.getByRole("button", { name: "批量导入" }).click();
+  const modal = page.getByRole("dialog", { name: "批量导入" });
   await modal
-    .getByLabel("收藏夹链接")
+    .getByLabel("导入链接")
     .fill("https://space.bilibili.com/686127/favlist?fid=10526220");
   await modal.getByRole("button", { name: "解析" }).click();
 
   await expect(modal.getByText(/不属于该 UP 主/)).toBeVisible();
+  await expect(
+    page.getByLabel("当前歌单", { exact: true }).locator("option"),
+  ).toHaveCount(1);
+});
 
-  // 没有生成任何新歌单：下拉框里仍只有默认歌单。
+test("imports a collection sniffed from a video link", async ({ page }) => {
+  await routeViews(page, {
+    BV1VideoWithSeason: viewPayload(
+      "BV1VideoWithSeason",
+      "合集里的某个视频",
+      ONE_PART,
+      {
+        ugc_season: {
+          id: 8888,
+          title: "我的合集",
+          mid: 3546619314178489,
+          ep_count: 2,
+          sections: [{ episodes: [{ bvid: "BV1SeasonA" }] }],
+        },
+      },
+    ),
+    BV1SeasonA: viewPayload("BV1SeasonA", "接口标题一", ONE_PART),
+    BV1SeasonB: viewPayload("BV1SeasonB", "接口标题二", ONE_PART),
+  });
+  await page.route(SEASON_API_GLOB, async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify(
+        seasonPayload([
+          archive("BV1SeasonA", "合集歌曲一"),
+          archive("BV1SeasonB", "合集歌曲二"),
+        ]),
+      ),
+    });
+  });
+
+  await openImportTestPage(page);
+
+  await page.getByRole("button", { name: "批量导入" }).click();
+  const modal = page.getByRole("dialog", { name: "批量导入" });
+  await modal
+    .getByLabel("导入链接")
+    .fill("https://www.bilibili.com/video/BV1VideoWithSeason");
+  await modal.getByRole("button", { name: "解析" }).click();
+
+  await expect(
+    modal.getByText(/即将导入歌单「我的合集」，共 2 条内容/),
+  ).toBeVisible();
+  await modal.getByRole("button", { name: "导入" }).click();
+  await expect(modal.getByText(/成功导入 2 个视频/)).toBeVisible();
+
+  const stored = await readStoredAppData(page);
+  const playlist = stored.playlists.find((item) => item.id === "season-8888");
+  expect(playlist?.tracks.map((track) => track.bvid)).toEqual([
+    "BV1SeasonA",
+    "BV1SeasonB",
+  ]);
+  expect(playlist?.tracks.every((track) => track.source === "collection")).toBe(
+    true,
+  );
+});
+
+test("imports a plain video without a collection", async ({ page }) => {
+  await routeViews(page, {
+    BV1PlainVideo: viewPayload("BV1PlainVideo", "普通视频标题", ONE_PART),
+  });
+
+  await openImportTestPage(page);
+
+  await page.getByRole("button", { name: "批量导入" }).click();
+  const modal = page.getByRole("dialog", { name: "批量导入" });
+  await modal
+    .getByLabel("导入链接")
+    .fill("https://www.bilibili.com/video/BV1PlainVideo");
+  await modal.getByRole("button", { name: "解析" }).click();
+
+  await expect(
+    modal.getByText("该视频没有合集，是否导入为歌单？"),
+  ).toBeVisible();
+  await expect(modal.getByText("《普通视频标题》")).toBeVisible();
+  await modal.getByRole("button", { name: "导入" }).click();
+
+  const stored = await readStoredAppData(page);
+  const playlist = stored.playlists.find(
+    (item) => item.id === "video-BV1PlainVideo",
+  );
+  expect(playlist?.name).toBe("普通视频标题");
+  expect(playlist?.tracks).toHaveLength(1);
+  expect(playlist?.tracks[0]).toMatchObject({
+    id: "video-BV1PlainVideo-p1",
+    bvid: "BV1PlainVideo",
+    title: "普通视频标题",
+    source: "manual",
+    startTime: 0,
+  });
+});
+
+test("splits every part of a multi-part video link and ignores p", async ({
+  page,
+}) => {
+  await routeViews(page, {
+    BV1MultiPartVideo: viewPayload("BV1MultiPartVideo", "多P视频", [
+      { cid: 111, page: 1, part: "第一首", duration: 100 },
+      { cid: 222, page: 2, part: "第二首", duration: 200 },
+    ]),
+  });
+
+  await openImportTestPage(page);
+
+  await page.getByRole("button", { name: "批量导入" }).click();
+  const modal = page.getByRole("dialog", { name: "批量导入" });
+  await modal
+    .getByLabel("导入链接")
+    .fill("https://www.bilibili.com/video/BV1MultiPartVideo?p=2");
+  await modal.getByRole("button", { name: "解析" }).click();
+
+  // 批量导入忽略 ?p：两个分P 都要导。
+  await expect(modal.getByText("将导入 2 个视频")).toBeVisible();
+  await modal.getByRole("button", { name: "导入" }).click();
+
+  const stored = await readStoredAppData(page);
+  expect(
+    stored.playlists.some((item) => item.id === "video-BV1MultiPartVideo-p2"),
+  ).toBe(false);
+  const playlist = stored.playlists.find(
+    (item) => item.id === "video-BV1MultiPartVideo",
+  );
+  expect(playlist?.tracks.map((track) => track.title)).toEqual([
+    "多P视频 [P1] 第一首",
+    "多P视频 [P2] 第二首",
+  ]);
+  expect(playlist?.tracks.map((track) => track.duration)).toEqual([100, 200]);
+  expect(playlist?.tracks.map((track) => track.id)).toEqual([
+    "video-BV1MultiPartVideo-p1",
+    "video-BV1MultiPartVideo-p2",
+  ]);
+});
+
+test("refuses to import a video with no playable parts", async ({ page }) => {
+  await routeViews(page, {
+    BV1NoParts: viewPayload("BV1NoParts", "无分P视频", []),
+  });
+
+  await openImportTestPage(page);
+
+  await page.getByRole("button", { name: "批量导入" }).click();
+  const modal = page.getByRole("dialog", { name: "批量导入" });
+  await modal
+    .getByLabel("导入链接")
+    .fill("https://www.bilibili.com/video/BV1NoParts");
+  await modal.getByRole("button", { name: "解析" }).click();
+
+  await expect(modal.getByText("将导入 0 个视频")).toBeVisible();
+  await modal.getByRole("button", { name: "导入" }).click();
+
+  await expect(
+    modal.getByText("该视频没有可导入的分P，请换一个视频链接"),
+  ).toBeVisible();
   await expect(
     page.getByLabel("当前歌单", { exact: true }).locator("option"),
   ).toHaveCount(1);

@@ -57,9 +57,9 @@ test("shows the plugin button on the space favlist page", async ({ page }) => {
 
   // 这个页面上没有播放器：直接进入完整面板并打开导入弹窗。
   await expect(
-    page.getByRole("dialog", { name: "导入 Bilibili 收藏夹" }),
+    page.getByRole("dialog", { name: "批量导入" }),
   ).toBeVisible();
-  await expect(page.getByLabel("收藏夹链接")).toBeVisible();
+  await expect(page.getByLabel("导入链接")).toBeVisible();
 });
 
 test("stays inert on other space pages", async ({ page }) => {
@@ -94,6 +94,6 @@ test("mounts after an SPA route change into the favlist page", async ({
   await expect(launcher).toBeVisible({ timeout: 5_000 });
   await launcher.click();
   await expect(
-    page.getByRole("dialog", { name: "导入 Bilibili 收藏夹" }),
+    page.getByRole("dialog", { name: "批量导入" }),
   ).toBeVisible();
 });

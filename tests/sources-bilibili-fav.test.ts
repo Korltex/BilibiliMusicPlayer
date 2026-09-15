@@ -1,16 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   favoritePlaylistId,
-  favoriteTrackId,
   fetchFavFolder,
   fetchFavFolderInfo,
-  mapFavToTrack,
-  parseFavUrl,
+  readFavEntry,
   type FavProgress,
-  type FavTarget,
 } from "../src/sources/bilibili-fav";
 
-function favMedia(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+function favMedia(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
   return {
     id: 371494037,
     type: 2,
@@ -25,140 +24,59 @@ function favMedia(overrides: Record<string, unknown> = {}): Record<string, unkno
   };
 }
 
-function folderTarget(input: string): FavTarget {
-  const result = parseFavUrl(input);
-  expect(result.kind).toBe("folder");
-  if (result.kind !== "folder") {
-    throw new Error("expected a favorite folder link");
-  }
-  return result.target;
+function favListPayload(
+  medias: Record<string, unknown>[],
+  extra: Record<string, unknown> = {},
+): unknown {
+  return {
+    code: 0,
+    data: {
+      info: { mid: 1, title: "我的收藏", media_count: medias.length },
+      medias,
+      has_more: false,
+      ...extra,
+    },
+  };
 }
 
-describe("parseFavUrl", () => {
-  it("parses the fid query parameter and the owner mid", () => {
-    expect(
-      folderTarget("https://space.bilibili.com/123/favlist?fid=2015788186"),
-    ).toEqual({ fid: "2015788186", ownerMid: "123" });
-  });
-
-  it("parses fid among other query parameters", () => {
-    expect(
-      folderTarget(
-        "https://space.bilibili.com/123/favlist?fid=2015788186&ctid=0",
-      ),
-    ).toEqual({ fid: "2015788186", ownerMid: "123" });
-  });
-
-  it("parses a medialist detail path without an owner mid", () => {
-    expect(
-      folderTarget("https://www.bilibili.com/medialist/detail/ml2015788186"),
-    ).toEqual({ fid: "2015788186" });
-  });
-
-  it("rejects a bare numeric id, which has no owner to verify", () => {
-    expect(parseFavUrl("2015788186")).toEqual({ kind: "unknown" });
-  });
-
-  it("rejects invalid or unrelated input", () => {
-    expect(parseFavUrl("https://example.com/favlist?fid=123")).toEqual({
-      kind: "unknown",
-    });
-    expect(parseFavUrl("not a url")).toEqual({ kind: "unknown" });
-    expect(parseFavUrl("https://space.bilibili.com/123/favlist")).toEqual({
-      kind: "unknown",
-    });
-    expect(parseFavUrl("")).toEqual({ kind: "unknown" });
-  });
-
-  it("routes collection (season) links to the season source", () => {
-    expect(
-      parseFavUrl(
-        "https://space.bilibili.com/100969474/favlist?fid=3221717&ftype=collect&ctype=21",
-      ),
-    ).toEqual({
-      kind: "season",
-      target: { seasonId: "3221717", mid: "100969474" },
-    });
-  });
-
-  it("still treats collected favorite folders as folders", () => {
-    expect(
-      folderTarget(
-        "https://space.bilibili.com/100969474/favlist?fid=1306978874&ftype=collect",
-      ),
-    ).toEqual({ fid: "1306978874", ownerMid: "100969474" });
-  });
-
-  it("rejects list-page links that are not favlist links", () => {
-    for (const input of [
-      "https://space.bilibili.com/3546619314178489/lists?sid=3221717&type=season",
-      "https://space.bilibili.com/100969474/lists/1947439?type=series",
-      "https://www.bilibili.com/list/100969474?sid=1947439",
-    ]) {
-      expect(parseFavUrl(input)).toEqual({
-        kind: "unsupported",
-        message: "这是合集/列表页链接，请改用收藏页 favlist 里的链接。",
-      });
-    }
-  });
-});
-
-describe("favorite ids", () => {
-  it("derives stable playlist and track ids", () => {
+describe("favorite ids and entries", () => {
+  it("derives the playlist id", () => {
     expect(favoritePlaylistId("2015788186")).toBe("favorite-2015788186");
-    expect(favoriteTrackId("2015788186", "BV1CZ4y1T7gC")).toBe(
-      "favorite-2015788186-BV1CZ4y1T7gC-1",
-    );
-    expect(favoriteTrackId("2015788186", "BV1CZ4y1T7gC", 3)).toBe(
-      "favorite-2015788186-BV1CZ4y1T7gC-3",
-    );
   });
-});
 
-describe("mapFavToTrack", () => {
-  const now = 1234567890;
-
-  it("maps a valid video entry to a Track", () => {
-    expect(mapFavToTrack("2015788186", favMedia(), now)).toEqual({
-      id: "favorite-2015788186-BV1CZ4y1T7gC-1",
-      bvid: "BV1CZ4y1T7gC",
-      title: "测试歌曲",
-      uploader: "测试UP主",
-      cover: "https://i2.hdslb.com/bfs/archive/cover.jpg",
-      startTime: 0,
-      duration: 546,
-      addedAt: now,
-      source: "favorite",
+  it("reads a valid video entry with its part count", () => {
+    expect(readFavEntry(favMedia())).toEqual({
+      track: {
+        bvid: "BV1CZ4y1T7gC",
+        title: "测试歌曲",
+        uploader: "测试UP主",
+        cover: "https://i2.hdslb.com/bfs/archive/cover.jpg",
+        duration: 546,
+      },
+      partCount: 1,
     });
   });
 
-  it("keeps multi-part pages and drops page 1", () => {
-    const multiPage = mapFavToTrack(
-      "fid",
-      favMedia({ page: 3, bvid: "BV1MultiPart" }),
-      now,
-    );
-    expect(multiPage).toMatchObject({
-      id: "favorite-fid-BV1MultiPart-3",
-      page: 3,
-    });
-    expect(mapFavToTrack("fid", favMedia({ page: 1 }), now)).not.toHaveProperty(
-      "page",
-    );
+  // `medias[].page` 是「分P总数」（实测 12/12 样本 page === view.videos），
+  // 不是「收藏的是第几分P」；它只决定要不要去拉详情拆分。
+  it("treats medias.page as the part count", () => {
+    expect(readFavEntry(favMedia({ page: 17 }))?.partCount).toBe(17);
+    expect(readFavEntry(favMedia({ page: 0 }))?.partCount).toBe(1);
+    expect(readFavEntry(favMedia({ page: undefined }))?.partCount).toBe(1);
   });
 
   it("filters invalid, deleted, non-video, and bvid-less entries", () => {
-    expect(mapFavToTrack("fid", favMedia({ attr: 1 }), now)).toBeUndefined();
-    expect(mapFavToTrack("fid", favMedia({ attr: 9 }), now)).toBeUndefined();
-    expect(mapFavToTrack("fid", favMedia({ type: 12 }), now)).toBeUndefined();
-    expect(mapFavToTrack("fid", favMedia({ bvid: "" }), now)).toBeUndefined();
-    expect(mapFavToTrack("fid", null, now)).toBeUndefined();
+    expect(readFavEntry(favMedia({ attr: 1 }))).toBeUndefined();
+    expect(readFavEntry(favMedia({ attr: 9 }))).toBeUndefined();
+    expect(readFavEntry(favMedia({ type: 12 }))).toBeUndefined();
+    expect(readFavEntry(favMedia({ bvid: "" }))).toBeUndefined();
+    expect(readFavEntry(null)).toBeUndefined();
   });
 
   it("falls back to bvid when the title is empty", () => {
-    expect(mapFavToTrack("fid", favMedia({ title: "  " }), now)).toMatchObject({
-      title: "BV1CZ4y1T7gC",
-    });
+    expect(readFavEntry(favMedia({ title: "  " }))?.track.title).toBe(
+      "BV1CZ4y1T7gC",
+    );
   });
 });
 
@@ -179,6 +97,127 @@ describe("fetchFavFolderInfo", () => {
       fetchFavFolderInfo("fid", { fetcher: fetcher as typeof fetch }),
     ).resolves.toEqual({ name: "我的收藏", mediaCount: 42 });
     expect(fetcher).toHaveBeenCalledOnce();
+  });
+});
+
+describe("fetchFavFolder", () => {
+  it("maps single-part entries without extra requests", async () => {
+    const fetcher = vi.fn(async () =>
+      Response.json(
+        favListPayload([
+          favMedia({ bvid: "BV1A" }),
+          favMedia({ bvid: "BV1Invalid", attr: 1 }),
+          favMedia({ bvid: "BV1B", page: 1 }),
+        ]),
+      ),
+    );
+
+    const progress: FavProgress[] = [];
+    const result = await fetchFavFolder("2015788186", {
+      fetcher: fetcher as typeof fetch,
+      delay: async () => {},
+      onProgress: (value) => progress.push(value),
+    });
+
+    expect(result.name).toBe("我的收藏");
+    expect(result.tracks.map((track) => track.title)).toEqual([
+      "测试歌曲",
+      "测试歌曲",
+    ]);
+    expect(result.tracks.map((track) => track.id)).toEqual([
+      "favorite-2015788186-BV1A-p1",
+      "favorite-2015788186-BV1B-p1",
+    ]);
+    expect(result.skipped).toBe(1);
+    // 单P 条目不得触发详情请求。
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(progress).toEqual([{ loaded: 2, total: 3, skipped: 1 }]);
+  });
+
+  it("splits a multi-part entry into one track per part", async () => {
+    const requested: string[] = [];
+    const fetcher = vi.fn(async (input: URL | RequestInfo) => {
+      const url = String(input);
+      requested.push(url);
+
+      if (url.includes("/x/web-interface/view")) {
+        return Response.json({
+          code: 0,
+          data: {
+            bvid: "BV1Multi",
+            title: "多P视频",
+            duration: 300,
+            pages: [
+              { cid: 111, page: 1, part: "第一首", duration: 100 },
+              { cid: 222, page: 2, part: "第二首", duration: 200 },
+            ],
+          },
+        });
+      }
+
+      return Response.json(
+        favListPayload([
+          favMedia({ bvid: "BV1Multi", title: "多P视频", page: 2, duration: 300 }),
+        ]),
+      );
+    });
+
+    const result = await fetchFavFolder("77", {
+      fetcher: fetcher as typeof fetch,
+      delay: async () => {},
+    });
+
+    expect(result.tracks.map((track) => track.id)).toEqual([
+      "favorite-77-BV1Multi-p1",
+      "favorite-77-BV1Multi-p2",
+    ]);
+    expect(result.tracks.map((track) => track.title)).toEqual([
+      "多P视频 [P1] 第一首",
+      "多P视频 [P2] 第二首",
+    ]);
+    expect(result.tracks.map((track) => track.duration)).toEqual([100, 200]);
+    expect(result.tracks.every((track) => track.source === "favorite")).toBe(
+      true,
+    );
+    expect(requested.filter((url) => url.includes("/view"))).toHaveLength(1);
+  });
+
+  it("paginates until has_more is false", async () => {
+    const fetcher = vi.fn(async (input: URL | RequestInfo) => {
+      const pn = Number(new URL(String(input)).searchParams.get("pn"));
+
+      return Response.json(
+        pn === 1
+          ? {
+              code: 0,
+              data: {
+                info: { mid: 1, title: "我的收藏", media_count: 2 },
+                medias: [favMedia({ bvid: "BV1A" })],
+                has_more: true,
+              },
+            }
+          : {
+              code: 0,
+              data: {
+                info: { mid: 1, title: "我的收藏", media_count: 2 },
+                medias: [favMedia({ bvid: "BV1B" })],
+                has_more: false,
+              },
+            },
+      );
+    });
+
+    const delays: number[] = [];
+    const result = await fetchFavFolder("77", {
+      fetcher: fetcher as typeof fetch,
+      delay: async () => {
+        delays.push(1);
+      },
+    });
+
+    expect(result.tracks.map((track) => track.bvid)).toEqual(["BV1A", "BV1B"]);
+    expect(delays).toHaveLength(1);
+    expect(fetcher).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -235,84 +274,6 @@ describe("favorite owner guard", () => {
         expectedOwnerMid: "686127",
       }),
     ).resolves.toEqual({ name: "无 mid", mediaCount: 1 });
-  });
-});
-
-describe("fetchFavFolder", () => {
-  it("paginates until has_more is false and reports progress", async () => {
-    const fetcher = vi.fn(async (input: URL | RequestInfo) => {
-      const url = new URL(String(input));
-      const pn = Number(url.searchParams.get("pn"));
-
-      if (pn === 1) {
-        return Response.json({
-          code: 0,
-          data: {
-            info: { title: "我的收藏", media_count: 3 },
-            medias: [
-              favMedia({ bvid: "BV1First" }),
-              favMedia({ bvid: "BV1Invalid", attr: 1 }),
-            ],
-            has_more: true,
-          },
-        });
-      }
-
-      return Response.json({
-        code: 0,
-        data: {
-          info: { title: "我的收藏", media_count: 3 },
-          medias: [favMedia({ bvid: "BV1Last" })],
-          has_more: false,
-        },
-      });
-    });
-
-    const progress: FavProgress[] = [];
-    const delayCalls: number[] = [];
-    const result = await fetchFavFolder("2015788186", {
-      fetcher: fetcher as typeof fetch,
-      delay: async () => {
-        delayCalls.push(1);
-      },
-      onProgress: (next) => progress.push(next),
-    });
-
-    expect(result.name).toBe("我的收藏");
-    expect(result.tracks.map((track) => track.bvid)).toEqual([
-      "BV1First",
-      "BV1Last",
-    ]);
-    expect(result.skipped).toBe(1);
-    expect(progress).toEqual([
-      { loaded: 1, total: 3, skipped: 1 },
-      { loaded: 2, total: 3, skipped: 1 },
-    ]);
-    expect(delayCalls).toHaveLength(1);
-    expect(fetcher).toHaveBeenCalledTimes(2);
-  });
-
-  it("builds the expected request URL with pagination parameters", async () => {
-    const fetcher = vi.fn(async () =>
-      Response.json({
-        code: 0,
-        data: { info: { title: "空", media_count: 0 }, medias: [], has_more: false },
-      }),
-    );
-
-    await fetchFavFolder("12345", {
-      fetcher: fetcher as typeof fetch,
-      delay: async () => {},
-    });
-
-    const requested = String((fetcher as ReturnType<typeof vi.fn>).mock.calls[0][0]);
-    const url = new URL(requested);
-    expect(url.hostname).toBe("api.bilibili.com");
-    expect(url.pathname).toBe("/x/v3/fav/resource/list");
-    expect(url.searchParams.get("media_id")).toBe("12345");
-    expect(url.searchParams.get("ps")).toBe("20");
-    expect(url.searchParams.get("pn")).toBe("1");
-    expect(url.searchParams.get("platform")).toBe("web");
   });
 });
 

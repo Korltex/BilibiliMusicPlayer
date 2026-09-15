@@ -1,5 +1,10 @@
 import type { Track } from "../core/types";
 import {
+  buildEntryTracks,
+  fetchVideoDetail,
+  type TrackPartsInput,
+} from "./bilibili-video";
+import {
   asNetworkError,
   createAbortError,
   randomDelay,
@@ -32,23 +37,11 @@ export interface FavProgress {
   skipped: number;
 }
 
-export interface FavTarget {
-  fid: string;
-  /** 链接形如 `space.bilibili.com/<mid>/…` 时记录链接声称的 UP 主 mid，用于校验收藏夹归属。 */
-  ownerMid?: string;
+/** 收藏夹列表里的一条视频 + 它的分P总数。 */
+export interface FavTrackEntry {
+  track: TrackPartsInput;
+  partCount: number;
 }
-
-export interface SeasonTarget {
-  seasonId: string;
-  /** 链接路径里的用户 mid，仅作合集接口的占位参数（该接口不校验 mid）。 */
-  mid?: string;
-}
-
-export type FavUrlResult =
-  | { kind: "folder"; target: FavTarget }
-  | { kind: "season"; target: SeasonTarget }
-  | { kind: "unsupported"; message: string }
-  | { kind: "unknown" };
 
 export interface FetchFavOptions {
   signal?: AbortSignal;
@@ -72,102 +65,17 @@ export function favoritePlaylistId(fid: string): string {
   return `favorite-${fid}`;
 }
 
-export function favoriteTrackId(
-  fid: string,
-  bvid: string,
-  page?: number,
-): string {
-  return `favorite-${fid}-${bvid}-${page && page > 1 ? page : 1}`;
-}
-
 /**
- * 从输入链接中解析收藏夹 fid。
- *
- * 支持：`?fid=2015788186`（带/不带其它参数）、
- * `?fid=5471&ftype=collect&ctype=21`（合集，`fid` 是 season_id）、
- * `/medialist/detail/ml2015788186`。
- * 不接受裸数字 id：它没有可校验的归属，会静默落到任意歌单上，因此只接受链接。
- * 不支持 `b23.tv` 短链（需一次网络重定向解析，超出本功能范围）。
- *
- * `ctype=21` 走合集分支；`lists`/`sid` 形式的合集页链接仍明确标记为不支持。
- */
-export function parseFavUrl(url: string): FavUrlResult {
-  const input = url.trim();
-  if (!input) {
-    return { kind: "unknown" };
-  }
-
-  let parsed: URL;
-  try {
-    parsed = new URL(input);
-  } catch {
-    return { kind: "unknown" };
-  }
-
-  const host = parsed.hostname.toLowerCase();
-  if (host !== "bilibili.com" && !host.endsWith(".bilibili.com")) {
-    return { kind: "unknown" };
-  }
-
-  const ownerMid = readOwnerMid(parsed);
-
-  // 合集：`ctype=21` 时 `fid` 是 season_id（不是收藏夹 mlid），必须走合集接口。
-  // 不能一刀切拒绝 `ftype=collect`——「收藏的收藏夹」同样是 collect，但它是普通 mlid。
-  if (parsed.searchParams.get("ctype") === "21") {
-    const seasonId = parsed.searchParams.get("fid");
-    if (seasonId && /^\d+$/.test(seasonId)) {
-      return {
-        kind: "season",
-        target: { seasonId, ...(ownerMid ? { mid: ownerMid } : {}) },
-      };
-    }
-    return { kind: "unknown" };
-  }
-
-  if (
-    parsed.searchParams.has("sid") ||
-    /\/lists(\/|$)/i.test(parsed.pathname)
-  ) {
-    return {
-      kind: "unsupported",
-      message: "这是合集/列表页链接，请改用收藏页 favlist 里的链接。",
-    };
-  }
-
-  const fid = parsed.searchParams.get("fid");
-  if (fid && /^\d+$/.test(fid)) {
-    return {
-      kind: "folder",
-      target: { fid, ...(ownerMid ? { ownerMid } : {}) },
-    };
-  }
-
-  const mediaListMatch = parsed.pathname.match(/\/medialist\/detail\/ml(\d+)/i);
-  if (mediaListMatch) {
-    return { kind: "folder", target: { fid: mediaListMatch[1] } };
-  }
-
-  return { kind: "unknown" };
-}
-
-function readOwnerMid(url: URL): string | undefined {
-  if (url.hostname.toLowerCase() !== "space.bilibili.com") {
-    return undefined;
-  }
-
-  return url.pathname.match(/^\/(\d+)\//)?.[1];
-}
-
-/**
- * 将收藏夹接口返回的单条 `medias` 映射为 `Track`。
+ * 读取收藏夹接口返回的单条 `medias`。
  * 只接受视频稿件（`type === 2`）且 `bvid` 非空的条目；
  * `attr !== 0` 视为失效/被删除（1 其他原因删除、9 UP 主自删），返回 `undefined`。
+ *
+ * `medias[].page` 是**该视频的分P总数**（接口文档写「视频分P数」），不是「收藏的是第几分P」：
+ * 实测 12/12 样本满足 `page === view.videos`（17P/40P/69P 全部吻合），条目里的 `link` 是
+ * `bilibili://video/<aid>`（不带 `p`）、`ugc.first_cid` 恒为第 1P 的 cid。因此这里把它
+ * 作为「是否多P」的判据，多P 时再拉详情按分P 拆分（见 `fetchFavFolder`）。
  */
-export function mapFavToTrack(
-  fid: string,
-  media: unknown,
-  now = Date.now(),
-): Track | undefined {
+export function readFavEntry(media: unknown): FavTrackEntry | undefined {
   const item = readRecord(media);
   if (!item) {
     return undefined;
@@ -185,10 +93,6 @@ export function mapFavToTrack(
   }
 
   const title = typeof item.title === "string" ? item.title.trim() : "";
-  const page =
-    typeof item.page === "number" && Number.isInteger(item.page) && item.page > 1
-      ? item.page
-      : undefined;
   const uploader = readRecord(item.upper)?.name;
   const rawCover = item.cover;
   const cover =
@@ -201,23 +105,23 @@ export function mapFavToTrack(
     item.duration > 0
       ? item.duration
       : 0;
+  const partCount =
+    typeof item.page === "number" && Number.isInteger(item.page) && item.page > 0
+      ? item.page
+      : 1;
 
-  const track: Track = {
-    id: favoriteTrackId(fid, bvid, page),
-    bvid,
-    ...(page !== undefined ? { page } : {}),
-    title: title || bvid,
-    ...(typeof uploader === "string" && uploader.trim()
-      ? { uploader: uploader.trim() }
-      : {}),
-    ...(cover ? { cover } : {}),
-    startTime: 0,
-    duration,
-    addedAt: now,
-    source: "favorite",
+  return {
+    track: {
+      bvid,
+      title: title || bvid,
+      ...(typeof uploader === "string" && uploader.trim()
+        ? { uploader: uploader.trim() }
+        : {}),
+      ...(cover ? { cover } : {}),
+      duration,
+    },
+    partCount,
   };
-
-  return track;
 }
 
 export async function fetchFavFolderInfo(
@@ -243,6 +147,7 @@ export async function fetchFavFolder(
   options: FetchFavOptions = {},
 ): Promise<FavFolderResult> {
   const delay = options.delay ?? randomDelay;
+  const idPrefix = favoritePlaylistId(fid);
   const tracks: Track[] = [];
   let name = "";
   let total = 0;
@@ -262,12 +167,26 @@ export async function fetchFavFolder(
     }
 
     for (const media of page.medias) {
-      const track = mapFavToTrack(fid, media);
-      if (track) {
-        tracks.push(track);
-      } else {
+      const entry = readFavEntry(media);
+      if (!entry) {
         skipped += 1;
+        continue;
       }
+
+      // 多P 视频必须拉详情拿 pages，再拆成独立的 Track；单P 直接用列表元数据。
+      if (entry.partCount > 1) {
+        await delay(options.signal);
+        const detail = await fetchVideoDetail(entry.track.bvid, {
+          signal: options.signal,
+          fetcher: options.fetcher,
+        });
+        tracks.push(
+          ...buildEntryTracks(idPrefix, entry.track, detail.pages, "favorite"),
+        );
+        continue;
+      }
+
+      tracks.push(...buildEntryTracks(idPrefix, entry.track, [], "favorite"));
     }
 
     const loaded = tracks.length;

@@ -197,8 +197,8 @@ export function App({ store, engine, audioOnly }: AppProps) {
           <button
             class="icon-button"
             type="button"
-            title="导入 Bilibili 收藏夹"
-            aria-label="导入 Bilibili 收藏夹"
+            title="批量导入"
+            aria-label="批量导入"
             onClick={() => setImportOpen(true)}
           >
             <Star size={18} aria-hidden="true" />

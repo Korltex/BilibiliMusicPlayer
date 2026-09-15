@@ -1,18 +1,28 @@
 import { useRef, useState } from "preact/hooks";
-import type { Playlist } from "../core/types";
+import type { Playlist, Track } from "../core/types";
 import {
   favoritePlaylistId,
   fetchFavFolder,
   fetchFavFolderInfo,
-  parseFavUrl,
-  type FavTarget,
-  type SeasonTarget,
 } from "../sources/bilibili-fav";
 import {
   fetchSeason,
   fetchSeasonInfo,
   seasonPlaylistId,
 } from "../sources/bilibili-season";
+import {
+  buildEntryTracks,
+  fetchVideoDetail,
+  videoPlaylistId,
+  VIDEO_TRACK_PREFIX,
+  type VideoDetail,
+} from "../sources/bilibili-video";
+import {
+  parseImportUrl,
+  type FavTarget,
+  type SeasonTarget,
+  type VideoTarget,
+} from "../sources/import-url";
 import { X } from "./icons";
 import type { AppStore } from "./store";
 
@@ -26,7 +36,8 @@ type Phase =
 
 type ImportSource =
   | { kind: "folder"; target: FavTarget }
-  | { kind: "season"; target: SeasonTarget };
+  | { kind: "season"; target: SeasonTarget }
+  | { kind: "video"; target: VideoTarget };
 
 interface SourceInfo {
   name: string;
@@ -48,19 +59,27 @@ export function ImportFavModal({ store, onClose }: ImportFavModalProps) {
   const [url, setUrl] = useState("");
   const [source, setSource] = useState<ImportSource>();
   const [info, setInfo] = useState<SourceInfo>();
+  const [detail, setDetail] = useState<VideoDetail>();
   const [progress, setProgress] = useState<ImportProgress>();
   const [summary, setSummary] = useState("");
   const [error, setError] = useState("");
   const controller = useRef<AbortController | null>(null);
 
+  const videoSource = source?.kind === "video" ? source : undefined;
+
   const playlistId = source
     ? source.kind === "folder"
       ? favoritePlaylistId(source.target.fid)
-      : seasonPlaylistId(source.target.seasonId)
+      : source.kind === "season"
+        ? seasonPlaylistId(source.target.seasonId)
+        : videoPlaylistId(source.target.bvid)
     : undefined;
   const existingPlaylist = playlistId
     ? store.data.value.playlists.find((item) => item.id === playlistId)
     : undefined;
+  const plannedCount = videoSource
+    ? (detail?.pages.length ?? 0)
+    : (info?.count ?? 0);
 
   const resetController = () => {
     controller.current?.abort();
@@ -76,23 +95,59 @@ export function ImportFavModal({ store, onClose }: ImportFavModalProps) {
     resetController();
     setSource(undefined);
     setInfo(undefined);
+    setDetail(undefined);
     setProgress(undefined);
     setError("");
     setPhase("input");
   };
 
+  const loadSeason = async (
+    target: SeasonTarget,
+    signal: AbortSignal,
+  ): Promise<void> => {
+    setSource({ kind: "season", target });
+    const result = await fetchSeasonInfo(target.seasonId, {
+      signal,
+      mid: target.mid,
+    });
+    setInfo({ name: result.name, count: result.total });
+  };
+
+  /** 视频入口：先嗅探合集；有合集就当合集导入，没有就按分P 全部导入。 */
+  const loadVideo = async (
+    target: VideoTarget,
+    signal: AbortSignal,
+  ): Promise<void> => {
+    const video = await fetchVideoDetail(target.bvid, { signal });
+    setDetail(video);
+
+    if (video.seasonId) {
+      await loadSeason(
+        {
+          seasonId: video.seasonId,
+          ...(video.seasonOwnerMid ? { mid: video.seasonOwnerMid } : {}),
+        },
+        signal,
+      );
+      return;
+    }
+
+    setSource({ kind: "video", target });
+    setInfo({ name: video.title || target.bvid, count: video.pages.length });
+  };
+
   const parse = async (event: SubmitEvent) => {
     event.preventDefault();
 
-    const parsed = parseFavUrl(url);
+    const parsed = parseImportUrl(url);
     if (parsed.kind === "unsupported") {
       setError(parsed.message);
       setPhase("error");
       return;
     }
-    if (parsed.kind !== "folder" && parsed.kind !== "season") {
+    if (parsed.kind === "unknown") {
       setError(
-        "无法解析链接，请粘贴 B 站收藏夹或合集链接（如 https://space.bilibili.com/…/favlist?fid=…）",
+        "无法解析链接，请粘贴 B 站收藏夹 / 合集 / 视频链接（space.bilibili.com 的 favlist，或 /video/BV…）",
       );
       setPhase("error");
       return;
@@ -112,26 +167,25 @@ export function ImportFavModal({ store, onClose }: ImportFavModalProps) {
           expectedOwnerMid: parsed.target.ownerMid,
         });
         setInfo({ name: result.name, count: result.mediaCount });
+      } else if (parsed.kind === "season") {
+        await loadSeason(parsed.target, next.signal);
       } else {
-        setSource({ kind: "season", target: parsed.target });
-        const result = await fetchSeasonInfo(parsed.target.seasonId, {
-          signal: next.signal,
-          mid: parsed.target.mid,
-        });
-        setInfo({ name: result.name, count: result.total });
+        await loadVideo(parsed.target, next.signal);
       }
 
       setPhase("confirm");
     } catch (err) {
-      if (!next.signal.aborted) {
-        setError(readMessage(err));
-        setPhase("error");
+      if (next.signal.aborted) {
+        return;
       }
+
+      setError(readMessage(err));
+      setPhase("error");
     }
   };
 
   const runImport = async () => {
-    if (!source || !info) {
+    if (!source || !info || !playlistId) {
       return;
     }
 
@@ -143,35 +197,66 @@ export function ImportFavModal({ store, onClose }: ImportFavModalProps) {
     setPhase("importing");
 
     try {
-      const result =
-        source.kind === "folder"
-          ? await fetchFavFolder(source.target.fid, {
-              signal: next.signal,
-              expectedOwnerMid: source.target.ownerMid,
-              onProgress: (value) =>
-                setProgress({ loaded: value.loaded, total: value.total }),
-            })
-          : await fetchSeason(source.target.seasonId, {
-              signal: next.signal,
-              mid: source.target.mid,
-              onProgress: (value) =>
-                setProgress({ loaded: value.loaded, total: value.total }),
-            });
+      let tracks: Track[];
+      let skipped = 0;
+
+      if (source.kind === "video") {
+        if (!detail) {
+          throw new Error("视频信息已失效，请重新解析链接");
+        }
+        // `pages` 是唯一权威的可播放选集来源；空即无可导入内容。
+        // （收藏夹/合集的单P 条目走的是「无 parts → 用列表元数据」分支，不在此列。）
+        if (detail.pages.length === 0) {
+          throw new Error("该视频没有可导入的分P，请换一个视频链接");
+        }
+
+        tracks = buildEntryTracks(
+          VIDEO_TRACK_PREFIX,
+          {
+            bvid: detail.bvid,
+            title: detail.title,
+            ...(detail.cover ? { cover: detail.cover } : {}),
+            ...(detail.ownerName ? { uploader: detail.ownerName } : {}),
+            duration: detail.duration,
+          },
+          detail.pages,
+          "manual",
+        );
+
+        if (tracks.length === 0) {
+          throw new Error("该视频没有可导入的分P，请换一个视频链接");
+        }
+      } else {
+        const result =
+          source.kind === "folder"
+            ? await fetchFavFolder(source.target.fid, {
+                signal: next.signal,
+                expectedOwnerMid: source.target.ownerMid,
+                onProgress: (value) =>
+                  setProgress({ loaded: value.loaded, total: value.total }),
+              })
+            : await fetchSeason(source.target.seasonId, {
+                signal: next.signal,
+                mid: source.target.mid,
+                onProgress: (value) =>
+                  setProgress({ loaded: value.loaded, total: value.total }),
+              });
+
+        tracks = result.tracks;
+        skipped = result.skipped;
+      }
 
       const playlist: Playlist = {
-        id:
-          source.kind === "folder"
-            ? favoritePlaylistId(source.target.fid)
-            : seasonPlaylistId(source.target.seasonId),
+        id: playlistId,
         name: info.name,
-        tracks: result.tracks,
+        tracks,
         createdAt: existingPlaylist?.createdAt ?? Date.now(),
         updatedAt: Date.now(),
       };
       store.importPlaylist(playlist);
 
       setSummary(
-        `成功导入 ${result.tracks.length} 个视频，已跳过 ${result.skipped} 个失效视频`,
+        `成功导入 ${tracks.length} 个视频，已跳过 ${skipped} 个失效视频`,
       );
       setPhase("done");
     } catch (err) {
@@ -203,11 +288,11 @@ export function ImportFavModal({ store, onClose }: ImportFavModalProps) {
       class="import-fav-modal"
       role="dialog"
       aria-modal="true"
-      aria-label="导入 Bilibili 收藏夹"
+      aria-label="批量导入"
     >
       <div class="import-fav-card">
         <div class="editor-heading">
-          <strong>导入收藏夹 / 合集</strong>
+          <strong>批量导入</strong>
           <button
             class="icon-button"
             type="button"
@@ -223,8 +308,8 @@ export function ImportFavModal({ store, onClose }: ImportFavModalProps) {
           <form class="import-fav-form" onSubmit={parse}>
             <input
               value={url}
-              placeholder="粘贴收藏夹或合集链接，如 https://space.bilibili.com/…/favlist?fid=…"
-              aria-label="收藏夹链接"
+              placeholder="粘贴收藏夹 / 合集 / 视频链接，如 https://www.bilibili.com/video/BV…"
+              aria-label="导入链接"
               autoFocus
               onInput={(event) => setUrl(event.currentTarget.value)}
             />
@@ -253,9 +338,19 @@ export function ImportFavModal({ store, onClose }: ImportFavModalProps) {
 
         {phase === "confirm" && info && (
           <div class="import-fav-confirm">
-            <p>
-              即将导入歌单「{info.name}」，共 {info.count} 条内容
-            </p>
+            {videoSource ? (
+              <div class="import-fav-video">
+                <p>该视频没有合集，是否导入为歌单？</p>
+                <p class="import-fav-name">《{info.name}》</p>
+                <p class="import-fav-note">
+                  将导入 {plannedCount} 个视频（多P 会按分P 拆分为独立曲目）
+                </p>
+              </div>
+            ) : (
+              <p>
+                即将导入歌单「{info.name}」，共 {info.count} 条内容
+              </p>
+            )}
             {existingPlaylist && (
               <p class="import-fav-warning">
                 本地已存在该歌单，覆盖导入将替换其中的歌曲

@@ -1063,6 +1063,16 @@ select:focus-visible {
   color: var(--danger);
 }
 
+.import-fav-name {
+  overflow-wrap: anywhere;
+  font-weight: 600;
+}
+
+.import-fav-note {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .import-fav-error {
   display: flex;
   flex-direction: column;

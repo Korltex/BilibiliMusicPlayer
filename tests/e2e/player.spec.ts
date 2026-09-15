@@ -500,7 +500,7 @@ test("switches between full, minimal, and launcher modes", async ({ page }) => {
   await expect(headerButtons).toHaveCount(4);
   await expect(headerButtons.nth(0)).toHaveAttribute(
     "aria-label",
-    "导入 Bilibili 收藏夹",
+    "批量导入",
   );
   await expect(headerButtons.nth(1)).toHaveAttribute(
     "aria-label",

@@ -1189,6 +1189,16 @@
 		"  color: var(--danger);",
 		"}",
 		"",
+		".import-fav-name {",
+		"  overflow-wrap: anywhere;",
+		"  font-weight: 600;",
+		"}",
+		"",
+		".import-fav-note {",
+		"  color: var(--muted);",
+		"  font-size: 12px;",
+		"}",
+		"",
 		".import-fav-error {",
 		"  display: flex;",
 		"  flex-direction: column;",
@@ -1541,61 +1551,138 @@
 	function asNetworkError(error, fallback) {
 		return error instanceof Error ? error : new Error(fallback);
 	}
+	var VIEW_URL = "https://api.bilibili.com/x/web-interface/view";
+	var VIDEO_TRACK_PREFIX = "video";
+	function videoPlaylistId(bvid) {
+		return `video-${bvid}`;
+	}
+	function trackIdFor(idPrefix, bvid, page) {
+		return `${idPrefix}-${bvid}-p${page}`;
+	}
+	function buildEntryTracks(idPrefix, entry, parts, source, now = Date.now()) {
+		if (!entry.bvid.trim()) return [];
+		if (parts.length > 1) return parts.flatMap((part) => buildTrack(idPrefix, entry, source, now, {
+			page: part.page,
+			cid: part.cid,
+			title: readSplitTitle(entry.title, part),
+			duration: part.duration > 0 ? part.duration : entry.duration
+		}));
+		const part = parts[0];
+		return buildTrack(idPrefix, entry, source, now, {
+			page: part?.page ?? 1,
+			cid: part?.cid ?? 0,
+			title: entry.title || entry.bvid,
+			duration: entry.duration
+		});
+	}
+	async function fetchVideoDetail(bvid, options = {}) {
+		const fetcher = options.fetcher ?? fetch;
+		const url = new URL(VIEW_URL);
+		url.searchParams.set("bvid", bvid);
+		let response;
+		try {
+			response = await fetcher(url, {
+				credentials: "include",
+				signal: options.signal
+			});
+		} catch (error) {
+			throw asNetworkError(error, "网络异常，导入失败");
+		}
+		if (response.status === 412) throw new Error("请求过于频繁，已触发 B 站风控，请稍后再试");
+		if (!response.ok) throw new Error(`网络异常（HTTP ${response.status}）`);
+		let payload;
+		try {
+			payload = await response.json();
+		} catch {
+			throw new Error("网络异常，导入失败");
+		}
+		const root = readRecord$1(payload);
+		if (root?.code !== 0) throw new Error(videoCodeMessage(root?.code, root?.message));
+		const data = readRecord$1(root?.data);
+		if (!data) throw new Error("视频不存在或链接无效");
+		const detail = readVideoDetail(data);
+		if (!detail.bvid.trim()) throw new Error("视频不存在或链接无效");
+		return detail;
+	}
+	function buildTrack(idPrefix, entry, source, now, slot) {
+		return [{
+			id: trackIdFor(idPrefix, entry.bvid, slot.page),
+			bvid: entry.bvid,
+			...slot.cid > 0 ? { cid: slot.cid } : {},
+			...slot.page > 1 ? { page: slot.page } : {},
+			title: slot.title,
+			...entry.uploader ? { uploader: entry.uploader } : {},
+			...entry.cover ? { cover: entry.cover } : {},
+			startTime: 0,
+			duration: slot.duration,
+			addedAt: now,
+			source
+		}];
+	}
+	function readSplitTitle(videoTitle, part) {
+		const base = videoTitle || part.title || `P${part.page}`;
+		const partTitle = part.title.trim();
+		return partTitle ? `${base} [P${part.page}] ${partTitle}` : `${base} [P${part.page}]`;
+	}
+	function readVideoDetail(data) {
+		const owner = readRecord$1(data.owner);
+		const ownerMid = readIdValue(owner?.mid);
+		const ownerName = typeof owner?.name === "string" && owner.name.trim() ? owner.name.trim() : void 0;
+		const season = readRecord$1(data.ugc_season);
+		const seasonId = readIdValue(season?.id) ?? readIdValue(data.season_id);
+		const seasonTitle = typeof season?.title === "string" && season.title.trim() ? season.title.trim() : void 0;
+		const seasonOwnerMid = readIdValue(season?.mid) ?? ownerMid;
+		return {
+			bvid: typeof data.bvid === "string" ? data.bvid : "",
+			title: typeof data.title === "string" ? data.title.trim() : "",
+			...readHttpsUrl(data.pic) ? { cover: readHttpsUrl(data.pic) } : {},
+			duration: readPositiveNumber(data.duration) ?? 0,
+			...ownerName ? { ownerName } : {},
+			...ownerMid ? { ownerMid } : {},
+			pages: readParts(data.pages),
+			...seasonId ? { seasonId } : {},
+			...seasonTitle ? { seasonTitle } : {},
+			...seasonId && seasonOwnerMid ? { seasonOwnerMid } : {}
+		};
+	}
+	function readParts(value) {
+		if (!Array.isArray(value)) return [];
+		return value.flatMap((entry, index) => {
+			const record = readRecord$1(entry);
+			if (!record) return [];
+			return [{
+				page: readPositiveInteger(record.page) ?? index + 1,
+				cid: readPositiveInteger(record.cid) ?? 0,
+				title: typeof record.part === "string" ? record.part.trim() : "",
+				duration: readPositiveNumber(record.duration) ?? 0
+			}];
+		});
+	}
+	function videoCodeMessage(code, message) {
+		if (code === -101) return "需要登录 Bilibili 账号";
+		if (code === -403) return "无权访问该视频";
+		if (code === -404 || code === -400 || code === 62002 || code === 62004) return "视频不存在或已被删除";
+		return `视频信息获取失败：${typeof message === "string" && message.trim() && message !== "0" ? message.trim() : "导入失败"}`;
+	}
+	function readHttpsUrl(value) {
+		return typeof value === "string" && value.trim() ? value.trim().replace(/^http:/i, "https:") : void 0;
+	}
+	function readIdValue(value) {
+		if (typeof value === "number" && Number.isFinite(value)) return String(value);
+		if (typeof value === "string" && /^\d+$/.test(value.trim())) return value.trim();
+	}
+	function readPositiveInteger(value) {
+		return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : void 0;
+	}
+	function readPositiveNumber(value) {
+		return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : void 0;
+	}
 	var FAV_LIST_URL = "https://api.bilibili.com/x/v3/fav/resource/list";
 	var PAGE_SIZE$1 = 20;
 	function favoritePlaylistId(fid) {
 		return `favorite-${fid}`;
 	}
-	function favoriteTrackId(fid, bvid, page) {
-		return `favorite-${fid}-${bvid}-${page && page > 1 ? page : 1}`;
-	}
-	function parseFavUrl(url) {
-		const input = url.trim();
-		if (!input) return { kind: "unknown" };
-		let parsed;
-		try {
-			parsed = new URL(input);
-		} catch {
-			return { kind: "unknown" };
-		}
-		const host = parsed.hostname.toLowerCase();
-		if (host !== "bilibili.com" && !host.endsWith(".bilibili.com")) return { kind: "unknown" };
-		const ownerMid = readOwnerMid(parsed);
-		if (parsed.searchParams.get("ctype") === "21") {
-			const seasonId = parsed.searchParams.get("fid");
-			if (seasonId && /^\d+$/.test(seasonId)) return {
-				kind: "season",
-				target: {
-					seasonId,
-					...ownerMid ? { mid: ownerMid } : {}
-				}
-			};
-			return { kind: "unknown" };
-		}
-		if (parsed.searchParams.has("sid") || /\/lists(\/|$)/i.test(parsed.pathname)) return {
-			kind: "unsupported",
-			message: "这是合集/列表页链接，请改用收藏页 favlist 里的链接。"
-		};
-		const fid = parsed.searchParams.get("fid");
-		if (fid && /^\d+$/.test(fid)) return {
-			kind: "folder",
-			target: {
-				fid,
-				...ownerMid ? { ownerMid } : {}
-			}
-		};
-		const mediaListMatch = parsed.pathname.match(/\/medialist\/detail\/ml(\d+)/i);
-		if (mediaListMatch) return {
-			kind: "folder",
-			target: { fid: mediaListMatch[1] }
-		};
-		return { kind: "unknown" };
-	}
-	function readOwnerMid(url) {
-		if (url.hostname.toLowerCase() !== "space.bilibili.com") return;
-		return url.pathname.match(/^\/(\d+)\//)?.[1];
-	}
-	function mapFavToTrack(fid, media, now = Date.now()) {
+	function readFavEntry(media) {
 		const item = readRecord$1(media);
 		if (!item) return;
 		const type = item.type;
@@ -1604,22 +1691,20 @@
 		const attr = item.attr;
 		if (typeof attr === "number" && attr !== 0) return;
 		const title = typeof item.title === "string" ? item.title.trim() : "";
-		const page = typeof item.page === "number" && Number.isInteger(item.page) && item.page > 1 ? item.page : void 0;
 		const uploader = readRecord$1(item.upper)?.name;
 		const rawCover = item.cover;
 		const cover = typeof rawCover === "string" && rawCover.trim() ? rawCover.trim().replace(/^http:/i, "https:") : void 0;
 		const duration = typeof item.duration === "number" && Number.isFinite(item.duration) && item.duration > 0 ? item.duration : 0;
+		const partCount = typeof item.page === "number" && Number.isInteger(item.page) && item.page > 0 ? item.page : 1;
 		return {
-			id: favoriteTrackId(fid, bvid, page),
-			bvid,
-			...page !== void 0 ? { page } : {},
-			title: title || bvid,
-			...typeof uploader === "string" && uploader.trim() ? { uploader: uploader.trim() } : {},
-			...cover ? { cover } : {},
-			startTime: 0,
-			duration,
-			addedAt: now,
-			source: "favorite"
+			track: {
+				bvid,
+				title: title || bvid,
+				...typeof uploader === "string" && uploader.trim() ? { uploader: uploader.trim() } : {},
+				...cover ? { cover } : {},
+				duration
+			},
+			partCount
 		};
 	}
 	async function fetchFavFolderInfo(fid, options = {}) {
@@ -1635,6 +1720,7 @@
 	}
 	async function fetchFavFolder(fid, options = {}) {
 		const delay = options.delay ?? randomDelay;
+		const idPrefix = favoritePlaylistId(fid);
 		const tracks = [];
 		let name = "";
 		let total = 0;
@@ -1648,9 +1734,21 @@
 				total = readMediaCount(page.info);
 			}
 			for (const media of page.medias) {
-				const track = mapFavToTrack(fid, media);
-				if (track) tracks.push(track);
-				else skipped += 1;
+				const entry = readFavEntry(media);
+				if (!entry) {
+					skipped += 1;
+					continue;
+				}
+				if (entry.partCount > 1) {
+					await delay(options.signal);
+					const detail = await fetchVideoDetail(entry.track.bvid, {
+						signal: options.signal,
+						fetcher: options.fetcher
+					});
+					tracks.push(...buildEntryTracks(idPrefix, entry.track, detail.pages, "favorite"));
+					continue;
+				}
+				tracks.push(...buildEntryTracks(idPrefix, entry.track, [], "favorite"));
 			}
 			const loaded = tracks.length;
 			options.onProgress?.({
@@ -1733,10 +1831,7 @@
 	function seasonPlaylistId(seasonId) {
 		return `season-${seasonId}`;
 	}
-	function seasonTrackId(seasonId, bvid) {
-		return `season-${seasonId}-${bvid}`;
-	}
-	function mapSeasonArchiveToTrack(seasonId, archive, now = Date.now()) {
+	function readSeasonEntry(archive) {
 		const item = readRecord$1(archive);
 		if (!item) return;
 		const bvid = item.bvid;
@@ -1746,14 +1841,10 @@
 		const cover = typeof rawCover === "string" && rawCover.trim() ? rawCover.trim().replace(/^http:/i, "https:") : void 0;
 		const duration = typeof item.duration === "number" && Number.isFinite(item.duration) && item.duration > 0 ? item.duration : 0;
 		return {
-			id: seasonTrackId(seasonId, bvid),
 			bvid,
 			title: title || bvid,
 			...cover ? { cover } : {},
-			startTime: 0,
-			duration,
-			addedAt: now,
-			source: "favorite"
+			duration
 		};
 	}
 	async function fetchSeasonInfo(seasonId, options = {}) {
@@ -1769,6 +1860,7 @@
 	}
 	async function fetchSeason(seasonId, options = {}) {
 		const delay = options.delay ?? randomDelay;
+		const idPrefix = seasonPlaylistId(seasonId);
 		const tracks = [];
 		let name = "";
 		let total = 0;
@@ -1782,9 +1874,17 @@
 				total = readTotal(page.meta, page.page);
 			}
 			for (const archive of page.archives) {
-				const track = mapSeasonArchiveToTrack(seasonId, archive);
-				if (track) tracks.push(track);
-				else skipped += 1;
+				const entry = readSeasonEntry(archive);
+				if (!entry) {
+					skipped += 1;
+					continue;
+				}
+				await delay(options.signal);
+				const detail = await fetchVideoDetail(entry.bvid, {
+					signal: options.signal,
+					fetcher: options.fetcher
+				});
+				tracks.push(...buildEntryTracks(idPrefix, entry, detail.pages, "collection"));
 			}
 			const loaded = tracks.length;
 			options.onProgress?.({
@@ -1858,17 +1958,76 @@
 		if (code === -404 || code === 11010) return "合集不存在或链接无效";
 		return `合集获取失败：${typeof message === "string" && message.trim() && message !== "0" ? message.trim() : "导入失败"}`;
 	}
+	var VIDEO_PATH$1 = /\/video\/(BV[0-9A-Za-z]+)/;
+	var FAVLIST_MEDIA_PATH = /\/medialist\/detail\/ml(\d+)/i;
+	function parseImportUrl(url) {
+		const input = url.trim();
+		if (!input) return { kind: "unknown" };
+		let parsed;
+		try {
+			parsed = new URL(input);
+		} catch {
+			return { kind: "unknown" };
+		}
+		if (!isBilibiliHost$1(parsed.hostname)) return { kind: "unknown" };
+		const video = parsed.pathname.match(VIDEO_PATH$1);
+		if (video) return {
+			kind: "video",
+			target: { bvid: video[1] }
+		};
+		const ownerMid = readOwnerMid(parsed);
+		if (parsed.searchParams.get("ctype") === "21") {
+			const seasonId = parsed.searchParams.get("fid");
+			if (seasonId && /^\d+$/.test(seasonId)) return {
+				kind: "season",
+				target: {
+					seasonId,
+					...ownerMid ? { mid: ownerMid } : {}
+				}
+			};
+			return { kind: "unknown" };
+		}
+		if (parsed.searchParams.has("sid") || /\/lists(\/|$)/i.test(parsed.pathname)) return {
+			kind: "unsupported",
+			message: "这是合集/列表页链接，请改用收藏页 favlist 里的链接。"
+		};
+		const fid = parsed.searchParams.get("fid");
+		if (fid && /^\d+$/.test(fid)) return {
+			kind: "folder",
+			target: {
+				fid,
+				...ownerMid ? { ownerMid } : {}
+			}
+		};
+		const mediaListMatch = parsed.pathname.match(FAVLIST_MEDIA_PATH);
+		if (mediaListMatch) return {
+			kind: "folder",
+			target: { fid: mediaListMatch[1] }
+		};
+		return { kind: "unknown" };
+	}
+	function readOwnerMid(url) {
+		if (url.hostname.toLowerCase() !== "space.bilibili.com") return;
+		return url.pathname.match(/^\/(\d+)\//)?.[1];
+	}
+	function isBilibiliHost$1(hostname) {
+		const host = hostname.toLowerCase();
+		return host === "bilibili.com" || host.endsWith(".bilibili.com");
+	}
 	function ImportFavModal({ store, onClose }) {
 		const [phase, setPhase] = (0, preact_hooks.useState)("input");
 		const [url, setUrl] = (0, preact_hooks.useState)("");
 		const [source, setSource] = (0, preact_hooks.useState)();
 		const [info, setInfo] = (0, preact_hooks.useState)();
+		const [detail, setDetail] = (0, preact_hooks.useState)();
 		const [progress, setProgress] = (0, preact_hooks.useState)();
 		const [summary, setSummary] = (0, preact_hooks.useState)("");
 		const [error, setError] = (0, preact_hooks.useState)("");
 		const controller = (0, preact_hooks.useRef)(null);
-		const playlistId = source ? source.kind === "folder" ? favoritePlaylistId(source.target.fid) : seasonPlaylistId(source.target.seasonId) : void 0;
+		const videoSource = source?.kind === "video" ? source : void 0;
+		const playlistId = source ? source.kind === "folder" ? favoritePlaylistId(source.target.fid) : source.kind === "season" ? seasonPlaylistId(source.target.seasonId) : videoPlaylistId(source.target.bvid) : void 0;
 		const existingPlaylist = playlistId ? store.data.value.playlists.find((item) => item.id === playlistId) : void 0;
+		const plannedCount = videoSource ? detail?.pages.length ?? 0 : info?.count ?? 0;
 		const resetController = () => {
 			controller.current?.abort();
 			controller.current = null;
@@ -1881,20 +2040,54 @@
 			resetController();
 			setSource(void 0);
 			setInfo(void 0);
+			setDetail(void 0);
 			setProgress(void 0);
 			setError("");
 			setPhase("input");
 		};
+		const loadSeason = async (target, signal) => {
+			setSource({
+				kind: "season",
+				target
+			});
+			const result = await fetchSeasonInfo(target.seasonId, {
+				signal,
+				mid: target.mid
+			});
+			setInfo({
+				name: result.name,
+				count: result.total
+			});
+		};
+		const loadVideo = async (target, signal) => {
+			const video = await fetchVideoDetail(target.bvid, { signal });
+			setDetail(video);
+			if (video.seasonId) {
+				await loadSeason({
+					seasonId: video.seasonId,
+					...video.seasonOwnerMid ? { mid: video.seasonOwnerMid } : {}
+				}, signal);
+				return;
+			}
+			setSource({
+				kind: "video",
+				target
+			});
+			setInfo({
+				name: video.title || target.bvid,
+				count: video.pages.length
+			});
+		};
 		const parse = async (event) => {
 			event.preventDefault();
-			const parsed = parseFavUrl(url);
+			const parsed = parseImportUrl(url);
 			if (parsed.kind === "unsupported") {
 				setError(parsed.message);
 				setPhase("error");
 				return;
 			}
-			if (parsed.kind !== "folder" && parsed.kind !== "season") {
-				setError("无法解析链接，请粘贴 B 站收藏夹或合集链接（如 https://space.bilibili.com/…/favlist?fid=…）");
+			if (parsed.kind === "unknown") {
+				setError("无法解析链接，请粘贴 B 站收藏夹 / 合集 / 视频链接（space.bilibili.com 的 favlist，或 /video/BV…）");
 				setPhase("error");
 				return;
 			}
@@ -1917,30 +2110,17 @@
 						name: result.name,
 						count: result.mediaCount
 					});
-				} else {
-					setSource({
-						kind: "season",
-						target: parsed.target
-					});
-					const result = await fetchSeasonInfo(parsed.target.seasonId, {
-						signal: next.signal,
-						mid: parsed.target.mid
-					});
-					setInfo({
-						name: result.name,
-						count: result.total
-					});
-				}
+				} else if (parsed.kind === "season") await loadSeason(parsed.target, next.signal);
+				else await loadVideo(parsed.target, next.signal);
 				setPhase("confirm");
 			} catch (err) {
-				if (!next.signal.aborted) {
-					setError(readMessage(err));
-					setPhase("error");
-				}
+				if (next.signal.aborted) return;
+				setError(readMessage(err));
+				setPhase("error");
 			}
 		};
 		const runImport = async () => {
-			if (!source || !info) return;
+			if (!source || !info || !playlistId) return;
 			resetController();
 			const next = new AbortController();
 			controller.current = next;
@@ -1948,30 +2128,47 @@
 			setProgress(void 0);
 			setPhase("importing");
 			try {
-				const result = source.kind === "folder" ? await fetchFavFolder(source.target.fid, {
-					signal: next.signal,
-					expectedOwnerMid: source.target.ownerMid,
-					onProgress: (value) => setProgress({
-						loaded: value.loaded,
-						total: value.total
-					})
-				}) : await fetchSeason(source.target.seasonId, {
-					signal: next.signal,
-					mid: source.target.mid,
-					onProgress: (value) => setProgress({
-						loaded: value.loaded,
-						total: value.total
-					})
-				});
+				let tracks;
+				let skipped = 0;
+				if (source.kind === "video") {
+					if (!detail) throw new Error("视频信息已失效，请重新解析链接");
+					if (detail.pages.length === 0) throw new Error("该视频没有可导入的分P，请换一个视频链接");
+					tracks = buildEntryTracks(VIDEO_TRACK_PREFIX, {
+						bvid: detail.bvid,
+						title: detail.title,
+						...detail.cover ? { cover: detail.cover } : {},
+						...detail.ownerName ? { uploader: detail.ownerName } : {},
+						duration: detail.duration
+					}, detail.pages, "manual");
+					if (tracks.length === 0) throw new Error("该视频没有可导入的分P，请换一个视频链接");
+				} else {
+					const result = source.kind === "folder" ? await fetchFavFolder(source.target.fid, {
+						signal: next.signal,
+						expectedOwnerMid: source.target.ownerMid,
+						onProgress: (value) => setProgress({
+							loaded: value.loaded,
+							total: value.total
+						})
+					}) : await fetchSeason(source.target.seasonId, {
+						signal: next.signal,
+						mid: source.target.mid,
+						onProgress: (value) => setProgress({
+							loaded: value.loaded,
+							total: value.total
+						})
+					});
+					tracks = result.tracks;
+					skipped = result.skipped;
+				}
 				const playlist = {
-					id: source.kind === "folder" ? favoritePlaylistId(source.target.fid) : seasonPlaylistId(source.target.seasonId),
+					id: playlistId,
 					name: info.name,
-					tracks: result.tracks,
+					tracks,
 					createdAt: existingPlaylist?.createdAt ?? Date.now(),
 					updatedAt: Date.now()
 				};
 				store.importPlaylist(playlist);
-				setSummary(`成功导入 ${result.tracks.length} 个视频，已跳过 ${result.skipped} 个失效视频`);
+				setSummary(`成功导入 ${tracks.length} 个视频，已跳过 ${skipped} 个失效视频`);
 				setPhase("done");
 			} catch (err) {
 				if (next.signal.aborted) setPhase("input");
@@ -1990,13 +2187,13 @@
 			class: "import-fav-modal",
 			role: "dialog",
 			"aria-modal": "true",
-			"aria-label": "导入 Bilibili 收藏夹",
+			"aria-label": "批量导入",
 			children: (0, preact_jsx_runtime.jsxs)("div", {
 				class: "import-fav-card",
 				children: [
 					(0, preact_jsx_runtime.jsxs)("div", {
 						class: "editor-heading",
-						children: [(0, preact_jsx_runtime.jsx)("strong", { children: "导入收藏夹 / 合集" }), (0, preact_jsx_runtime.jsx)("button", {
+						children: [(0, preact_jsx_runtime.jsx)("strong", { children: "批量导入" }), (0, preact_jsx_runtime.jsx)("button", {
 							class: "icon-button",
 							type: "button",
 							title: "关闭",
@@ -2013,8 +2210,8 @@
 						onSubmit: parse,
 						children: [(0, preact_jsx_runtime.jsx)("input", {
 							value: url,
-							placeholder: "粘贴收藏夹或合集链接，如 https://space.bilibili.com/…/favlist?fid=…",
-							"aria-label": "收藏夹链接",
+							placeholder: "粘贴收藏夹 / 合集 / 视频链接，如 https://www.bilibili.com/video/BV…",
+							"aria-label": "导入链接",
 							autoFocus: true,
 							onInput: (event) => setUrl(event.currentTarget.value)
 						}), (0, preact_jsx_runtime.jsxs)("div", {
@@ -2039,7 +2236,28 @@
 					phase === "confirm" && info && (0, preact_jsx_runtime.jsxs)("div", {
 						class: "import-fav-confirm",
 						children: [
-							(0, preact_jsx_runtime.jsxs)("p", { children: [
+							videoSource ? (0, preact_jsx_runtime.jsxs)("div", {
+								class: "import-fav-video",
+								children: [
+									(0, preact_jsx_runtime.jsx)("p", { children: "该视频没有合集，是否导入为歌单？" }),
+									(0, preact_jsx_runtime.jsxs)("p", {
+										class: "import-fav-name",
+										children: [
+											"《",
+											info.name,
+											"》"
+										]
+									}),
+									(0, preact_jsx_runtime.jsxs)("p", {
+										class: "import-fav-note",
+										children: [
+											"将导入 ",
+											plannedCount,
+											" 个视频（多P 会按分P 拆分为独立曲目）"
+										]
+									})
+								]
+							}) : (0, preact_jsx_runtime.jsxs)("p", { children: [
 								"即将导入歌单「",
 								info.name,
 								"」，共 ",
@@ -2907,8 +3125,8 @@
 							(0, preact_jsx_runtime.jsx)("button", {
 								class: "icon-button",
 								type: "button",
-								title: "导入 Bilibili 收藏夹",
-								"aria-label": "导入 Bilibili 收藏夹",
+								title: "批量导入",
+								"aria-label": "批量导入",
 								onClick: () => setImportOpen(true),
 								children: (0, preact_jsx_runtime.jsx)(Star, {
 									size: 18,

@@ -68,9 +68,11 @@ src/
 │   ├── audio-only-controller.ts 纯音频模式的开关、状态机与页面表现
 │   ├── audio-only-interceptor.ts `__playinfo__` / fetch / XHR 拦截安装
 │   └── playurl-rewriter.ts      纯函数：把 playurl 响应改写成「仅音频」（可单测）
-├── sources/                     外部来源（收藏夹 / 视频合集）→ `Track` 的适配层
-│   ├── bilibili-fav.ts          解析链接（收藏夹/合集）、收藏夹分页拉取、失效过滤、映射为 Track（可单测）
-│   ├── bilibili-season.ts       视频合集 season 拉取与映射（另一套接口 `seasons_archives_list`）
+├── sources/                     外部来源（收藏夹 / 视频合集 / 单个视频）→ `Track` 的适配层
+│   ├── import-url.ts            纯函数：统一解析导入链接（收藏夹 / 合集 / 视频）为目标结构，可单测
+│   ├── bilibili-fav.ts          收藏夹分页拉取、失效过滤、多P 拆分、映射为 Track（可单测）
+│   ├── bilibili-season.ts       视频合集 season 拉取与映射（接口 `seasons_archives_list`）
+│   ├── bilibili-video.ts        视频详情 + 合集嗅探（`web-interface/view` 的 `ugc_season`）+ 分P 展开为独立 Track
 │   └── http.ts                  适配层共用的随机限流、可中止 sleep、响应读取
 ├── core/                        无副作用基础件：types.ts / id.ts / time.ts
 ├── playback/                    播放逻辑（不碰 DOM 细节、不碰存储实现）

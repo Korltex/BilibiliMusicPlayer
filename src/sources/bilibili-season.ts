@@ -1,5 +1,10 @@
 import type { Track } from "../core/types";
 import {
+  buildEntryTracks,
+  fetchVideoDetail,
+  type TrackPartsInput,
+} from "./bilibili-video";
+import {
   asNetworkError,
   createAbortError,
   randomDelay,
@@ -60,16 +65,13 @@ export function seasonPlaylistId(seasonId: string): string {
   return `season-${seasonId}`;
 }
 
-export function seasonTrackId(seasonId: string, bvid: string): string {
-  return `season-${seasonId}-${bvid}`;
-}
-
-/** 把合集里的一条 `archives` 映射为 `Track`；缺 bvid 的条目返回 `undefined`。 */
-export function mapSeasonArchiveToTrack(
-  seasonId: string,
-  archive: unknown,
-  now = Date.now(),
-): Track | undefined {
+/**
+ * 读取合集里的一条 `archives`；缺 bvid 的条目返回 `undefined`。
+ *
+ * 注意：合集列表**不提供分P数**（archives 字段只有 aid/bvid/duration/title/state…），
+ * 所以「是否多P」无法从列表判断，只能逐条查详情（见 `fetchSeason`）。
+ */
+export function readSeasonEntry(archive: unknown): TrackPartsInput | undefined {
   const item = readRecord(archive);
   if (!item) {
     return undefined;
@@ -94,14 +96,10 @@ export function mapSeasonArchiveToTrack(
       : 0;
 
   return {
-    id: seasonTrackId(seasonId, bvid),
     bvid,
     title: title || bvid,
     ...(cover ? { cover } : {}),
-    startTime: 0,
     duration,
-    addedAt: now,
-    source: "favorite",
   };
 }
 
@@ -128,6 +126,7 @@ export async function fetchSeason(
   options: FetchSeasonOptions = {},
 ): Promise<SeasonResult> {
   const delay = options.delay ?? randomDelay;
+  const idPrefix = seasonPlaylistId(seasonId);
   const tracks: Track[] = [];
   let name = "";
   let total = 0;
@@ -147,12 +146,21 @@ export async function fetchSeason(
     }
 
     for (const archive of page.archives) {
-      const track = mapSeasonArchiveToTrack(seasonId, archive);
-      if (track) {
-        tracks.push(track);
-      } else {
+      const entry = readSeasonEntry(archive);
+      if (!entry) {
         skipped += 1;
+        continue;
       }
+
+      // 列表没有分P数，必须逐条查详情才能判断是否多P 并拿到 pages。
+      await delay(options.signal);
+      const detail = await fetchVideoDetail(entry.bvid, {
+        signal: options.signal,
+        fetcher: options.fetcher,
+      });
+      tracks.push(
+        ...buildEntryTracks(idPrefix, entry, detail.pages, "collection"),
+      );
     }
 
     const loaded = tracks.length;
