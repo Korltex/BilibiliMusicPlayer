@@ -72,7 +72,7 @@ src/
 ├── sources/                     外部来源（收藏夹 / 视频合集 / 单个视频）→ `Track` 的适配层
 │   ├── import-url.ts            纯函数：统一解析导入链接（收藏夹 / 合集 / 视频）为目标结构，可单测
 │   ├── bilibili-fav.ts          收藏夹分页拉取、失效过滤、多P 拆分、映射为 Track（可单测）
-│   ├── bilibili-season.ts       视频合集 season 拉取与映射（接口 `seasons_archives_list`）
+│   ├── bilibili-season.ts       视频合集 season 拉取与映射（接口 `seasons_archives_list`；导入期**不逐条查详情**，见 6.8）
 │   ├── bilibili-video.ts        视频详情 + 合集嗅探（`web-interface/view` 的 `ugc_season`）+ 分P 展开为独立 Track
 │   └── http.ts                  适配层共用的随机限流、可中止 sleep、响应读取
 ├── core/                        无副作用基础件：types.ts / id.ts / time.ts
@@ -201,6 +201,20 @@ B 站是 SPA，`<video>` 会被替换。`MediaLocator` 用三条互补的路径�
 
 `App` 里还包含歌曲编辑器（`TrackEditor`）：可改标题、起止时间，并用 `fetchVideoChapters()` 调用 B 站公开接口（`/x/web-interface/view` 解析 cid → `/x/player/wbi/v2` 取 `view_points`）识别视频章节。章节以可键盘操作的下拉列表（combobox）呈现，**选中某章即把歌名与起止时间填入表单，保存后成为一首歌（一次一首，不是批量导入）**；没有章节时仍可完全手动填写。章节解析（`parseVideoChapters`）是纯函数，只接受 `content` + 合法 `from`/`to` 的条目，封面 `http:` 会被升成 `https:`。
 
+### 6.8 批量导入（`src/sources/` + `src/app/ImportFavModal.tsx`）
+
+三种入口先由 `parseImportUrl`（`import-url.ts`）归一化：收藏夹 `favlist?fid=<mlid>`、合集 `favlist?fid=<season_id>&ctype=21`（`ctype=21` 时 `fid` 是 season_id，塞给 `/x/v3/fav/*` 会返回**别人**的收藏夹）、视频 `/video/BV…`（先 `view` 嗅探 `ugc_season`，有合集就转走合集路径）。
+
+导入策略按数据源的能力分档，**不要为了「精确」把详情请求加回导入期**：
+
+| 来源                             | 列表是否带分P数        | 导入期行为                                                                                                                   |
+| -------------------------------- | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| 收藏夹 `/x/v3/fav/resource/list` | 带（`medias[].page`）  | 单P 用列表元数据；仅 `partCount > 1` 的条目才查一次详情并按分P 拆分                                                          |
+| 合集 `seasons_archives_list`     | **不带**               | **一个条目 = 一条 `Track`**（无 `page` → 播放落在 P1，无 `cid`），导入期**零详情请求**；多P 不拆分，留给后续「按需补全」能力 |
+| 视频入口                         | 由详情直接给出 `pages` | 按分P 拆分（这一步本来就要查详情）                                                                                           |
+
+两条通用约定：**进度按条目回报**（`loaded` 与 `total` 同为「条目」单位，`processed = 已导入 + 已跳过`，不要用 `tracks.length` 去比 `meta.total`，多P 拆分会让它放大甚至提前 break）；`delay`（0.8~1.5s 随机）只用在**翻页**之间，不要放进逐条循环——408 条的合集会因此空等十几分钟，并让进度长时间停在 0%。
+
 ---
 
 ## 7. 生命周期全景（一次典型使用）
@@ -240,8 +254,8 @@ B 站是 SPA，`<video>` 会被替换。`MediaLocator` 用三条互补的路径�
 
 ## 9. 测试体系
 
-- **单元测试（Vitest，node 环境，`tests/**/*.test.ts`）**：覆盖纯逻辑——时间格式化与钳制、四种播放模式的边界、播放条目的合成与变化比较（`tests/now-playing.test.ts`）、封面 URL 规范化与按 bvid 缓存/退避（`tests/video-cover.test.ts`）、默认歌单/非法持久化数据恢复、播放会话初始化与无效歌曲回退、playurl 改写（三种 DASH 结构 + `durl`/缺音频/畸形 JSON 的失败开放且不修改输入）、章节解析、进度百分比。
-- **浏览器测试（Playwright，`tests/e2e/`）**：**加载的是构建产物**（`tests/helpers/userscript.ts` 读 `dist/*.user.js` 并把 CDN 运行时文件内联进去），所以必须先 `npm run build`。测试用 `page.route()` 把 `https://www.bilibili.com/video/BV1…` 伪造成假 B 站页面，用 `addInitScript` 注入 `localStorage` 版的 `GM_*` 替身，并用 `Object.defineProperties` 伪造 `<video>` 的 `paused/currentTime/duration/readyState/volume/muted` 与 `play()/pause()`。`tests/e2e/player.spec.ts` 覆盖挂载与媒体控制、拖拽位置持久化、片段整秒边界与旧数据归一化、章节选择、删除确认、队列游标与上下文判定、歌单播放会话刷新恢复、bfcache 恢复、网页全屏隐藏、极简模式布局/进度/键盘可达性；`tests/e2e/audio-only.spec.ts` 覆盖 `__playinfo__`、fetch、XHR 三种拦截与失败回退、开关双向重载；`tests/e2e/tab-coordination.spec.ts` 覆盖多标签页**互相独立**播放、以及远端删除当前歌曲后本标签页安全退出歌单播放；`tests/e2e/metadata-refresh.spec.ts` 用 `history.pushState` + 延迟写 DOM 复现 B 站同文档跳转，锁住「面板标题/UP 主自动收敛」「无变化时不重建 MediaMetadata」，以及封面三层兜底：接口封面优先、接口风控/无封面时退回分享卡片封面、每个视频只请求一次接口。
+- **单元测试（Vitest，node 环境，`tests/**/*.test.ts`）**：覆盖纯逻辑——时间格式化与钳制、四种播放模式的边界、播放条目的合成与变化比较（`tests/now-playing.test.ts`）、封面 URL 规范化与按 bvid 缓存/退避（`tests/video-cover.test.ts`）、默认歌单/非法持久化数据恢复、播放会话初始化与无效歌曲回退、playurl 改写（三种 DASH 结构 + `durl`/缺音频/畸形 JSON 的失败开放且不修改输入）、章节解析、进度百分比，以及导入链路的**契约测试**：`tests/sources-bilibili-season.test.ts` 里有「408 条合集 = 14 次列表请求 + **0 次详情请求**」「逐条进度 = 1…408」「多P 条目只产出单条 `-p1`」的用例，`tests/sources-bilibili-fav.test.ts` 锁住收藏夹的分页/失效过滤/多P 拆分。
+- **浏览器测试（Playwright，`tests/e2e/`）**：**加载的是构建产物**（`tests/helpers/userscript.ts` 读 `dist/*.user.js` 并把 CDN 运行时文件内联进去），所以必须先 `npm run build`。测试用 `page.route()` 把 `https://www.bilibili.com/video/BV1…` 伪造成假 B 站页面，用 `addInitScript` 注入 `localStorage` 版的 `GM_*` 替身，并用 `Object.defineProperties` 伪造 `<video>` 的 `paused/currentTime/duration/readyState/volume/muted` 与 `play()/pause()`。`tests/e2e/player.spec.ts` 覆盖挂载与媒体控制、拖拽位置持久化、片段整秒边界与旧数据归一化、章节选择、删除确认、队列游标与上下文判定、歌单播放会话刷新恢复、bfcache 恢复、网页全屏隐藏、极简模式布局/进度/键盘可达性；`tests/e2e/audio-only.spec.ts` 覆盖 `__playinfo__`、fetch、XHR 三种拦截与失败回退、开关双向重载；`tests/e2e/tab-coordination.spec.ts` 覆盖多标签页**互相独立**播放、以及远端删除当前歌曲后本标签页安全退出歌单播放；`tests/e2e/metadata-refresh.spec.ts` 用 `history.pushState` + 延迟写 DOM 复现 B 站同文档跳转，锁住「面板标题/UP 主自动收敛」「无变化时不重建 MediaMetadata」，以及封面三层兜底：接口封面优先、接口风控/无封面时退回分享卡片封面、每个视频只请求一次接口；`tests/e2e/import-fav.spec.ts` 覆盖收藏夹/合集/视频三种入口的导入与覆盖导入、错误提示，并断言合集导入期间详情接口被请求 **0** 次（`viewRequests === 0`）。
 - **真实网站烟雾测试（`tests/real/`，独立配置 `playwright.real.config.ts`）**：访问真实公开 B 站视频页注入正式构建，验证媒体定位与面板挂载；其中一个用例断言纯音频模式下只请求音频分片、不请求视频分片。它依赖外部网络，不纳入默认命令。
 
 ---
@@ -250,7 +264,7 @@ B 站是 SPA，`<video>` 会被替换。`MediaLocator` 用三条互补的路径�
 
 - 不下载、不转码、不缓存音视频；不提供离线播放。
 - 不跨站点工作：`@match` 只有 B 站 `/video/` 页面与 `space.bilibili.com` 空间页（后者只在收藏页 `favlist` 显示 UI，其它空间页脚本惰性加载、不渲染任何东西）。
-- 不修改 B 站账号数据（收藏、投币等）；只读取公开的视频/章节接口（`/x/web-interface/view`、`/x/player/wbi/v2`）、当前登录用户的收藏夹内容（`/x/v3/fav/*`）以及公开的视频合集（`/x/polymer/web-space/seasons_archives_list`）——全部只读、不写回 B 站。封面复用 `/x/web-interface/view`：同一 bvid 最多请求一次，失败退避 5 分钟；接口被风控（412）时改用页面分享卡片封面，不重试、不清空已有封面。
+- 不修改 B 站账号数据（收藏、投币等）；只读取公开的视频/章节接口（`/x/web-interface/view`、`/x/player/wbi/v2`）、当前登录用户的收藏夹内容（`/x/v3/fav/*`）以及公开的视频合集（`/x/polymer/web-space/seasons_archives_list`）——全部只读、不写回 B 站。合集导入**只读列表接口**，不会为了分P 对每个视频各发一次 `/x/web-interface/view`（见 6.8）。封面复用 `/x/web-interface/view`：同一 bvid 最多请求一次，失败退避 5 分钟；接口被风控（412）时改用页面分享卡片封面，不重试、不清空已有封面。
 - 不收集、不上传任何用户数据。
 - 不试图绕过会员/区域限制：能被改写的只有页面本来就能拿到的清单。
 - 纯音频模式不承诺总是生效；抢不到拦截时机或结构不匹配时**必须**回退并如实提示。

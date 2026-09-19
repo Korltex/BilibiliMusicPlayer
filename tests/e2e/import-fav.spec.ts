@@ -353,9 +353,18 @@ test("imports a collection (season) as a new playlist", async ({ page }) => {
       ),
     });
   });
-  await routeViews(page, {
-    BV1SeasonA: viewPayload("BV1SeasonA", "接口标题一", ONE_PART),
-    BV1SeasonB: viewPayload("BV1SeasonB", "接口标题二", ONE_PART),
+  // 方案A：合集导入期不请求任何视频详情。
+  // （面板本身会为当前页面视频取一次封面，所以这里只统计合集条目的 bvid。）
+  const seasonBvids = ["BV1SeasonA", "BV1SeasonB"];
+  const detailRequests: string[] = [];
+  await page.route(VIEW_API_GLOB, async (route) => {
+    detailRequests.push(
+      new URL(route.request().url()).searchParams.get("bvid") ?? "",
+    );
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ code: -404, message: "合集导入不应请求详情" }),
+    });
   });
 
   await openImportTestPage(page);
@@ -382,8 +391,20 @@ test("imports a collection (season) as a new playlist", async ({ page }) => {
     "BV1SeasonA",
     "BV1SeasonB",
   ]);
+  // 元数据全部来自列表：标题用列表标题，且不含 cid / page。
+  expect(playlist?.tracks.map((track) => track.title)).toEqual([
+    "合集歌曲一",
+    "合集歌曲二",
+  ]);
+  expect(playlist?.tracks.every((track) => track.cid === undefined)).toBe(true);
+  expect(playlist?.tracks.every((track) => track.page === undefined)).toBe(
+    true,
+  );
   expect(playlist?.tracks.every((track) => track.source === "collection")).toBe(
     true,
+  );
+  expect(detailRequests.filter((bvid) => seasonBvids.includes(bvid))).toEqual(
+    [],
   );
 
   await modal.getByRole("button", { name: "完成" }).click();
@@ -501,6 +522,12 @@ test("imports a collection sniffed from a video link", async ({ page }) => {
     "BV1SeasonA",
     "BV1SeasonB",
   ]);
+  expect(playlist?.tracks.map((track) => track.title)).toEqual([
+    "合集歌曲一",
+    "合集歌曲二",
+  ]);
+  // 只有嗅探合集时才查详情；合集展开阶段不再逐条请求（所以没有 cid）。
+  expect(playlist?.tracks.every((track) => track.cid === undefined)).toBe(true);
   expect(playlist?.tracks.every((track) => track.source === "collection")).toBe(
     true,
   );

@@ -52,24 +52,6 @@ function seasonPayload(
   };
 }
 
-function viewPayload(
-  bvid: string,
-  title: string,
-  parts: { cid: number; page: number; part: string; duration: number }[],
-): unknown {
-  return {
-    code: 0,
-    data: {
-      bvid,
-      title,
-      duration: parts.reduce((sum, item) => sum + item.duration, 0),
-      pages: parts,
-    },
-  };
-}
-
-const ONE_PART = [{ cid: 111, page: 1, part: "正片", duration: 120 }];
-
 describe("season ids and entries", () => {
   it("derives the playlist id", () => {
     expect(seasonPlaylistId("3221717")).toBe("season-3221717");
@@ -137,16 +119,10 @@ describe("fetchSeasonInfo", () => {
 });
 
 describe("fetchSeason", () => {
-  it("expands single-part archives from the list without extra metadata", async () => {
+  it("builds tracks from list metadata without any video detail request", async () => {
     const requested: string[] = [];
     const fetcher = vi.fn(async (input: URL | RequestInfo) => {
-      const url = String(input);
-      requested.push(url);
-
-      if (url.includes("/view")) {
-        return Response.json(viewPayload("BV1A", "接口标题", ONE_PART));
-      }
-
+      requested.push(String(input));
       return Response.json(seasonPayload([archive("BV1A", "列表标题")], 1, 1));
     });
 
@@ -160,7 +136,6 @@ describe("fetchSeason", () => {
       {
         id: "season-3221717-BV1A-p1",
         bvid: "BV1A",
-        cid: 111,
         title: "列表标题",
         cover: "https://i2.hdslb.com/bfs/archive/cover.jpg",
         startTime: 0,
@@ -169,23 +144,22 @@ describe("fetchSeason", () => {
         source: "collection",
       },
     ]);
-    // 合集列表没有分P数，必须逐条查详情。
-    expect(requested.filter((url) => url.includes("/view"))).toHaveLength(1);
+    // 导入期只发列表请求，详情请求 0 次。
+    expect(requested.filter((url) => url.includes("/view"))).toHaveLength(0);
+    expect(requested).toHaveLength(1);
   });
 
-  it("splits a multi-part archive into one track per part", async () => {
+  it("keeps a multi-part archive as a single P1 entry", async () => {
+    // 列表没有分P数：即使该视频实际有多个分P，导入期也只产出 `-p1` 一条（拆分交给按需补全）。
+    const requested: string[] = [];
     const fetcher = vi.fn(async (input: URL | RequestInfo) => {
-      if (String(input).includes("/view")) {
-        return Response.json(
-          viewPayload("BV1Multi", "多P视频", [
-            { cid: 111, page: 1, part: "第一首", duration: 100 },
-            { cid: 222, page: 2, part: "第二首", duration: 200 },
-          ]),
-        );
-      }
-
+      requested.push(String(input));
       return Response.json(
-        seasonPayload([archive("BV1Multi", "多P视频", { duration: 300 })], 1, 1),
+        seasonPayload(
+          [archive("BV1Multi", "多P视频", { duration: 300 })],
+          1,
+          1,
+        ),
       );
     });
 
@@ -196,16 +170,50 @@ describe("fetchSeason", () => {
 
     expect(result.tracks.map((track) => track.id)).toEqual([
       "season-3221717-BV1Multi-p1",
-      "season-3221717-BV1Multi-p2",
     ]);
-    expect(result.tracks.map((track) => track.title)).toEqual([
-      "多P视频 [P1] 第一首",
-      "多P视频 [P2] 第二首",
-    ]);
-    expect(result.tracks.map((track) => track.duration)).toEqual([100, 200]);
-    expect(result.tracks.every((track) => track.source === "collection")).toBe(
-      true,
-    );
+    expect(result.tracks[0]).toMatchObject({
+      bvid: "BV1Multi",
+      title: "多P视频",
+      duration: 300,
+      source: "collection",
+    });
+    expect(result.tracks[0]).not.toHaveProperty("page");
+    expect(result.tracks[0]).not.toHaveProperty("cid");
+    expect(requested).toHaveLength(1);
+  });
+
+  it("imports a 408-entry collection with one request per page and zero details", async () => {
+    const total = 408;
+    const pageSize = 30;
+    const requested: string[] = [];
+
+    const fetcher = vi.fn(async (input: URL | RequestInfo) => {
+      const url = String(input);
+      requested.push(url);
+      const pageNum = Number(new URL(url).searchParams.get("page_num"));
+      const start = (pageNum - 1) * pageSize;
+      const count = Math.max(0, Math.min(pageSize, total - start));
+      const archives = Array.from({ length: count }, (_value, index) =>
+        archive(`BV1S${start + index}`, `合集视频 ${start + index}`),
+      );
+      return Response.json(seasonPayload(archives, pageNum, total));
+    });
+
+    const progress: SeasonProgress[] = [];
+    const result = await fetchSeason("186033", {
+      fetcher: fetcher as typeof fetch,
+      delay: async () => {},
+      onProgress: (value) => progress.push(value),
+    });
+
+    expect(result.tracks).toHaveLength(total);
+    // 408 条 → 14 次列表请求（13×30 + 18），详情请求 0 次。
+    expect(requested.filter((url) => url.includes("/view"))).toHaveLength(0);
+    expect(requested).toHaveLength(14);
+    // 逐条回报：408 次回调，第一条就是 1/408。
+    expect(progress).toHaveLength(total);
+    expect(progress[0]).toEqual({ loaded: 1, total });
+    expect(progress[total - 1]).toEqual({ loaded: total, total });
   });
 
   it("paginates until the reported total is collected", async () => {
@@ -214,14 +222,9 @@ describe("fetchSeason", () => {
       2: [archive("BV1B", "第二首")],
     };
     const fetcher = vi.fn(async (input: URL | RequestInfo) => {
-      const url = String(input);
-
-      if (url.includes("/view")) {
-        const bvid = new URL(url).searchParams.get("bvid") ?? "";
-        return Response.json(viewPayload(bvid, bvid, ONE_PART));
-      }
-
-      const pageNum = Number(new URL(url).searchParams.get("page_num"));
+      const pageNum = Number(
+        new URL(String(input)).searchParams.get("page_num"),
+      );
       return Response.json(seasonPayload(archives[pageNum], pageNum, 2));
     });
 
@@ -236,9 +239,40 @@ describe("fetchSeason", () => {
     });
 
     expect(result.tracks.map((track) => track.bvid)).toEqual(["BV1A", "BV1B"]);
-    expect(fetcher).toHaveBeenCalledTimes(4); // 2 页列表 + 2 次详情
-    expect(delays).toHaveLength(3); // 第 2 页前 + 两次详情前
-    expect(progress.map((item) => item.loaded)).toEqual([1, 2]);
+    expect(fetcher).toHaveBeenCalledTimes(2); // 2 页列表，没有详情请求
+    expect(delays).toHaveLength(1); // 只有第 2 页前
+    expect(progress).toEqual([
+      { loaded: 1, total: 2 },
+      { loaded: 2, total: 2 },
+    ]);
+  });
+
+  it("advances progress for skipped entries so loaded and total share one unit", async () => {
+    const fetcher = vi.fn(async () =>
+      Response.json(
+        seasonPayload(
+          [archive("BV1A", "第一首"), { title: "缺少 bvid 的条目" }],
+          1,
+          2,
+        ),
+      ),
+    );
+
+    const progress: SeasonProgress[] = [];
+    const result = await fetchSeason("3221717", {
+      fetcher: fetcher as typeof fetch,
+      delay: async () => {},
+      onProgress: (value) => progress.push(value),
+    });
+
+    // `loaded` 数的是条目数（与 `total` 同单位），跳过的条目也要推进进度。
+    expect(progress).toEqual([
+      { loaded: 1, total: 2 },
+      { loaded: 2, total: 2 },
+    ]);
+    expect(result.tracks).toHaveLength(1);
+    expect(result.skipped).toBe(1);
+    expect(fetcher).toHaveBeenCalledOnce();
   });
 
   it("stops after the first page when the season is empty", async () => {

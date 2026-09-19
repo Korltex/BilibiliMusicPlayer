@@ -1,9 +1,5 @@
 import type { Track } from "../core/types";
-import {
-  buildEntryTracks,
-  fetchVideoDetail,
-  type TrackPartsInput,
-} from "./bilibili-video";
+import { buildEntryTracks, type TrackPartsInput } from "./bilibili-video";
 import {
   asNetworkError,
   createAbortError,
@@ -21,6 +17,12 @@ import {
  *
  * 该接口的 `mid` 参数不参与鉴权（文档与实测均确认：任意 mid 返回同一个合集），
  * 因此这里优先用链接路径里的 mid，缺失时退回常量。
+ *
+ * 导入策略：`archives` 已经带齐 `title` / `pic` / `duration`，所以导入期**不逐条请求**
+ * `/x/web-interface/view`（一个 408 条的合集原本要发 408 次详情请求），
+ * 而是「一个条目 = 一条 `Track`」：没有 `page`（播放时落在 P1）、没有 `cid`。
+ * 代价是**多P 视频不会按分P 拆分**——列表不含分P数，无法在导入期知道；
+ * 需要精确分P 时再由按需补全处理（单条 `/view` + 缓存），不必整单重导。
  */
 
 export interface SeasonInfo {
@@ -69,7 +71,8 @@ export function seasonPlaylistId(seasonId: string): string {
  * 读取合集里的一条 `archives`；缺 bvid 的条目返回 `undefined`。
  *
  * 注意：合集列表**不提供分P数**（archives 字段只有 aid/bvid/duration/title/state…），
- * 所以「是否多P」无法从列表判断，只能逐条查详情（见 `fetchSeason`）。
+ * 所以从列表无法判断一条是否多P。导入期因此一律按「一个条目 = 一条曲目」处理，
+ * 不为了分P 而逐条请求详情（见 `fetchSeason` 的导入策略说明）。
  */
 export function readSeasonEntry(archive: unknown): TrackPartsInput | undefined {
   const item = readRecord(archive);
@@ -131,6 +134,11 @@ export async function fetchSeason(
   let name = "";
   let total = 0;
   let skipped = 0;
+  /**
+   * 已处理的条目数（已导入 + 已跳过）。
+   * `total` 是合集内**视频条目数**，两者同为「条目」单位，进度百分比才不会被多P 拆分放大。
+   */
+  let processed = 0;
   let pageNum = 1;
 
   for (;;) {
@@ -147,26 +155,21 @@ export async function fetchSeason(
 
     for (const archive of page.archives) {
       const entry = readSeasonEntry(archive);
-      if (!entry) {
+
+      if (entry) {
+        // 列表元数据直接建 Track：一个条目一条曲目，不额外请求详情。
+        tracks.push(...buildEntryTracks(idPrefix, entry, [], "collection"));
+      } else {
         skipped += 1;
-        continue;
       }
 
-      // 列表没有分P数，必须逐条查详情才能判断是否多P 并拿到 pages。
-      await delay(options.signal);
-      const detail = await fetchVideoDetail(entry.bvid, {
-        signal: options.signal,
-        fetcher: options.fetcher,
-      });
-      tracks.push(
-        ...buildEntryTracks(idPrefix, entry, detail.pages, "collection"),
-      );
+      // 逐条回报（不是每页一次），否则长时间停在 0% 会被误判成卡死。
+      processed += 1;
+      options.onProgress?.({ loaded: processed, total: total || processed });
     }
 
-    const loaded = tracks.length;
-    options.onProgress?.({ loaded, total: total || loaded });
-
-    if (total > 0 && loaded + skipped >= total) {
+    // 单位一致（条目 vs 条目）；`total` 缺失时由下面的翻页条件兜底。
+    if (total > 0 && processed >= total) {
       break;
     }
     if (page.archives.length === 0 || pageNum >= MAX_PAGES) {

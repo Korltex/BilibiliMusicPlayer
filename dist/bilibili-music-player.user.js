@@ -1875,6 +1875,7 @@
 		let name = "";
 		let total = 0;
 		let skipped = 0;
+		let processed = 0;
 		let pageNum = 1;
 		for (;;) {
 			if (options.signal?.aborted) throw createAbortError();
@@ -1885,23 +1886,15 @@
 			}
 			for (const archive of page.archives) {
 				const entry = readSeasonEntry(archive);
-				if (!entry) {
-					skipped += 1;
-					continue;
-				}
-				await delay(options.signal);
-				const detail = await fetchVideoDetail(entry.bvid, {
-					signal: options.signal,
-					fetcher: options.fetcher
+				if (entry) tracks.push(...buildEntryTracks(idPrefix, entry, [], "collection"));
+				else skipped += 1;
+				processed += 1;
+				options.onProgress?.({
+					loaded: processed,
+					total: total || processed
 				});
-				tracks.push(...buildEntryTracks(idPrefix, entry, detail.pages, "collection"));
 			}
-			const loaded = tracks.length;
-			options.onProgress?.({
-				loaded,
-				total: total || loaded
-			});
-			if (total > 0 && loaded + skipped >= total) break;
+			if (total > 0 && processed >= total) break;
 			if (page.archives.length === 0 || pageNum >= MAX_PAGES) break;
 			await delay(options.signal);
 			pageNum += 1;
