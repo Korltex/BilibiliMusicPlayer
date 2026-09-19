@@ -236,6 +236,59 @@ test("imports a favorite folder and splits its multi-part videos", async ({
   );
 });
 
+test("skips an entry whose video is gone instead of failing the import", async ({
+  page,
+}) => {
+  await page.route(FAV_API_GLOB, async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        code: 0,
+        data: {
+          info: { mid: 1, title: "我的收藏", media_count: 2 },
+          medias: [
+            favMedia({
+              id: 1,
+              title: "已经没了的视频",
+              bvid: "BV1ImportGone",
+              page: 2,
+            }),
+            favMedia({ id: 2, title: "还活着的视频", bvid: "BV1ImportAlive" }),
+          ],
+          has_more: false,
+        },
+      }),
+    });
+  });
+  // 列表的 attr 是 0（没标失效），只有详情请求能发现它已经拿不到了。
+  await routeViews(page, {
+    BV1ImportGone: { code: -404, message: "啥都木有" },
+  });
+
+  await openImportTestPage(page);
+
+  await page.getByRole("button", { name: "批量导入" }).click();
+  const modal = page.getByRole("dialog", { name: "批量导入" });
+  await modal
+    .getByLabel("导入链接")
+    .fill("https://space.bilibili.com/1/favlist?fid=2015788187");
+  await modal.getByRole("button", { name: "解析" }).click();
+  await modal.getByRole("button", { name: "导入" }).click();
+
+  // 整单照常完成，只少那一条。
+  await expect(
+    modal.getByText(/成功导入 1 个视频，已跳过 1 个失效视频/),
+  ).toBeVisible();
+
+  const stored = await readStoredAppData(page);
+  const playlist = stored.playlists.find(
+    (item) => item.id === "favorite-2015788187",
+  );
+  expect(playlist?.tracks.map((track) => track.bvid)).toEqual([
+    "BV1ImportAlive",
+  ]);
+});
+
 test("re-importing the same folder overwrites instead of duplicating", async ({
   page,
 }) => {

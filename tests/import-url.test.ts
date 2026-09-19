@@ -61,6 +61,24 @@ describe("parseImportUrl / favorite folders", () => {
       ),
     ).toEqual({ fid: "1306978874", ownerMid: "100969474" });
   });
+
+  // 收藏页给自己创建的收藏夹发的链接会同时带 ftype=create 和 ctype=21；
+  // `fid` 仍是 mlid，不能因为 ctype=21 就走合集接口（否则报「合集不存在或链接无效」）。
+  it("keeps ftype=create links as folders even when ctype=21 is present", () => {
+    expect(
+      folderTarget(
+        "https://space.bilibili.com/1776113786/favlist?fid=1618343886&ftype=create&ctype=21",
+      ),
+    ).toEqual({ fid: "1618343886", ownerMid: "1776113786" });
+  });
+
+  it("keeps created folders without an owner mid as folders too", () => {
+    expect(
+      folderTarget(
+        "https://www.bilibili.com/favlist?fid=1618343886&ftype=create&ctype=21",
+      ),
+    ).toEqual({ fid: "1618343886" });
+  });
 });
 
 describe("parseImportUrl / collections", () => {
@@ -76,6 +94,14 @@ describe("parseImportUrl / collections", () => {
     expect(
       seasonTarget("https://www.bilibili.com/favlist?fid=5471&ctype=21"),
     ).toEqual({ seasonId: "5471" });
+  });
+
+  it("routes collected collections (ftype=collect) to the season source", () => {
+    expect(
+      seasonTarget(
+        "https://space.bilibili.com/1776113786/favlist?fid=186033&ftype=collect&ctype=21",
+      ),
+    ).toEqual({ seasonId: "186033", mid: "1776113786" });
   });
 });
 

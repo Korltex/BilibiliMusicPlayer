@@ -131,7 +131,61 @@ describe("fetchFavFolder", () => {
     expect(result.skipped).toBe(1);
     // 单P 条目不得触发详情请求。
     expect(fetcher).toHaveBeenCalledOnce();
-    expect(progress).toEqual([{ loaded: 2, total: 3, skipped: 1 }]);
+    // 逐条回报，且 `loaded` 数的是条目（跳过的也推进），与 total 同单位。
+    expect(progress).toEqual([
+      { loaded: 1, total: 3, skipped: 0 },
+      { loaded: 2, total: 3, skipped: 1 },
+      { loaded: 3, total: 3, skipped: 1 },
+    ]);
+  });
+
+  it("reports entry progress, not the multi-part track count", async () => {
+    // 一个只有 2 条、但其中一条是 4 分P 的收藏夹：曲目数会到 5，进度不能显示成 5/2。
+    const fetcher = vi.fn(async (input: URL | RequestInfo) => {
+      if (String(input).includes("/x/web-interface/view")) {
+        return Response.json({
+          code: 0,
+          data: {
+            bvid: "BV1Multi",
+            title: "多P视频",
+            duration: 400,
+            pages: [
+              { cid: 1, page: 1, part: "P1", duration: 100 },
+              { cid: 2, page: 2, part: "P2", duration: 100 },
+              { cid: 3, page: 3, part: "P3", duration: 100 },
+              { cid: 4, page: 4, part: "P4", duration: 100 },
+            ],
+          },
+        });
+      }
+
+      return Response.json(
+        favListPayload([
+          favMedia({
+            bvid: "BV1Multi",
+            title: "多P视频",
+            page: 4,
+            duration: 400,
+          }),
+          favMedia({ bvid: "BV1Single" }),
+        ]),
+      );
+    });
+
+    const progress: FavProgress[] = [];
+    const result = await fetchFavFolder("2015788186", {
+      fetcher: fetcher as typeof fetch,
+      delay: async () => {},
+      onProgress: (value) => progress.push(value),
+    });
+
+    // 5 条曲目（4 个分P + 1 条单P），但进度只数 2 个条目。
+    expect(result.tracks).toHaveLength(5);
+    expect(progress).toEqual([
+      { loaded: 1, total: 2, skipped: 0 },
+      { loaded: 2, total: 2, skipped: 0 },
+    ]);
+    expect(progress.every((item) => item.loaded <= item.total)).toBe(true);
   });
 
   it("splits a multi-part entry into one track per part", async () => {
@@ -180,6 +234,91 @@ describe("fetchFavFolder", () => {
       true,
     );
     expect(requested.filter((url) => url.includes("/view"))).toHaveLength(1);
+  });
+
+  it("skips an unmarked unavailable entry instead of failing the whole import", async () => {
+    // 真实案例：收藏夹条目 attr = 0（列表没标失效），但稿件的记录已经被清掉，
+    // /view 返回 -404。旧行为会让整单导入报「视频不存在或已被删除」，一条不剩。
+    const fetcher = vi.fn(async (input: URL | RequestInfo) => {
+      const url = String(input);
+
+      if (url.includes("/x/web-interface/view")) {
+        const bvid = new URL(url).searchParams.get("bvid");
+        return bvid === "BV1Dead"
+          ? Response.json({ code: -404, message: "啥都木有" })
+          : Response.json({
+              code: 0,
+              data: {
+                bvid: "BV1Multi",
+                title: "多P视频",
+                duration: 200,
+                pages: [
+                  { cid: 111, page: 1, part: "第一首", duration: 100 },
+                  { cid: 222, page: 2, part: "第二首", duration: 100 },
+                ],
+              },
+            });
+      }
+
+      return Response.json(
+        favListPayload([
+          favMedia({ bvid: "BV1Dead", title: "已删除的多P视频", page: 2 }),
+          favMedia({ bvid: "BV1Multi", title: "多P视频", page: 2 }),
+          favMedia({ bvid: "BV1Single" }),
+        ]),
+      );
+    });
+
+    const progress: FavProgress[] = [];
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const result = await fetchFavFolder("77", {
+      fetcher: fetcher as typeof fetch,
+      delay: async () => {},
+      onProgress: (value) => progress.push(value),
+    });
+    // mockRestore 会清空调用记录，所以先把它抄出来。
+    const warnCalls = [...warn.mock.calls];
+    warn.mockRestore();
+
+    // 坏的那条只跳过自己：其余条目照常导入。
+    expect(result.tracks.map((track) => track.bvid)).toEqual([
+      "BV1Multi",
+      "BV1Multi",
+      "BV1Single",
+    ]);
+    expect(result.skipped).toBe(1);
+    // 进度仍然走到 total（3 个条目），不会因为跳过而卡住。
+    expect(progress.at(-1)).toEqual({ loaded: 3, total: 3, skipped: 1 });
+    // 跳过不是静默的：日志里能查到是哪一条、为什么。
+    expect(warnCalls).toEqual([
+      [
+        "[Bilibili Music Player] 跳过不可用视频",
+        expect.objectContaining({
+          bvid: "BV1Dead",
+          title: "已删除的多P视频",
+          reason: "视频不存在或已被删除",
+        }),
+      ],
+    ]);
+  });
+
+  it("still fails on risk control instead of swallowing it as a skipped entry", async () => {
+    const fetcher = vi.fn(async (input: URL | RequestInfo) => {
+      if (String(input).includes("/x/web-interface/view")) {
+        return new Response(null, { status: 412 });
+      }
+
+      return Response.json(
+        favListPayload([favMedia({ bvid: "BV1Multi", page: 2 })]),
+      );
+    });
+
+    await expect(
+      fetchFavFolder("77", {
+        fetcher: fetcher as typeof fetch,
+        delay: async () => {},
+      }),
+    ).rejects.toThrow(/请求过于频繁/);
   });
 
   it("paginates until has_more is false", async () => {

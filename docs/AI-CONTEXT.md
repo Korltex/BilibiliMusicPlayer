@@ -203,7 +203,9 @@ B 站是 SPA，`<video>` 会被替换。`MediaLocator` 用三条互补的路径�
 
 ### 6.8 批量导入（`src/sources/` + `src/app/ImportFavModal.tsx`）
 
-三种入口先由 `parseImportUrl`（`import-url.ts`）归一化：收藏夹 `favlist?fid=<mlid>`、合集 `favlist?fid=<season_id>&ctype=21`（`ctype=21` 时 `fid` 是 season_id，塞给 `/x/v3/fav/*` 会返回**别人**的收藏夹）、视频 `/video/BV…`（先 `view` 嗅探 `ugc_season`，有合集就转走合集路径）。
+三种入口先由 `parseImportUrl`（`import-url.ts`）归一化：收藏夹 `favlist?fid=<mlid>`、合集 `favlist?fid=<season_id>&ftype=collect&ctype=21`、视频 `/video/BV…`（先 `view` 嗅探 `ugc_season`，有合集就转走合集路径）。
+
+判据不能只看 `ctype`：`ctype` 表示「收藏对象的内容类型」（11 稿件 / 21 合集），只有 `ftype=collect`（或省略 ftype）时的 `fid` 才是 season_id；**`ftype=create` 是我创建的收藏夹，`fid` 始终是 mlid**，收藏页给自家收藏夹的链接会写成 `ftype=create&ctype=21`，误当合集送进合集接口只会拿到 `code -404`「合集不存在或链接无效」。反过来，把 season_id 当 mlid 送给 `/x/v3/fav/*` 会**静默返回别人的收藏夹**（id 空间重叠），所以 `ftype=create` 的链接带 ownerMid 交给 `assertFavOwner` 校验归属。
 
 导入策略按数据源的能力分档，**不要为了「精确」把详情请求加回导入期**：
 
@@ -213,7 +215,9 @@ B 站是 SPA，`<video>` 会被替换。`MediaLocator` 用三条互补的路径�
 | 合集 `seasons_archives_list`     | **不带**               | **一个条目 = 一条 `Track`**（无 `page` → 播放落在 P1，无 `cid`），导入期**零详情请求**；多P 不拆分，留给后续「按需补全」能力 |
 | 视频入口                         | 由详情直接给出 `pages` | 按分P 拆分（这一步本来就要查详情）                                                                                           |
 
-两条通用约定：**进度按条目回报**（`loaded` 与 `total` 同为「条目」单位，`processed = 已导入 + 已跳过`，不要用 `tracks.length` 去比 `meta.total`，多P 拆分会让它放大甚至提前 break）；**逐条循环里不要放等待**，限流只放在翻页之间——合集用 `seasonPageDelay`（200–400ms；`page_size` 取接口上限 100，408 条 = 5 页）、命中风控（HTTP 412 / `code` -352、-412）按 1s/2s/4s 退避**重试同一页**，用尽才报错；不要换回为详情接口准备的 `randomDelay`（0.8–1.5s），那只会让 408 条多等十几秒并放大「假死」观感。确认阶段（`fetchSeasonInfo`）刻意**不做退避重试**：风控/异常立刻反馈，用户直接重试即可。
+两条通用约定（收藏夹与合集两条路径都适用）：**进度按条目回报且单位一致**——`loaded` 数的是「已处理条目数」（`processed = 已导入 + 已跳过`），与 `total`（收藏夹 `media_count` / 合集 `meta.total`，都是条目数）同单位；**不要用 `tracks.length`**，多P 拆分后的曲目数会大于条目数，进度会冲成 `88/27（100%）`，也会让合集的终止判断提前 break。回报频率是**逐条**（不是每页一次），否则慢页期间进度长时间不动。**逐条循环里不要放等待**，限流只放在翻页之间——合集用 `seasonPageDelay`（200–400ms；`page_size` 取接口上限 100，408 条 = 5 页）、命中风控（HTTP 412 / `code` -352、-412）按 1s/2s/4s 退避**重试同一页**，用尽才报错；不要换回为详情接口准备的 `randomDelay`（0.8–1.5s）去翻页，那只会让 408 条多等十几秒并放大「假死」观感（收藏夹路径的 `randomDelay` 用在「多P 条目查详情」之前，是它该待的地方）。确认阶段（`fetchSeasonInfo`）刻意**不做退避重试**：风控/异常立刻反馈，用户直接重试即可。
+
+第三条约定：**「这一条拿不到」不等于「整单失败」**。收藏夹列表的 `medias[].attr` 只标"删除"类失效（`1` 其他原因删除、`9` UP 自删），**稿件记录已被清掉但条目仍是 `attr = 0`** 的情况（详情接口返回 `-404`、`62002` 等）只有 `/x/web-interface/view` 能发现。所以收藏夹路径里「多P 条目查详情」必须**按条目** try/catch：命中 `VideoUnavailableError`（`bilibili-video.ts`，覆盖 `-404/-400/62002/62004` 与"响应里没有稿件"）就计入 `skipped` 继续下一条，并 `console.warn` 出 bvid/标题（跳过但不静默；UI 摘要只报「已跳过 N 个失效视频」，不再细分来源）；风控（HTTP 412 / `code` -352）与网络异常照旧上抛，不要一起吞掉。**不要**为了发现"不可见的单P"而对每个条目都查详情——那是每条一次请求，等于把刚拆掉的坑挖回来；单P 的不可见条目目前仍会静默进歌单，这是已知限制。
 
 ---
 
@@ -254,7 +258,7 @@ B 站是 SPA，`<video>` 会被替换。`MediaLocator` 用三条互补的路径�
 
 ## 9. 测试体系
 
-- **单元测试（Vitest，node 环境，`tests/**/*.test.ts`）**：覆盖纯逻辑——时间格式化与钳制、四种播放模式的边界、播放条目的合成与变化比较（`tests/now-playing.test.ts`）、封面 URL 规范化与按 bvid 缓存/退避（`tests/video-cover.test.ts`）、默认歌单/非法持久化数据恢复、播放会话初始化与无效歌曲回退、playurl 改写（三种 DASH 结构 + `durl`/缺音频/畸形 JSON 的失败开放且不修改输入）、章节解析、进度百分比，以及导入链路的**契约测试**：`tests/sources-bilibili-season.test.ts` 里有「408 条合集 = **5 次列表请求** + **0 次详情请求**」「`page_size=100`」「逐条进度 = 1…408」「多P 条目只产出单条 `-p1`」「HTTP 412 退避后重试同一页」「退避阶梯用尽才报风控错」「翻页礼让间隔 200~400ms」的用例，`tests/sources-bilibili-fav.test.ts` 锁住收藏夹的分页/失效过滤/多P 拆分。
+- **单元测试（Vitest，node 环境，`tests/**/*.test.ts`）**：覆盖纯逻辑——时间格式化与钳制、四种播放模式的边界、播放条目的合成与变化比较（`tests/now-playing.test.ts`）、封面 URL 规范化与按 bvid 缓存/退避（`tests/video-cover.test.ts`）、默认歌单/非法持久化数据恢复、播放会话初始化与无效歌曲回退、playurl 改写（三种 DASH 结构 + `durl`/缺音频/畸形 JSON 的失败开放且不修改输入）、章节解析、进度百分比，以及导入链路的**契约测试**：`tests/sources-bilibili-season.test.ts` 里有「408 条合集 = **5 次列表请求** + **0 次详情请求**」「`page_size=100`」「逐条进度 = 1…408」「多P 条目只产出单条 `-p1`」「HTTP 412 退避后重试同一页」「退避阶梯用尽才报风控错」「翻页礼让间隔 200~400ms」的用例，`tests/sources-bilibili-fav.test.ts` 锁住收藏夹的分页/失效过滤/多P 拆分、「进度只数条目、不数多P 拆分后的曲目数」（`loaded <= total`）、以及「列表没标失效但详情 `-404` 的条目只跳过自己、风控 412 仍然上抛」。
 - **浏览器测试（Playwright，`tests/e2e/`）**：**加载的是构建产物**（`tests/helpers/userscript.ts` 读 `dist/*.user.js` 并把 CDN 运行时文件内联进去），所以必须先 `npm run build`。测试用 `page.route()` 把 `https://www.bilibili.com/video/BV1…` 伪造成假 B 站页面，用 `addInitScript` 注入 `localStorage` 版的 `GM_*` 替身，并用 `Object.defineProperties` 伪造 `<video>` 的 `paused/currentTime/duration/readyState/volume/muted` 与 `play()/pause()`。`tests/e2e/player.spec.ts` 覆盖挂载与媒体控制、拖拽位置持久化、片段整秒边界与旧数据归一化、章节选择、删除确认、队列游标与上下文判定、歌单播放会话刷新恢复、bfcache 恢复、网页全屏隐藏、极简模式布局/进度/键盘可达性；`tests/e2e/audio-only.spec.ts` 覆盖 `__playinfo__`、fetch、XHR 三种拦截与失败回退、开关双向重载；`tests/e2e/tab-coordination.spec.ts` 覆盖多标签页**互相独立**播放、以及远端删除当前歌曲后本标签页安全退出歌单播放；`tests/e2e/metadata-refresh.spec.ts` 用 `history.pushState` + 延迟写 DOM 复现 B 站同文档跳转，锁住「面板标题/UP 主自动收敛」「无变化时不重建 MediaMetadata」，以及封面三层兜底：接口封面优先、接口风控/无封面时退回分享卡片封面、每个视频只请求一次接口；`tests/e2e/import-fav.spec.ts` 覆盖收藏夹/合集/视频三种入口的导入与覆盖导入、错误提示，并断言合集导入期间详情接口被请求 **0** 次（`viewRequests === 0`）。
 - **真实网站烟雾测试（`tests/real/`，独立配置 `playwright.real.config.ts`）**：访问真实公开 B 站视频页注入正式构建，验证媒体定位与面板挂载；其中一个用例断言纯音频模式下只请求音频分片、不请求视频分片。它依赖外部网络，不纳入默认命令。
 

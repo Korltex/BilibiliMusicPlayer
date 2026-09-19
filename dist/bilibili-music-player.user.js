@@ -1561,6 +1561,15 @@
 	function asNetworkError(error, fallback) {
 		return error instanceof Error ? error : new Error(fallback);
 	}
+	var VideoUnavailableError = class extends Error {
+		constructor(message) {
+			super(message);
+			this.name = "VideoUnavailableError";
+		}
+	};
+	function isVideoUnavailableError(error) {
+		return error instanceof VideoUnavailableError;
+	}
 	var VIEW_URL$1 = "https://api.bilibili.com/x/web-interface/view";
 	var VIDEO_TRACK_PREFIX = "video";
 	function videoPlaylistId(bvid) {
@@ -1607,11 +1616,14 @@
 			throw new Error("网络异常，导入失败");
 		}
 		const root = readRecord$1(payload);
-		if (root?.code !== 0) throw new Error(videoCodeMessage(root?.code, root?.message));
+		if (root?.code !== 0) {
+			const message = videoCodeMessage(root?.code, root?.message);
+			throw isUnavailableVideoCode(root?.code) ? new VideoUnavailableError(message) : new Error(message);
+		}
 		const data = readRecord$1(root?.data);
-		if (!data) throw new Error("视频不存在或链接无效");
+		if (!data) throw new VideoUnavailableError("视频不存在或链接无效");
 		const detail = readVideoDetail(data);
-		if (!detail.bvid.trim()) throw new Error("视频不存在或链接无效");
+		if (!detail.bvid.trim()) throw new VideoUnavailableError("视频不存在或链接无效");
 		return detail;
 	}
 	function buildTrack(idPrefix, entry, source, now, slot) {
@@ -1667,6 +1679,9 @@
 				duration: readPositiveNumber(record.duration) ?? 0
 			}];
 		});
+	}
+	function isUnavailableVideoCode(code) {
+		return code === -404 || code === -400 || code === 62002 || code === 62004;
 	}
 	function videoCodeMessage(code, message) {
 		if (code === -101) return "需要登录 Bilibili 账号";
@@ -1735,6 +1750,7 @@
 		let name = "";
 		let total = 0;
 		let skipped = 0;
+		let processed = 0;
 		let pn = 1;
 		for (;;) {
 			if (options.signal?.aborted) throw createAbortError();
@@ -1745,27 +1761,32 @@
 			}
 			for (const media of page.medias) {
 				const entry = readFavEntry(media);
-				if (!entry) {
-					skipped += 1;
-					continue;
-				}
-				if (entry.partCount > 1) {
+				if (!entry) skipped += 1;
+				else if (entry.partCount > 1) {
 					await delay(options.signal);
-					const detail = await fetchVideoDetail(entry.track.bvid, {
-						signal: options.signal,
-						fetcher: options.fetcher
-					});
-					tracks.push(...buildEntryTracks(idPrefix, entry.track, detail.pages, "favorite"));
-					continue;
-				}
-				tracks.push(...buildEntryTracks(idPrefix, entry.track, [], "favorite"));
+					try {
+						const detail = await fetchVideoDetail(entry.track.bvid, {
+							signal: options.signal,
+							fetcher: options.fetcher
+						});
+						tracks.push(...buildEntryTracks(idPrefix, entry.track, detail.pages, "favorite"));
+					} catch (error) {
+						if (!isVideoUnavailableError(error)) throw error;
+						skipped += 1;
+						console.warn("[Bilibili Music Player] 跳过不可用视频", {
+							bvid: entry.track.bvid,
+							title: entry.track.title,
+							reason: error instanceof Error ? error.message : String(error)
+						});
+					}
+				} else tracks.push(...buildEntryTracks(idPrefix, entry.track, [], "favorite"));
+				processed += 1;
+				options.onProgress?.({
+					loaded: processed,
+					total: total || processed,
+					skipped
+				});
 			}
-			const loaded = tracks.length;
-			options.onProgress?.({
-				loaded,
-				total: total || loaded,
-				skipped
-			});
 			if (!page.hasMore) break;
 			await delay(options.signal);
 			pn += 1;
@@ -2010,7 +2031,8 @@
 			target: { bvid: video[1] }
 		};
 		const ownerMid = readOwnerMid(parsed);
-		if (parsed.searchParams.get("ctype") === "21") {
+		const isCreatedFolder = parsed.searchParams.get("ftype") === "create";
+		if (parsed.searchParams.get("ctype") === "21" && !isCreatedFolder) {
 			const seasonId = parsed.searchParams.get("fid");
 			if (seasonId && /^\d+$/.test(seasonId)) return {
 				kind: "season",
@@ -2175,15 +2197,19 @@
 						duration: detail.duration
 					}, detail.pages, "manual");
 					if (tracks.length === 0) throw new Error("该视频没有可导入的分P，请换一个视频链接");
-				} else {
-					const result = source.kind === "folder" ? await fetchFavFolder(source.target.fid, {
+				} else if (source.kind === "folder") {
+					const result = await fetchFavFolder(source.target.fid, {
 						signal: next.signal,
 						expectedOwnerMid: source.target.ownerMid,
 						onProgress: (value) => setProgress({
 							loaded: value.loaded,
 							total: value.total
 						})
-					}) : await fetchSeason(source.target.seasonId, {
+					});
+					tracks = result.tracks;
+					skipped = result.skipped;
+				} else {
+					const result = await fetchSeason(source.target.seasonId, {
 						signal: next.signal,
 						mid: source.target.mid,
 						onProgress: (value) => setProgress({

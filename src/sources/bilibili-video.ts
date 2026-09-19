@@ -38,6 +38,21 @@ export interface FetchVideoOptions {
   fetcher?: typeof fetch;
 }
 
+/**
+ * 「这个稿件现在拿不到」：已删除、或审核中/被锁定/仅自己可见等不可见状态。
+ * 与风控、网络异常区分开——调用方可以据此只跳过这一条，而不是让整次导入失败。
+ */
+export class VideoUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "VideoUnavailableError";
+  }
+}
+
+export function isVideoUnavailableError(error: unknown): boolean {
+  return error instanceof VideoUnavailableError;
+}
+
 /** 列表级元数据：单P视频直接用它，不额外请求。 */
 export interface TrackPartsInput {
   bvid: string;
@@ -140,17 +155,20 @@ export async function fetchVideoDetail(
 
   const root = readRecord(payload);
   if (root?.code !== 0) {
-    throw new Error(videoCodeMessage(root?.code, root?.message));
+    const message = videoCodeMessage(root?.code, root?.message);
+    throw isUnavailableVideoCode(root?.code)
+      ? new VideoUnavailableError(message)
+      : new Error(message);
   }
 
   const data = readRecord(root?.data);
   if (!data) {
-    throw new Error("视频不存在或链接无效");
+    throw new VideoUnavailableError("视频不存在或链接无效");
   }
 
   const detail = readVideoDetail(data);
   if (!detail.bvid.trim()) {
-    throw new Error("视频不存在或链接无效");
+    throw new VideoUnavailableError("视频不存在或链接无效");
   }
 
   return detail;
@@ -244,6 +262,14 @@ function readParts(value: unknown): VideoPart[] {
       },
     ];
   });
+}
+
+/**
+ * 与 `videoCodeMessage` 的「不可用」分支保持一致：这些 code 表示稿件拿不到了，
+ * 值得让调用方跳过该条目；风控（-352/-412）与其它错误不在此列。
+ */
+function isUnavailableVideoCode(code: unknown): boolean {
+  return code === -404 || code === -400 || code === 62002 || code === 62004;
 }
 
 function videoCodeMessage(code: unknown, message: unknown): string {

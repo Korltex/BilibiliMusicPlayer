@@ -226,21 +226,23 @@ export function ImportFavModal({ store, onClose }: ImportFavModalProps) {
         if (tracks.length === 0) {
           throw new Error("该视频没有可导入的分P，请换一个视频链接");
         }
+      } else if (source.kind === "folder") {
+        const result = await fetchFavFolder(source.target.fid, {
+          signal: next.signal,
+          expectedOwnerMid: source.target.ownerMid,
+          onProgress: (value) =>
+            setProgress({ loaded: value.loaded, total: value.total }),
+        });
+
+        tracks = result.tracks;
+        skipped = result.skipped;
       } else {
-        const result =
-          source.kind === "folder"
-            ? await fetchFavFolder(source.target.fid, {
-                signal: next.signal,
-                expectedOwnerMid: source.target.ownerMid,
-                onProgress: (value) =>
-                  setProgress({ loaded: value.loaded, total: value.total }),
-              })
-            : await fetchSeason(source.target.seasonId, {
-                signal: next.signal,
-                mid: source.target.mid,
-                onProgress: (value) =>
-                  setProgress({ loaded: value.loaded, total: value.total }),
-              });
+        const result = await fetchSeason(source.target.seasonId, {
+          signal: next.signal,
+          mid: source.target.mid,
+          onProgress: (value) =>
+            setProgress({ loaded: value.loaded, total: value.total }),
+        });
 
         tracks = result.tracks;
         skipped = result.skipped;

@@ -2,6 +2,7 @@ import type { Track } from "../core/types";
 import {
   buildEntryTracks,
   fetchVideoDetail,
+  isVideoUnavailableError,
   type TrackPartsInput,
 } from "./bilibili-video";
 import {
@@ -32,6 +33,11 @@ export interface FavFolderResult {
 }
 
 export interface FavProgress {
+  /**
+   * 已处理条目数（已导入 + 已跳过）。
+   * 与 `total`（收藏夹条目数）同单位——**不是**多P 拆分后的曲目数，
+   * 否则一个 27 条的收藏夹会显示成 `88/27（100%）`。
+   */
   loaded: number;
   total: number;
   skipped: number;
@@ -152,6 +158,8 @@ export async function fetchFavFolder(
   let name = "";
   let total = 0;
   let skipped = 0;
+  /** 已处理的条目数；`total` 是收藏夹条目数，两者同单位。 */
+  let processed = 0;
   let pn = 1;
 
   for (;;) {
@@ -168,29 +176,54 @@ export async function fetchFavFolder(
 
     for (const media of page.medias) {
       const entry = readFavEntry(media);
+
       if (!entry) {
         skipped += 1;
-        continue;
-      }
-
-      // 多P 视频必须拉详情拿 pages，再拆成独立的 Track；单P 直接用列表元数据。
-      if (entry.partCount > 1) {
+      } else if (entry.partCount > 1) {
+        // 多P 视频必须拉详情拿 pages，再拆成独立的 Track；单P 直接用列表元数据。
         await delay(options.signal);
-        const detail = await fetchVideoDetail(entry.track.bvid, {
-          signal: options.signal,
-          fetcher: options.fetcher,
-        });
-        tracks.push(
-          ...buildEntryTracks(idPrefix, entry.track, detail.pages, "favorite"),
-        );
-        continue;
+        try {
+          const detail = await fetchVideoDetail(entry.track.bvid, {
+            signal: options.signal,
+            fetcher: options.fetcher,
+          });
+          tracks.push(
+            ...buildEntryTracks(
+              idPrefix,
+              entry.track,
+              detail.pages,
+              "favorite",
+            ),
+          );
+        } catch (error) {
+          // 列表的 attr 只标"删除"类失效：记录已被清掉但条目仍是 attr = 0 的稿件，
+          // 只有详情请求才发现。这种「这一条拿不到」按条目跳过，不要让整单导入失败；
+          // 风控（412/-352）与网络异常仍然上抛。
+          if (!isVideoUnavailableError(error)) {
+            throw error;
+          }
+
+          // 跳过但不静默：日志里能查到是哪一条、为什么。
+          skipped += 1;
+          console.warn("[Bilibili Music Player] 跳过不可用视频", {
+            bvid: entry.track.bvid,
+            title: entry.track.title,
+            reason: error instanceof Error ? error.message : String(error),
+          });
+        }
+      } else {
+        tracks.push(...buildEntryTracks(idPrefix, entry.track, [], "favorite"));
       }
 
-      tracks.push(...buildEntryTracks(idPrefix, entry.track, [], "favorite"));
+      // 逐条回报，且计的是「条目」而不是拆分后的曲目数：
+      // 多P 会把曲目数放大到超过 media_count，进度条会提前冲到 100%。
+      processed += 1;
+      options.onProgress?.({
+        loaded: processed,
+        total: total || processed,
+        skipped,
+      });
     }
-
-    const loaded = tracks.length;
-    options.onProgress?.({ loaded, total: total || loaded, skipped });
 
     if (!page.hasMore) {
       break;
