@@ -1,11 +1,6 @@
 import type { Track } from "../core/types";
 import { buildEntryTracks, type TrackPartsInput } from "./bilibili-video";
-import {
-  asNetworkError,
-  createAbortError,
-  randomDelay,
-  readRecord,
-} from "./http";
+import { asNetworkError, createAbortError, readRecord, sleep } from "./http";
 
 /*
  * Bilibili「视频合集(season)」导入适配层。
@@ -23,6 +18,11 @@ import {
  * 而是「一个条目 = 一条 `Track`」：没有 `page`（播放时落在 P1）、没有 `cid`。
  * 代价是**多P 视频不会按分P 拆分**——列表不含分P数，无法在导入期知道；
  * 需要精确分P 时再由按需补全处理（单条 `/view` + 缓存），不必整单重导。
+ *
+ * 分页与节奏：`page_size` 实测上限是 100（>100 返回 `code -400`），408 条因此只要 5 页；
+ * 翻页之间用 200~400ms 的礼让间隔即可（列表接口比详情接口耐受得多：同一客户端实测连续 14 页 0 风控），
+ * 只有真的命中风控（HTTP 412 / `code` -352、-412）才按 1s / 2s / 4s 退避**重试同一页**，用尽后如实报错。
+ * 不要把翻页换回 `randomDelay`（0.8~1.5s）：那只是让用户为 408 条多等十几秒。
  */
 
 export interface SeasonInfo {
@@ -45,7 +45,10 @@ export interface SeasonProgress {
 export interface FetchSeasonOptions {
   signal?: AbortSignal;
   fetcher?: typeof fetch;
+  /** 翻页之间的礼让间隔；默认 `seasonPageDelay`（200~400ms）。 */
   delay?: (signal: AbortSignal | undefined) => Promise<void>;
+  /** 命中风控后的退避等待；默认真实 `sleep`，测试可注入空实现跳过等待。 */
+  wait?: (ms: number, signal: AbortSignal | undefined) => Promise<void>;
   onProgress?: (progress: SeasonProgress) => void;
   /** 链接里的用户 mid；仅作接口占位，不参与鉴权。 */
   mid?: string;
@@ -59,9 +62,39 @@ interface SeasonPage {
 
 const SEASON_ARCHIVES_URL =
   "https://api.bilibili.com/x/polymer/web-space/seasons_archives_list";
-const PAGE_SIZE = 30;
+/** 接口上限：`page_size > 100` 返回 `code -400`（实测 101/120/150 均如此）。 */
+const PAGE_SIZE = 100;
 const MAX_PAGES = 200;
 const FALLBACK_MID = "1";
+/** 翻页礼让间隔：下限 + 随机抖动（毫秒）。 */
+const PAGE_DELAY_MIN_MS = 200;
+const PAGE_DELAY_JITTER_MS = 200;
+/** 命中风控后的退避阶梯（毫秒）；用尽仍失败才把错误抛给用户。 */
+const RISK_BACKOFF_MS = [1000, 2000, 4000];
+
+/** 风控（HTTP 412 / `code` -352、-412）：可以退避重试，而不是让整次导入直接失败。 */
+class SeasonRiskControlError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SeasonRiskControlError";
+  }
+}
+
+/**
+ * 翻页之间的礼让间隔（200~400ms）。
+ *
+ * 列表接口对所有客户端都比较宽容（同一客户端实测连续 14 页 0 风控），
+ * 而 `randomDelay`（0.8~1.5s）是为重风控的详情接口 `/view` 准备的；
+ * 用在翻页上只会让「408 条 = 13 次翻页」白白多等十几秒。
+ */
+export function seasonPageDelay(
+  signal: AbortSignal | undefined,
+): Promise<void> {
+  return sleep(
+    PAGE_DELAY_MIN_MS + Math.random() * PAGE_DELAY_JITTER_MS,
+    signal,
+  );
+}
 
 export function seasonPlaylistId(seasonId: string): string {
   return `season-${seasonId}`;
@@ -110,6 +143,7 @@ export async function fetchSeasonInfo(
   seasonId: string,
   options: FetchSeasonOptions = {},
 ): Promise<SeasonInfo> {
+  // 确认阶段只发一次、快速失败：风控或异常立刻反馈给用户，不做退避重试。
   const page = await requestSeasonPage(seasonId, 1, options);
   const name = readSeasonName(page.meta);
   if (!name) {
@@ -128,7 +162,7 @@ export async function fetchSeason(
   seasonId: string,
   options: FetchSeasonOptions = {},
 ): Promise<SeasonResult> {
-  const delay = options.delay ?? randomDelay;
+  const delay = options.delay ?? seasonPageDelay;
   const idPrefix = seasonPlaylistId(seasonId);
   const tracks: Track[] = [];
   let name = "";
@@ -146,7 +180,7 @@ export async function fetchSeason(
       throw createAbortError();
     }
 
-    const page = await requestSeasonPage(seasonId, pageNum, options);
+    const page = await requestSeasonPageWithBackoff(seasonId, pageNum, options);
 
     if (pageNum === 1) {
       name = readSeasonName(page.meta);
@@ -183,6 +217,33 @@ export async function fetchSeason(
   return { name, tracks, skipped };
 }
 
+/**
+ * 取一页列表；命中风控时按 `RISK_BACKOFF_MS` 退避后**重试同一页**，用尽才抛错。
+ * 退避期间可被 `signal` 中止（`sleep` 会抛 AbortError，中止导入仍然即时生效）。
+ */
+async function requestSeasonPageWithBackoff(
+  seasonId: string,
+  pageNum: number,
+  options: FetchSeasonOptions,
+): Promise<SeasonPage> {
+  const wait = options.wait ?? sleep;
+
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await requestSeasonPage(seasonId, pageNum, options);
+    } catch (error) {
+      const giveUp =
+        !(error instanceof SeasonRiskControlError) ||
+        attempt >= RISK_BACKOFF_MS.length;
+      if (giveUp) {
+        throw error;
+      }
+
+      await wait(RISK_BACKOFF_MS[attempt], options.signal);
+    }
+  }
+}
+
 async function requestSeasonPage(
   seasonId: string,
   pageNum: number,
@@ -207,7 +268,9 @@ async function requestSeasonPage(
   }
 
   if (response.status === 412) {
-    throw new Error("请求过于频繁，已触发 B 站风控，请稍后再试");
+    throw new SeasonRiskControlError(
+      "请求过于频繁，已触发 B 站风控，请稍后再试",
+    );
   }
   if (!response.ok) {
     throw new Error(`网络异常（HTTP ${response.status}）`);
@@ -222,7 +285,10 @@ async function requestSeasonPage(
 
   const root = readRecord(payload);
   if (root?.code !== 0) {
-    throw new Error(seasonCodeMessage(root?.code, root?.message));
+    const message = seasonCodeMessage(root?.code, root?.message);
+    throw isRiskControlCode(root?.code)
+      ? new SeasonRiskControlError(message)
+      : new Error(message);
   }
 
   const data = readRecord(root?.data);
@@ -264,6 +330,11 @@ function readMid(meta: Record<string, unknown> | undefined): string | undefined 
     return raw.trim();
   }
   return undefined;
+}
+
+/** 与 `seasonCodeMessage` 里的风控分支保持一致：这两个 code 值得退避重试。 */
+function isRiskControlCode(code: unknown): boolean {
+  return code === -352 || code === -412;
 }
 
 function seasonCodeMessage(code: unknown, message: unknown): string {

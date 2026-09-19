@@ -3,6 +3,7 @@ import {
   fetchSeason,
   fetchSeasonInfo,
   readSeasonEntry,
+  seasonPageDelay,
   seasonPlaylistId,
   type SeasonProgress,
 } from "../src/sources/bilibili-season";
@@ -47,7 +48,7 @@ function seasonPayload(
     data: {
       meta: seasonMeta(total, metaOverrides),
       archives,
-      page: { page_num: pageNum, page_size: 30, total },
+      page: { page_num: pageNum, page_size: 100, total },
     },
   };
 }
@@ -182,9 +183,9 @@ describe("fetchSeason", () => {
     expect(requested).toHaveLength(1);
   });
 
-  it("imports a 408-entry collection with one request per page and zero details", async () => {
+  it("imports a 408-entry collection with 100-per-page requests and zero details", async () => {
     const total = 408;
-    const pageSize = 30;
+    const pageSize = 100;
     const requested: string[] = [];
 
     const fetcher = vi.fn(async (input: URL | RequestInfo) => {
@@ -207,13 +208,75 @@ describe("fetchSeason", () => {
     });
 
     expect(result.tracks).toHaveLength(total);
-    // 408 条 → 14 次列表请求（13×30 + 18），详情请求 0 次。
+    // 408 条 → 5 次列表请求（100×4 + 8），详情请求 0 次。
     expect(requested.filter((url) => url.includes("/view"))).toHaveLength(0);
-    expect(requested).toHaveLength(14);
+    expect(requested).toHaveLength(5);
+    // 分页大小用满接口上限（>100 会返回 code -400）。
+    expect(new URL(requested[0]).searchParams.get("page_size")).toBe("100");
     // 逐条回报：408 次回调，第一条就是 1/408。
     expect(progress).toHaveLength(total);
     expect(progress[0]).toEqual({ loaded: 1, total });
     expect(progress[total - 1]).toEqual({ loaded: total, total });
+  });
+
+  it("retries the same page after HTTP 412 and finishes the import", async () => {
+    const pagesRequested: number[] = [];
+    const waits: number[] = [];
+    let blocked = 1;
+
+    const fetcher = vi.fn(async (input: URL | RequestInfo) => {
+      const pageNum = Number(
+        new URL(String(input)).searchParams.get("page_num"),
+      );
+      pagesRequested.push(pageNum);
+
+      if (pageNum === 2 && blocked > 0) {
+        blocked -= 1;
+        return new Response(null, { status: 412 });
+      }
+
+      const archives =
+        pageNum === 1
+          ? [archive("BV1A", "第一首")]
+          : pageNum === 2
+            ? [archive("BV1B", "第二首")]
+            : [];
+      return Response.json(seasonPayload(archives, pageNum, 2));
+    });
+
+    const result = await fetchSeason("3221717", {
+      fetcher: fetcher as typeof fetch,
+      delay: async () => {},
+      wait: async (ms) => {
+        waits.push(ms);
+      },
+    });
+
+    expect(result.tracks.map((track) => track.bvid)).toEqual(["BV1A", "BV1B"]);
+    // 第 2 页被请求两次：第一次 412，退避 1s 后重试成功。
+    expect(pagesRequested.filter((pageNum) => pageNum === 2)).toHaveLength(2);
+    expect(waits).toEqual([1000]);
+  });
+
+  it("gives up after the backoff ladder and reports a readable risk-control error", async () => {
+    const waits: number[] = [];
+    const fetcher = vi.fn(async () =>
+      Response.json({ code: -352, message: "-352" }),
+    );
+
+    await expect(
+      fetchSeason("3221717", {
+        fetcher: fetcher as typeof fetch,
+        delay: async () => {},
+        wait: async (ms) => {
+          waits.push(ms);
+        },
+      }),
+    ).rejects.toThrow(/风控/);
+
+    // 4 次尝试（首次 + 3 次退避），退避阶梯 1s / 2s / 4s。
+    expect(fetcher).toHaveBeenCalledTimes(4);
+    expect(waits).toEqual([1000, 2000, 4000]);
   });
 
   it("paginates until the reported total is collected", async () => {
@@ -273,6 +336,28 @@ describe("fetchSeason", () => {
     expect(result.tracks).toHaveLength(1);
     expect(result.skipped).toBe(1);
     expect(fetcher).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the between-page pacing at 200~400ms instead of the 0.8~1.5s detail-API delay", async () => {
+    const sleeps: number[] = [];
+    const spy = vi.spyOn(globalThis, "setTimeout").mockImplementation(((
+      handler: () => void,
+      ms?: number,
+    ) => {
+      sleeps.push(Number(ms));
+      queueMicrotask(handler);
+      return 0 as unknown as ReturnType<typeof setTimeout>;
+    }) as unknown as typeof setTimeout);
+
+    try {
+      await seasonPageDelay(undefined);
+    } finally {
+      spy.mockRestore();
+    }
+
+    expect(sleeps).toHaveLength(1);
+    expect(sleeps[0]).toBeGreaterThanOrEqual(200);
+    expect(sleeps[0]).toBeLessThanOrEqual(400);
   });
 
   it("stops after the first page when the season is empty", async () => {

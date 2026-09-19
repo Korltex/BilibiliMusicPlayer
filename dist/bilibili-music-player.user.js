@@ -1835,9 +1835,25 @@
 		return `收藏夹获取失败：${typeof message === "string" && message.trim() && message !== "0" ? message.trim() : "导入失败"}`;
 	}
 	var SEASON_ARCHIVES_URL = "https://api.bilibili.com/x/polymer/web-space/seasons_archives_list";
-	var PAGE_SIZE = 30;
+	var PAGE_SIZE = 100;
 	var MAX_PAGES = 200;
 	var FALLBACK_MID = "1";
+	var PAGE_DELAY_MIN_MS = 200;
+	var PAGE_DELAY_JITTER_MS = 200;
+	var RISK_BACKOFF_MS = [
+		1e3,
+		2e3,
+		4e3
+	];
+	var SeasonRiskControlError = class extends Error {
+		constructor(message) {
+			super(message);
+			this.name = "SeasonRiskControlError";
+		}
+	};
+	function seasonPageDelay(signal) {
+		return sleep(PAGE_DELAY_MIN_MS + Math.random() * PAGE_DELAY_JITTER_MS, signal);
+	}
 	function seasonPlaylistId(seasonId) {
 		return `season-${seasonId}`;
 	}
@@ -1869,7 +1885,7 @@
 		};
 	}
 	async function fetchSeason(seasonId, options = {}) {
-		const delay = options.delay ?? randomDelay;
+		const delay = options.delay ?? seasonPageDelay;
 		const idPrefix = seasonPlaylistId(seasonId);
 		const tracks = [];
 		let name = "";
@@ -1879,7 +1895,7 @@
 		let pageNum = 1;
 		for (;;) {
 			if (options.signal?.aborted) throw createAbortError();
-			const page = await requestSeasonPage(seasonId, pageNum, options);
+			const page = await requestSeasonPageWithBackoff(seasonId, pageNum, options);
 			if (pageNum === 1) {
 				name = readSeasonName(page.meta);
 				total = readTotal(page.meta, page.page);
@@ -1905,6 +1921,15 @@
 			skipped
 		};
 	}
+	async function requestSeasonPageWithBackoff(seasonId, pageNum, options) {
+		const wait = options.wait ?? sleep;
+		for (let attempt = 0;; attempt += 1) try {
+			return await requestSeasonPage(seasonId, pageNum, options);
+		} catch (error) {
+			if (!(error instanceof SeasonRiskControlError) || attempt >= RISK_BACKOFF_MS.length) throw error;
+			await wait(RISK_BACKOFF_MS[attempt], options.signal);
+		}
+	}
 	async function requestSeasonPage(seasonId, pageNum, options) {
 		const fetcher = options.fetcher ?? fetch;
 		const url = new URL(SEASON_ARCHIVES_URL);
@@ -1922,7 +1947,7 @@
 		} catch (error) {
 			throw asNetworkError(error, "网络异常，导入失败");
 		}
-		if (response.status === 412) throw new Error("请求过于频繁，已触发 B 站风控，请稍后再试");
+		if (response.status === 412) throw new SeasonRiskControlError("请求过于频繁，已触发 B 站风控，请稍后再试");
 		if (!response.ok) throw new Error(`网络异常（HTTP ${response.status}）`);
 		let payload;
 		try {
@@ -1931,7 +1956,10 @@
 			throw new Error("网络异常，导入失败");
 		}
 		const root = readRecord$1(payload);
-		if (root?.code !== 0) throw new Error(seasonCodeMessage(root?.code, root?.message));
+		if (root?.code !== 0) {
+			const message = seasonCodeMessage(root?.code, root?.message);
+			throw isRiskControlCode(root?.code) ? new SeasonRiskControlError(message) : new Error(message);
+		}
 		const data = readRecord$1(root?.data);
 		return {
 			meta: readRecord$1(data?.meta),
@@ -1954,6 +1982,9 @@
 		const raw = meta?.mid;
 		if (typeof raw === "number" && Number.isFinite(raw)) return String(raw);
 		if (typeof raw === "string" && /^\d+$/.test(raw.trim())) return raw.trim();
+	}
+	function isRiskControlCode(code) {
+		return code === -352 || code === -412;
 	}
 	function seasonCodeMessage(code, message) {
 		if (code === -101) return "需要登录 Bilibili 账号";
