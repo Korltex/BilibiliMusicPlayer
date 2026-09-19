@@ -65,6 +65,7 @@ src/
 │   ├── metadata.ts              读取 bvid / 分P / 标题 / UP 主 / 封面，构造 Track
 │   ├── page-route.ts            纯函数：判定页面路由（视频页 / 空间收藏页 / 其它），决定是否挂载 UI
 │   ├── chapters.ts              调用 B 站公开 API 拉取视频章节（亮点）
+│   ├── video-cover.ts           按 bvid 从 `view` 接口取封面 + 缩略图 + 缓存/退避（可单测，失败开放）
 │   ├── audio-only-controller.ts 纯音频模式的开关、状态机与页面表现
 │   ├── audio-only-interceptor.ts `__playinfo__` / fetch / XHR 拦截安装
 │   └── playurl-rewriter.ts      纯函数：把 playurl 响应改写成「仅音频」（可单测）
@@ -77,6 +78,7 @@ src/
 ├── core/                        无副作用基础件：types.ts / id.ts / time.ts
 ├── playback/                    播放逻辑（不碰 DOM 细节、不碰存储实现）
 │   ├── player-engine.ts         状态机 + 媒体事件绑定 + 跨视频/恢复播放 + Media Session
+│   ├── now-playing.ts           纯函数：合成当前播放条目 + 变化比较（周期性校正的去抖依据）
 │   └── queue.ts                 纯函数：根据播放模式选上一首/下一首
 └── storage/                     持久化与迁移
     ├── schema.ts                AppData v1 默认值与迁移（GM key: bilibili-music-player:data）
@@ -147,6 +149,8 @@ B 站是 SPA，`<video>` 会被替换。`MediaLocator` 用三条互补的路径�
 2. **上下文区分**：`playbackContext` 只有两个值。`"page"` = 用户在看普通视频（插件不介入切歌、不识别片段）；`"playlist"` = 插件歌单正在播放。切换依据是 URL 查询参数 **`bili_music=1`**（`hasPlaylistRouteMarker()`）加上「当前页面与目标 Track 的 bvid 与分P一致」。这个标记是「同一 BV 既在歌单里、用户又只是普通点进来」这类场景的判别关键。
 3. **片段边界**：`timeupdate` 中，若当前 Track 有 `endTime` 且 `currentTime >= endTime - 0.15`，触发 `next(true)`（自动切下一首）；用 `segmentAdvancing` + 500ms 定时器防止重复触发。`ended` 事件同样走 `next(true)`。
 4. **恢复播放**：`requestTrack()` 写入 `resumeRequested=true`，然后要么直接在当前页恢复，要么 `location.assign(buildTrackUrl(track))` 跳到目标视频页（URL 带 `bili_music=1`，分P用 `p` 参数）。新页面媒体就绪后 `resumeRequestedTrack()` 把 `currentTime` 设到上次进度（若进度已落出片段范围则回到 `startTime`），再 `tryPlay()`；`play()` 被浏览器拒绝时置 `requiresInteraction=true` 并给出中文提示，UI 显示「点击继续播放」。
+5. **页面校正（不要把它改回一次性快照）**：`reconcilePage()` 每秒运行一次，重新评估 `playbackContext` 并调用 `refreshNowPlaying()` 重读页面元数据；结果由 `playback/now-playing.ts` 的 `resolveNowPlaying()` / `nowPlayingEquals()` 计算与比较，**没变化就不写 `state`、不重建 `MediaMetadata`**。原因：B 站同文档换视频时 URL 先变、标题/UP 主 DOM 后渲染，过去只在 route 事件和一次 1 秒重试里读 DOM，导致「面板一直显示上一个视频」；暂停时没有 `timeupdate`，所以校正必须由定时器驱动。`loadedmetadata`/`durationchange`/`play`/`pageshow`（BFCache）会额外立即校正一次。
+6. **封面三层兜底（不要退化成只读 `og:image`）**：`og:image` 是首屏 SSR 写入的，同文档换视频时不保证更新，所以封面优先级是 ①`bili/video-cover.ts` 按当前 bvid 调 `view` 接口取 `pic`（转 `@120w_120h_1c.webp` 方图、按 bvid 缓存、失败退避 5 分钟）→ ② 页面分享卡片封面 `img[src*="!web-video-share-cover"]`（客户端按当前视频渲染，浏览器已缓存同一张图，不产生新请求）→ ③ `og:image` → `<video>.poster`。实测脚本发出的 `view` 请求会被 B 站风控返回 412，此时第 ② 层是主要兜底；三层都拿不到就沿用页面已有封面，绝不清空。
 
 引擎还接管 **Media Session**（系统媒体键/锁屏控制）：`play`/`pause`/`previoustrack`/`nexttrack`/`seekto`/`seekbackward`/`seekforward` 以及元数据与进度上报，全部 `try/catch` 包裹以兼容旧浏览器。
 
@@ -236,8 +240,8 @@ B 站是 SPA，`<video>` 会被替换。`MediaLocator` 用三条互补的路径�
 
 ## 9. 测试体系
 
-- **单元测试（Vitest，node 环境，`tests/**/*.test.ts`）**：覆盖纯逻辑——时间格式化与钳制、四种播放模式的边界、默认歌单/非法持久化数据恢复、播放会话初始化与无效歌曲回退、playurl 改写（三种 DASH 结构 + `durl`/缺音频/畸形 JSON 的失败开放且不修改输入）、章节解析、进度百分比。
-- **浏览器测试（Playwright，`tests/e2e/`）**：**加载的是构建产物**（`tests/helpers/userscript.ts` 读 `dist/*.user.js` 并把 CDN 运行时文件内联进去），所以必须先 `npm run build`。测试用 `page.route()` 把 `https://www.bilibili.com/video/BV1…` 伪造成假 B 站页面，用 `addInitScript` 注入 `localStorage` 版的 `GM_*` 替身，并用 `Object.defineProperties` 伪造 `<video>` 的 `paused/currentTime/duration/readyState/volume/muted` 与 `play()/pause()`。`tests/e2e/player.spec.ts` 覆盖挂载与媒体控制、拖拽位置持久化、片段整秒边界与旧数据归一化、章节选择、删除确认、队列游标与上下文判定、歌单播放会话刷新恢复、bfcache 恢复、网页全屏隐藏、极简模式布局/进度/键盘可达性；`tests/e2e/audio-only.spec.ts` 覆盖 `__playinfo__`、fetch、XHR 三种拦截与失败回退、开关双向重载；`tests/e2e/tab-coordination.spec.ts` 覆盖多标签页**互相独立**播放、以及远端删除当前歌曲后本标签页安全退出歌单播放。
+- **单元测试（Vitest，node 环境，`tests/**/*.test.ts`）**：覆盖纯逻辑——时间格式化与钳制、四种播放模式的边界、播放条目的合成与变化比较（`tests/now-playing.test.ts`）、封面 URL 规范化与按 bvid 缓存/退避（`tests/video-cover.test.ts`）、默认歌单/非法持久化数据恢复、播放会话初始化与无效歌曲回退、playurl 改写（三种 DASH 结构 + `durl`/缺音频/畸形 JSON 的失败开放且不修改输入）、章节解析、进度百分比。
+- **浏览器测试（Playwright，`tests/e2e/`）**：**加载的是构建产物**（`tests/helpers/userscript.ts` 读 `dist/*.user.js` 并把 CDN 运行时文件内联进去），所以必须先 `npm run build`。测试用 `page.route()` 把 `https://www.bilibili.com/video/BV1…` 伪造成假 B 站页面，用 `addInitScript` 注入 `localStorage` 版的 `GM_*` 替身，并用 `Object.defineProperties` 伪造 `<video>` 的 `paused/currentTime/duration/readyState/volume/muted` 与 `play()/pause()`。`tests/e2e/player.spec.ts` 覆盖挂载与媒体控制、拖拽位置持久化、片段整秒边界与旧数据归一化、章节选择、删除确认、队列游标与上下文判定、歌单播放会话刷新恢复、bfcache 恢复、网页全屏隐藏、极简模式布局/进度/键盘可达性；`tests/e2e/audio-only.spec.ts` 覆盖 `__playinfo__`、fetch、XHR 三种拦截与失败回退、开关双向重载；`tests/e2e/tab-coordination.spec.ts` 覆盖多标签页**互相独立**播放、以及远端删除当前歌曲后本标签页安全退出歌单播放；`tests/e2e/metadata-refresh.spec.ts` 用 `history.pushState` + 延迟写 DOM 复现 B 站同文档跳转，锁住「面板标题/UP 主自动收敛」「无变化时不重建 MediaMetadata」，以及封面三层兜底：接口封面优先、接口风控/无封面时退回分享卡片封面、每个视频只请求一次接口。
 - **真实网站烟雾测试（`tests/real/`，独立配置 `playwright.real.config.ts`）**：访问真实公开 B 站视频页注入正式构建，验证媒体定位与面板挂载；其中一个用例断言纯音频模式下只请求音频分片、不请求视频分片。它依赖外部网络，不纳入默认命令。
 
 ---
@@ -246,7 +250,7 @@ B 站是 SPA，`<video>` 会被替换。`MediaLocator` 用三条互补的路径�
 
 - 不下载、不转码、不缓存音视频；不提供离线播放。
 - 不跨站点工作：`@match` 只有 B 站 `/video/` 页面与 `space.bilibili.com` 空间页（后者只在收藏页 `favlist` 显示 UI，其它空间页脚本惰性加载、不渲染任何东西）。
-- 不修改 B 站账号数据（收藏、投币等）；只读取公开的视频/章节接口（`/x/web-interface/view`、`/x/player/wbi/v2`）、当前登录用户的收藏夹内容（`/x/v3/fav/*`）以及公开的视频合集（`/x/polymer/web-space/seasons_archives_list`）——全部只读、不写回 B 站。
+- 不修改 B 站账号数据（收藏、投币等）；只读取公开的视频/章节接口（`/x/web-interface/view`、`/x/player/wbi/v2`）、当前登录用户的收藏夹内容（`/x/v3/fav/*`）以及公开的视频合集（`/x/polymer/web-space/seasons_archives_list`）——全部只读、不写回 B 站。封面复用 `/x/web-interface/view`：同一 bvid 最多请求一次，失败退避 5 分钟；接口被风控（412）时改用页面分享卡片封面，不重试、不清空已有封面。
 - 不收集、不上传任何用户数据。
 - 不试图绕过会员/区域限制：能被改写的只有页面本来就能拿到的清单。
 - 纯音频模式不承诺总是生效；抢不到拦截时机或结构不匹配时**必须**回退并如实提示。

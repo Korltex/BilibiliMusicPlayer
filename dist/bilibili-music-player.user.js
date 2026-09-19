@@ -1551,7 +1551,7 @@
 	function asNetworkError(error, fallback) {
 		return error instanceof Error ? error : new Error(fallback);
 	}
-	var VIEW_URL = "https://api.bilibili.com/x/web-interface/view";
+	var VIEW_URL$1 = "https://api.bilibili.com/x/web-interface/view";
 	var VIDEO_TRACK_PREFIX = "video";
 	function videoPlaylistId(bvid) {
 		return `video-${bvid}`;
@@ -1577,7 +1577,7 @@
 	}
 	async function fetchVideoDetail(bvid, options = {}) {
 		const fetcher = options.fetcher ?? fetch;
-		const url = new URL(VIEW_URL);
+		const url = new URL(VIEW_URL$1);
 		url.searchParams.set("bvid", bvid);
 		let response;
 		try {
@@ -2363,13 +2363,28 @@
 		const page = Number(new URL(url).searchParams.get("p"));
 		return Number.isInteger(page) && page > 1 ? page : void 0;
 	}
+	var TITLE_SELECTORS = [
+		"#viewbox_report h1.video-title",
+		"#viewbox_report h1[title]",
+		".video-info-detail h1.video-title",
+		".video-info-detail h1[title]",
+		"h1.video-title",
+		"h1[title]",
+		".video-title"
+	];
+	var UPLOADER_SELECTORS = [
+		".up-name",
+		".up-info-container .username",
+		"a.up-name",
+		".members-info .staff-name"
+	];
 	function readCurrentVideoMetadata() {
 		const bvid = getBvid();
 		if (!bvid) return;
-		const titleElement = document.querySelector("h1.video-title, h1[title], .video-title");
-		const rawTitle = titleElement?.getAttribute("title") ?? titleElement?.textContent ?? document.querySelector("meta[property=\"og:title\"]")?.getAttribute("content") ?? document.title;
-		const uploader = document.querySelector(".up-name, .up-info-container .username, a.up-name, .members-info .staff-name")?.textContent?.trim() || void 0;
-		const cover = document.querySelector("meta[property=\"og:image\"]")?.getAttribute("content") || void 0;
+		const titleElement = readFirstElement(TITLE_SELECTORS);
+		const rawTitle = readText(titleElement?.getAttribute("title")) ?? readText(titleElement?.textContent) ?? readText(document.querySelector("meta[property=\"og:title\"]")?.getAttribute("content")) ?? document.title;
+		const uploader = readText(readFirstElement(UPLOADER_SELECTORS)?.textContent);
+		const cover = readShareCover() ?? readMetaCover() ?? readVideoPoster();
 		return {
 			bvid,
 			page: getPageNumber(),
@@ -2377,6 +2392,34 @@
 			uploader,
 			cover
 		};
+	}
+	function readFirstElement(selectors) {
+		for (const selector of selectors) {
+			const candidates = [...document.querySelectorAll(selector)].filter((element) => readText(element.textContent) !== void 0 || readText(element.getAttribute("title")) !== void 0);
+			const element = candidates.find(isRendered) ?? candidates[0];
+			if (element) return element;
+		}
+	}
+	function isRendered(element) {
+		return element.isConnected && (element.offsetParent !== null || element.getClientRects().length > 0);
+	}
+	function readShareCover() {
+		const candidates = [...document.querySelectorAll("img[src*=\"!web-video-share-cover\"]")].filter((image) => readText(image.currentSrc || image.src) !== void 0);
+		const image = candidates.find(isRendered) ?? candidates[0];
+		return readText(image?.currentSrc || image?.src);
+	}
+	function readMetaCover() {
+		return readText(document.querySelector("meta[property=\"og:image\"]")?.getAttribute("content"));
+	}
+	function readVideoPoster() {
+		for (const video of document.querySelectorAll("video")) {
+			const poster = readText(video.poster);
+			if (poster) return poster;
+		}
+	}
+	function readText(value) {
+		const text = value?.trim();
+		return text ? text : void 0;
 	}
 	function createTrackFromCurrentPage(media, title, startTime, endTime, cid) {
 		const metadata = readCurrentVideoMetadata();
@@ -2417,6 +2460,94 @@
 			seconds
 		].map((part) => String(part).padStart(2, "0")).join(":");
 		return [minutes, seconds].map((part) => String(part).padStart(2, "0")).join(":");
+	}
+	var VIEW_URL = "https://api.bilibili.com/x/web-interface/view";
+	var THUMBNAIL_SUFFIX = "@120w_120h_1c.webp";
+	var RETRY_DELAY = 5 * 6e4;
+	var MAX_ENTRIES = 50;
+	async function fetchVideoCover(bvid, options = {}) {
+		const fetcher = options.fetcher ?? fetch;
+		const url = new URL(VIEW_URL);
+		url.searchParams.set("bvid", bvid);
+		try {
+			const response = await fetcher(url, {
+				credentials: "include",
+				signal: options.signal
+			});
+			if (!response.ok) return { status: "failed" };
+			const payload = await response.json();
+			if (payload?.code !== 0) return { status: "failed" };
+			const cover = normalizeCoverUrl(payload.data?.pic);
+			return cover ? {
+				status: "resolved",
+				cover: toThumbnailCover(cover)
+			} : { status: "missing" };
+		} catch (error) {
+			return isAbortError(error) ? { status: "aborted" } : { status: "failed" };
+		}
+	}
+	function normalizeCoverUrl(value) {
+		if (typeof value !== "string") return;
+		const trimmed = value.trim();
+		return trimmed ? trimmed.replace(/^http:/i, "https:") : void 0;
+	}
+	function toThumbnailCover(cover) {
+		if (!/hdslb\.com\/bfs\//i.test(cover) || cover.includes("@")) return cover;
+		return `${cover}${THUMBNAIL_SUFFIX}`;
+	}
+	var VideoCoverCache = class {
+		fetcher;
+		now;
+		entries = new Map();
+		pending = new Set();
+		constructor(fetcher, now = Date.now) {
+			this.fetcher = fetcher;
+			this.now = now;
+		}
+		peek(bvid) {
+			return this.entries.get(bvid)?.cover;
+		}
+		async resolve(bvid, signal) {
+			if (!bvid) return;
+			const entry = this.entries.get(bvid);
+			if (entry?.cover !== void 0) return entry.cover;
+			if (entry?.resolved || this.pending.has(bvid) || this.isBackingOff(entry)) return;
+			this.pending.add(bvid);
+			try {
+				const outcome = await fetchVideoCover(bvid, {
+					fetcher: this.fetcher,
+					signal
+				});
+				switch (outcome.status) {
+					case "resolved":
+						this.remember(bvid, { cover: outcome.cover });
+						return outcome.cover;
+					case "missing":
+						this.remember(bvid, { resolved: true });
+						return;
+					case "failed":
+						this.remember(bvid, { failedAt: this.now() });
+						return;
+					case "aborted": return;
+				}
+			} finally {
+				this.pending.delete(bvid);
+			}
+		}
+		isBackingOff(entry) {
+			return entry?.failedAt !== void 0 && this.now() - entry.failedAt < RETRY_DELAY;
+		}
+		remember(bvid, entry) {
+			this.entries.delete(bvid);
+			this.entries.set(bvid, entry);
+			if (this.entries.size > MAX_ENTRIES) {
+				const oldest = this.entries.keys().next();
+				if (!oldest.done) this.entries.delete(oldest.value);
+			}
+		}
+	};
+	function isAbortError(error) {
+		return error?.name === "AbortError";
 	}
 	async function fetchVideoChapters(source, options = {}) {
 		const fetcher = options.fetcher ?? fetch;
@@ -2463,8 +2594,7 @@
 			const startTime = toStartSecond(rawStart);
 			const endTime = toEndSecond(rawEnd);
 			if (endTime <= startTime) return [];
-			const rawCover = record?.imgUrl;
-			const cover = typeof rawCover === "string" && rawCover.trim() ? rawCover.trim().replace(/^http:/i, "https:") : void 0;
+			const cover = normalizeCoverUrl(record?.imgUrl);
 			return [{
 				title,
 				startTime,
@@ -4472,6 +4602,20 @@ html[${ROOT_ATTRIBUTE}="active"] video.bpx-player-video {
 		const hasDuration = Number.isFinite(media.duration) ? 1e5 : 0;
 		return (media.paused ? 0 : 1e7) + ready + hasDuration + area;
 	}
+	function resolveNowPlaying({ track, metadata, pageCover }) {
+		return {
+			trackId: track?.id,
+			title: track?.title ?? metadata?.title ?? "Bilibili 音乐播放器",
+			uploader: metadata?.uploader ?? track?.uploader,
+			cover: pageCover ?? metadata?.cover ?? track?.cover,
+			startTime: track?.startTime ?? 0,
+			endTime: track?.endTime,
+			storedDuration: track?.duration ?? 0
+		};
+	}
+	function nowPlayingEquals(left, right) {
+		return left.trackId === right.trackId && left.title === right.title && left.uploader === right.uploader && left.cover === right.cover && left.startTime === right.startTime && left.endTime === right.endTime && left.storedDuration === right.storedDuration;
+	}
 	function selectAdjacentTrack(playlist, currentTrackId, mode, options) {
 		const tracks = playlist?.tracks ?? [];
 		if (tracks.length === 0) return;
@@ -4510,6 +4654,10 @@ html[${ROOT_ATTRIBUTE}="active"] video.bpx-player-video {
 		segmentAdvancing = false;
 		previousSession;
 		stopStoreObservation;
+		metadataTimer;
+		coverRequestedFor;
+		coverAbort;
+		covers = new VideoCoverCache();
 		locator;
 		constructor(store) {
 			this.store = store;
@@ -4531,11 +4679,22 @@ html[${ROOT_ATTRIBUTE}="active"] video.bpx-player-video {
 				if (activePlaylistChanged || currentTrackRemoved) this.exitPlaylistPlayback();
 			});
 			this.locator.start();
+			this.reconcilePage();
+			this.metadataTimer = window.setInterval(() => this.reconcilePage(), 1e3);
 			this.installMediaSessionHandlers();
 			window.addEventListener("pagehide", this.savePosition);
+			window.addEventListener("pageshow", this.handlePageShow);
 		}
 		stop() {
 			this.savePosition();
+			if (this.metadataTimer !== void 0) {
+				window.clearInterval(this.metadataTimer);
+				this.metadataTimer = void 0;
+			}
+			window.removeEventListener("pageshow", this.handlePageShow);
+			this.coverAbort?.abort();
+			this.coverAbort = void 0;
+			this.coverRequestedFor = void 0;
 			this.stopStoreObservation?.();
 			this.stopStoreObservation = void 0;
 			this.previousSession = void 0;
@@ -4595,7 +4754,7 @@ html[${ROOT_ATTRIBUTE}="active"] video.bpx-player-video {
 				return;
 			}
 			this.setPlaylistRouteMarker(true);
-			this.refreshPageMetadata();
+			this.refreshNowPlaying();
 			this.resumeRequestedTrack();
 		}
 		next(automatic = false) {
@@ -4622,11 +4781,7 @@ html[${ROOT_ATTRIBUTE}="active"] video.bpx-player-video {
 		}
 		handleMediaChange(media, reason) {
 			if (media !== this.media) this.bindMedia(media);
-			if (reason === "route") {
-				this.setPlaybackContext(this.shouldUsePlaylistContext() ? "playlist" : "page");
-				this.refreshPageMetadata();
-				window.setTimeout(() => this.refreshPageMetadata(), 1e3);
-			}
+			if (reason === "route") this.reconcilePage();
 			if (media && this.isPlaylistContext() && this.store.session.peek().playback.resumeRequested) this.resumeRequestedTrack();
 		}
 		bindMedia(media) {
@@ -4649,14 +4804,15 @@ html[${ROOT_ATTRIBUTE}="active"] video.bpx-player-video {
 			media.addEventListener("play", this.handlePlay, options);
 			media.addEventListener("pause", this.syncRuntime, options);
 			media.addEventListener("timeupdate", this.handleTimeUpdate, options);
-			media.addEventListener("durationchange", this.syncRuntime, options);
+			media.addEventListener("durationchange", this.handleDurationChange, options);
 			media.addEventListener("loadedmetadata", this.handleLoadedMetadata, options);
 			media.addEventListener("volumechange", this.syncRuntime, options);
 			media.addEventListener("ended", this.handleEnded, options);
-			this.refreshPageMetadata();
+			this.refreshNowPlaying();
 			this.syncRuntime();
 		}
 		handlePlay = () => {
+			this.refreshNowPlaying();
 			this.state.value = {
 				...this.state.peek(),
 				playing: true,
@@ -4683,7 +4839,15 @@ html[${ROOT_ATTRIBUTE}="active"] video.bpx-player-video {
 		};
 		handleLoadedMetadata = () => {
 			this.syncRuntime();
+			this.refreshNowPlaying();
 			if (this.isPlaylistContext() && this.store.session.peek().playback.resumeRequested) this.resumeRequestedTrack();
+		};
+		handleDurationChange = () => {
+			this.syncRuntime();
+			this.refreshNowPlaying();
+		};
+		handlePageShow = (event) => {
+			if (event.persisted) this.reconcilePage();
 		};
 		handleEnded = () => {
 			if (this.getActiveTrack()) this.next(true);
@@ -4709,7 +4873,7 @@ html[${ROOT_ATTRIBUTE}="active"] video.bpx-player-video {
 			if (media.readyState === 0) return;
 			const resumeTime = session.playback.currentTime >= track.startTime && (track.endTime === void 0 || session.playback.currentTime < track.endTime) ? session.playback.currentTime : track.startTime;
 			media.currentTime = clamp(resumeTime, 0, Number.isFinite(media.duration) ? media.duration : resumeTime);
-			this.refreshPageMetadata();
+			this.refreshNowPlaying();
 			this.store.consumeResumeRequest();
 			await this.tryPlay();
 		}
@@ -4730,22 +4894,36 @@ html[${ROOT_ATTRIBUTE}="active"] video.bpx-player-video {
 				};
 			}
 		}
-		refreshPageMetadata() {
-			const track = this.getActiveTrack();
+		reconcilePage() {
+			this.setPlaybackContext(this.shouldUsePlaylistContext() ? "playlist" : "page");
+			this.refreshNowPlaying();
+		}
+		refreshNowPlaying() {
 			const metadata = readCurrentVideoMetadata();
+			this.ensurePageCover(metadata?.bvid);
+			const next = resolveNowPlaying({
+				track: this.getActiveTrack(),
+				metadata,
+				pageCover: metadata ? this.covers.peek(metadata.bvid) : void 0
+			});
+			if (nowPlayingEquals(this.state.peek().nowPlaying, next)) return;
 			this.state.value = {
 				...this.state.peek(),
-				nowPlaying: {
-					trackId: track?.id,
-					title: track?.title ?? metadata?.title ?? "Bilibili 音乐播放器",
-					uploader: metadata?.uploader ?? track?.uploader,
-					cover: metadata?.cover ?? track?.cover,
-					startTime: track?.startTime ?? 0,
-					endTime: track?.endTime,
-					storedDuration: track?.duration ?? 0
-				}
+				nowPlaying: next
 			};
 			this.updateMediaSession();
+		}
+		ensurePageCover(bvid) {
+			if (!bvid || bvid === this.coverRequestedFor || this.covers.peek(bvid) !== void 0) return;
+			this.coverRequestedFor = bvid;
+			this.coverAbort?.abort();
+			const controller = new AbortController();
+			this.coverAbort = controller;
+			this.covers.resolve(bvid, controller.signal).then((cover) => {
+				if (cover && getBvid() === bvid) this.refreshNowPlaying();
+			}).finally(() => {
+				if (this.coverRequestedFor === bvid) this.coverRequestedFor = void 0;
+			});
 		}
 		getActiveTrack() {
 			if (!this.isPlaylistContext()) return;
@@ -4770,7 +4948,7 @@ html[${ROOT_ATTRIBUTE}="active"] video.bpx-player-video {
 		exitPlaylistContext() {
 			this.setPlaybackContext("page");
 			this.setPlaylistRouteMarker(false);
-			this.refreshPageMetadata();
+			this.refreshNowPlaying();
 		}
 		setPlaylistRouteMarker(enabled) {
 			const url = new URL(location.href);

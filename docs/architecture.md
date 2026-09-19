@@ -61,6 +61,16 @@ flowchart LR
 
 候选媒体元素按照播放状态、就绪状态、时长和可见面积评分，不依赖 Bilibili 私有播放器对象。
 
+页面元数据（标题、UP 主、封面）不依赖单次读取。Bilibili 同文档换视频时会先改 URL、后渲染标题，因此引擎每秒执行一次幂等校正（`PlayerEngine.reconcilePage()`）：重新评估播放上下文并重读页面信息。解析结果与当前状态相同时不写状态、不重建 `MediaMetadata`，所以周期性重读不会造成界面或系统媒体面板抖动。媒体就绪事件（`loadedmetadata`、`durationchange`、`play`）与 BFCache 恢复（`pageshow`）会额外触发一次立即校正；标题读取按选择器优先级取有内容的可见节点，避免读到 SPA 过渡期的隐藏旧节点或同名推荐卡片。
+
+封面按三层取用，前一层拿不到才用后一层：
+
+1. `bili/video-cover.ts` 通过公开的 `view` 接口按当前 bvid 取 `data.pic`，转成 `@120w_120h_1c.webp` 方图缩略图（58px 面板不需要整张原图）。结果按 bvid 缓存、同一视频只请求一次，失败进入 5 分钟退避，避免被每秒一次的校正放大成请求风暴；接口返回 412（风控）或网络异常时按失败开放处理。
+2. 页面分享卡片里的封面 `img[src*="!web-video-share-cover"]`：由 Bilibili 客户端按当前视频渲染，浏览器已为页面加载过同一张图，因此既不需要额外请求，也比首屏 SSR 的 `og:image` 更跟得上同文档切歌。实测 Bilibili 偶尔会对脚本发出的 `view` 请求返回 412，这一层是主要兜底。
+3. `meta[property="og:image"]`，最后是 `<video>` 的 `poster`。
+
+歌单播放时歌曲自身的封面仍然只作为最后一层兜底：正在播放的是当前页面，页面封面比歌单里存的历史封面更可信。
+
 ## 纯音频适配
 
 纯音频设置使用独立 GM key，并在 `document-start` 同步读取。关闭时不修改任何页面网络 API；开启时覆盖首屏 `window.__playinfo__`，并对后续普通视频 `playurl` 的 fetch/XHR 响应进行失败开放式改写。

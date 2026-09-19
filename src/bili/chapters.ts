@@ -1,4 +1,5 @@
 import { toEndSecond, toStartSecond } from "../core/time";
+import { normalizeCoverUrl } from "./video-cover";
 
 export interface VideoChapter {
   title: string;
@@ -101,11 +102,7 @@ export function parseVideoChapters(value: unknown): VideoChapter[] {
       return [];
     }
 
-    const rawCover = record?.imgUrl;
-    const cover =
-      typeof rawCover === "string" && rawCover.trim()
-        ? rawCover.trim().replace(/^http:/i, "https:")
-        : undefined;
+    const cover = normalizeCoverUrl(record?.imgUrl);
 
     return [
       {

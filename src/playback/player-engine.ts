@@ -6,6 +6,7 @@ import {
   readCurrentVideoMetadata,
 } from "../bili/metadata";
 import { MediaLocator, type MediaChangeReason } from "../bili/media-locator";
+import { VideoCoverCache } from "../bili/video-cover";
 import { clamp } from "../core/time";
 import type {
   NowPlayingState,
@@ -15,6 +16,7 @@ import type {
   RuntimePlayerState,
   Track,
 } from "../core/types";
+import { nowPlayingEquals, resolveNowPlaying } from "./now-playing";
 import { selectAdjacentTrack } from "./queue";
 
 const INITIAL_NOW_PLAYING_STATE: NowPlayingState = {
@@ -44,6 +46,10 @@ export class PlayerEngine {
   private segmentAdvancing = false;
   private previousSession?: PlaybackSession;
   private stopStoreObservation?: () => void;
+  private metadataTimer?: number;
+  private coverRequestedFor?: string;
+  private coverAbort?: AbortController;
+  private readonly covers = new VideoCoverCache();
   private readonly locator: MediaLocator;
 
   constructor(private readonly store: AppStore) {
@@ -83,12 +89,25 @@ export class PlayerEngine {
       }
     });
     this.locator.start();
+    this.reconcilePage();
+    // B 站同文档跳转会先改 URL、后渲染标题，单次读取必然存在竞态，
+    // 因此每秒做一次幂等校正，让页面元数据自行收敛。
+    this.metadataTimer = window.setInterval(() => this.reconcilePage(), 1_000);
     this.installMediaSessionHandlers();
     window.addEventListener("pagehide", this.savePosition);
+    window.addEventListener("pageshow", this.handlePageShow);
   }
 
   stop(): void {
     this.savePosition();
+    if (this.metadataTimer !== undefined) {
+      window.clearInterval(this.metadataTimer);
+      this.metadataTimer = undefined;
+    }
+    window.removeEventListener("pageshow", this.handlePageShow);
+    this.coverAbort?.abort();
+    this.coverAbort = undefined;
+    this.coverRequestedFor = undefined;
     this.stopStoreObservation?.();
     this.stopStoreObservation = undefined;
     this.previousSession = undefined;
@@ -173,7 +192,7 @@ export class PlayerEngine {
     }
 
     this.setPlaylistRouteMarker(true);
-    this.refreshPageMetadata();
+    this.refreshNowPlaying();
     void this.resumeRequestedTrack();
   }
 
@@ -228,11 +247,7 @@ export class PlayerEngine {
     }
 
     if (reason === "route") {
-      this.setPlaybackContext(
-        this.shouldUsePlaylistContext() ? "playlist" : "page",
-      );
-      this.refreshPageMetadata();
-      window.setTimeout(() => this.refreshPageMetadata(), 1_000);
+      this.reconcilePage();
     }
 
     if (
@@ -267,7 +282,11 @@ export class PlayerEngine {
     media.addEventListener("play", this.handlePlay, options);
     media.addEventListener("pause", this.syncRuntime, options);
     media.addEventListener("timeupdate", this.handleTimeUpdate, options);
-    media.addEventListener("durationchange", this.syncRuntime, options);
+    media.addEventListener(
+      "durationchange",
+      this.handleDurationChange,
+      options,
+    );
     media.addEventListener(
       "loadedmetadata",
       this.handleLoadedMetadata,
@@ -276,11 +295,12 @@ export class PlayerEngine {
     media.addEventListener("volumechange", this.syncRuntime, options);
     media.addEventListener("ended", this.handleEnded, options);
 
-    this.refreshPageMetadata();
+    this.refreshNowPlaying();
     this.syncRuntime();
   }
 
   private readonly handlePlay = (): void => {
+    this.refreshNowPlaying();
     this.state.value = {
       ...this.state.peek(),
       playing: true,
@@ -316,11 +336,25 @@ export class PlayerEngine {
 
   private readonly handleLoadedMetadata = (): void => {
     this.syncRuntime();
+    this.refreshNowPlaying();
     if (
       this.isPlaylistContext() &&
       this.store.session.peek().playback.resumeRequested
     ) {
       void this.resumeRequestedTrack();
+    }
+  };
+
+  /** durationchange 与新视频数据到达基本同步，是页面元数据最容易变新的时刻之一。 */
+  private readonly handleDurationChange = (): void => {
+    this.syncRuntime();
+    this.refreshNowPlaying();
+  };
+
+  /** 从 BFCache 恢复时页面不会重新初始化，补一次校正。 */
+  private readonly handlePageShow = (event: PageTransitionEvent): void => {
+    if (event.persisted) {
+      this.reconcilePage();
     }
   };
 
@@ -377,7 +411,7 @@ export class PlayerEngine {
       0,
       Number.isFinite(media.duration) ? media.duration : resumeTime,
     );
-    this.refreshPageMetadata();
+    this.refreshNowPlaying();
     this.store.consumeResumeRequest();
     await this.tryPlay();
   }
@@ -403,22 +437,67 @@ export class PlayerEngine {
     }
   }
 
-  private refreshPageMetadata(): void {
-    const track = this.getActiveTrack();
+  /**
+   * 幂等校正：把播放上下文与页面元数据对齐到当前 URL 和 DOM。
+   * 会被 route 事件、媒体事件与每秒定时器反复调用，因此不能有副作用累积。
+   */
+  private reconcilePage(): void {
+    this.setPlaybackContext(
+      this.shouldUsePlaylistContext() ? "playlist" : "page",
+    );
+    this.refreshNowPlaying();
+  }
+
+  /** 读取页面信息并合成面板条目；结果没变就不写状态、不重建 MediaMetadata。 */
+  private refreshNowPlaying(): void {
     const metadata = readCurrentVideoMetadata();
-    this.state.value = {
-      ...this.state.peek(),
-      nowPlaying: {
-        trackId: track?.id,
-        title: track?.title ?? metadata?.title ?? "Bilibili 音乐播放器",
-        uploader: metadata?.uploader ?? track?.uploader,
-        cover: metadata?.cover ?? track?.cover,
-        startTime: track?.startTime ?? 0,
-        endTime: track?.endTime,
-        storedDuration: track?.duration ?? 0,
-      },
-    };
+    this.ensurePageCover(metadata?.bvid);
+
+    const next = resolveNowPlaying({
+      track: this.getActiveTrack(),
+      metadata,
+      pageCover: metadata ? this.covers.peek(metadata.bvid) : undefined,
+    });
+
+    if (nowPlayingEquals(this.state.peek().nowPlaying, next)) {
+      return;
+    }
+
+    this.state.value = { ...this.state.peek(), nowPlaying: next };
     this.updateMediaSession();
+  }
+
+  /**
+   * 页面封面来自 view 接口而不是 `og:image`：后者是首屏 SSR 写入的，
+   * B 站同文档换视频时不保证跟着更新。拿不到就继续用页面上的封面。
+   */
+  private ensurePageCover(bvid: string | undefined): void {
+    if (
+      !bvid ||
+      bvid === this.coverRequestedFor ||
+      this.covers.peek(bvid) !== undefined
+    ) {
+      return;
+    }
+
+    this.coverRequestedFor = bvid;
+    this.coverAbort?.abort();
+    const controller = new AbortController();
+    this.coverAbort = controller;
+
+    void this.covers
+      .resolve(bvid, controller.signal)
+      .then((cover) => {
+        // 慢响应可能晚于下一次跳转返回，只对仍然匹配的页面生效
+        if (cover && getBvid() === bvid) {
+          this.refreshNowPlaying();
+        }
+      })
+      .finally(() => {
+        if (this.coverRequestedFor === bvid) {
+          this.coverRequestedFor = undefined;
+        }
+      });
   }
 
   private getActiveTrack(): Track | undefined {
@@ -461,7 +540,7 @@ export class PlayerEngine {
   private exitPlaylistContext(): void {
     this.setPlaybackContext("page");
     this.setPlaylistRouteMarker(false);
-    this.refreshPageMetadata();
+    this.refreshNowPlaying();
   }
 
   private setPlaylistRouteMarker(enabled: boolean): void {
