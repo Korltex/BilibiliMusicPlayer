@@ -1468,10 +1468,20 @@
 			children: [(0, preact_jsx_runtime.jsx)("path", { d: "M21 4v16" }), (0, preact_jsx_runtime.jsx)("path", { d: "M6.029 4.285A2 2 0 0 0 3 6v12a2 2 0 0 0 3.029 1.715l9.997-5.998a2 2 0 0 0 .003-3.432z" })]
 		});
 	}
-	function Star(props) {
-		return (0, preact_jsx_runtime.jsx)(SvgIcon, {
+	function StarPlus(props) {
+		return (0, preact_jsx_runtime.jsxs)(SvgIcon, {
 			...props,
-			children: (0, preact_jsx_runtime.jsx)("path", { d: "M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" })
+			children: [
+				(0, preact_jsx_runtime.jsx)("path", { d: "M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" }),
+				(0, preact_jsx_runtime.jsx)("path", {
+					d: "M12 9.9v4.6",
+					"stroke-width": 1.4
+				}),
+				(0, preact_jsx_runtime.jsx)("path", {
+					d: "M9.7 12.2h4.6",
+					"stroke-width": 1.4
+				})
+			]
 		});
 	}
 	function Trash2(props) {
@@ -3258,7 +3268,7 @@
 								title: "批量导入",
 								"aria-label": "批量导入",
 								onClick: () => setImportOpen(true),
-								children: (0, preact_jsx_runtime.jsx)(Star, {
+								children: (0, preact_jsx_runtime.jsx)(StarPlus, {
 									size: 18,
 									"aria-hidden": "true"
 								})

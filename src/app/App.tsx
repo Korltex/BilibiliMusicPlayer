@@ -10,7 +10,7 @@ import {
   Plus,
   RotateCcw,
   Save,
-  Star,
+  StarPlus,
   Trash2,
   Volume2,
   X,
@@ -201,7 +201,7 @@ export function App({ store, engine, audioOnly }: AppProps) {
             aria-label="批量导入"
             onClick={() => setImportOpen(true)}
           >
-            <Star size={18} aria-hidden="true" />
+            <StarPlus size={18} aria-hidden="true" />
           </button>
           <button
             class="icon-button reset-position-button"
