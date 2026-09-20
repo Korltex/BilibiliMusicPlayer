@@ -9,6 +9,7 @@
 // @description        A music playlist player for Bilibili videos.
 // @description:en     A music playlist player for Bilibili videos.
 // @description:zh-CN  将喜欢的 Bilibili 视频整理成可播放的音乐歌单。
+// @description:zh-TW  將喜歡的 Bilibili 影片整理成可播放的音樂歌單。
 // @license            MIT
 // @match              https://www.bilibili.com/video/*
 // @match              https://space.bilibili.com/*
