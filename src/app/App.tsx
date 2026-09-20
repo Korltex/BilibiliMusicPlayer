@@ -16,6 +16,7 @@ import {
   X,
 } from "./icons";
 import { ImportFavModal } from "./ImportFavModal";
+import { ConfirmModal } from "./ConfirmModal";
 import type { AppStore } from "./store";
 import type { PlayerEngine } from "../playback/player-engine";
 import type { AudioOnlyController } from "../bili/audio-only-controller";
@@ -26,7 +27,7 @@ import {
 import { fetchVideoChapters, type VideoChapter } from "../bili/chapters";
 import { isVideoPage } from "../bili/page-route";
 import { formatTime, toEndSecond, toStartSecond } from "../core/time";
-import type { PlayMode, Track } from "../core/types";
+import type { PlayMode, Playlist, Track } from "../core/types";
 import { useDraggablePosition } from "./use-draggable-position";
 import { LayoutRepository } from "../storage/layout";
 import type { OpenPanelMode } from "../storage/layout-schema";
@@ -55,6 +56,11 @@ export function App({ store, engine, audioOnly }: AppProps) {
   const [newPlaylistName, setNewPlaylistName] = useState("");
   const [editorTrack, setEditorTrack] = useState<Track | "new">();
   const [importOpen, setImportOpen] = useState(false);
+  // 待删除对象即“确认弹窗是否打开”的唯一来源，同时快照住点击那一刻的名称，
+  // 避免弹窗期间下游数据变化导致文案或删除目标漂移。
+  const [playlistPendingDeletion, setPlaylistPendingDeletion] =
+    useState<Playlist>();
+  const [trackPendingDeletion, setTrackPendingDeletion] = useState<Track>();
   const launcherDrag = useDraggablePosition("launcher");
   // 播放器面板顶边固定：歌单内容变少时只收起底边，面板不整体上移/下移。
   const panelDrag = useDraggablePosition("panel", { pinDefaultAnchor: true });
@@ -350,11 +356,7 @@ export function App({ store, engine, audioOnly }: AppProps) {
           title="删除当前歌单"
           aria-label="删除当前歌单"
           disabled={data.playlists.length <= 1}
-          onClick={() => {
-            if (window.confirm(`确定删除歌单“${activePlaylist.name}”？`)) {
-              store.removePlaylist(activePlaylist.id);
-            }
-          }}
+          onClick={() => setPlaylistPendingDeletion(activePlaylist)}
         >
           <Trash2 size={17} aria-hidden="true" />
         </button>
@@ -459,11 +461,7 @@ export function App({ store, engine, audioOnly }: AppProps) {
                 type="button"
                 title="删除歌曲"
                 aria-label={`删除 ${track.title}`}
-                onClick={() => {
-                  if (window.confirm(`确定删除歌曲“${track.title}”？`)) {
-                    store.removeTrack(track.id);
-                  }
-                }}
+                onClick={() => setTrackPendingDeletion(track)}
               >
                 <Trash2 size={15} aria-hidden="true" />
               </button>
@@ -474,6 +472,32 @@ export function App({ store, engine, audioOnly }: AppProps) {
 
       {importOpen && (
         <ImportFavModal store={store} onClose={() => setImportOpen(false)} />
+      )}
+
+      {playlistPendingDeletion && (
+        <ConfirmModal
+          title="删除歌单"
+          message={`确定删除歌单“${playlistPendingDeletion.name}”？`}
+          warning="删除后无法恢复，歌单里的歌曲会一并移除"
+          onCancel={() => setPlaylistPendingDeletion(undefined)}
+          onConfirm={() => {
+            store.removePlaylist(playlistPendingDeletion.id);
+            setPlaylistPendingDeletion(undefined);
+          }}
+        />
+      )}
+
+      {trackPendingDeletion && (
+        <ConfirmModal
+          title="删除歌曲"
+          message={`确定删除歌曲“${trackPendingDeletion.title}”？`}
+          warning="删除后无法恢复。"
+          onCancel={() => setTrackPendingDeletion(undefined)}
+          onConfirm={() => {
+            store.removeTrack(trackPendingDeletion.id);
+            setTrackPendingDeletion(undefined);
+          }}
+        />
       )}
     </section>
   );

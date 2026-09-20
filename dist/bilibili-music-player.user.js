@@ -1086,7 +1086,9 @@
 		"  color: var(--muted);",
 		"}",
 		"",
-		".import-fav-modal {",
+		"/* 「批量导入」与通用确认弹窗共用同一套模态外壳规则。 */",
+		".import-fav-modal,",
+		".modal-overlay {",
 		"  position: absolute;",
 		"  inset: 0;",
 		"  z-index: 10;",
@@ -1096,7 +1098,8 @@
 		"  background: rgb(0 0 0 / 45%);",
 		"}",
 		"",
-		".import-fav-card {",
+		".import-fav-card,",
+		".modal-card {",
 		"  display: flex;",
 		"  width: 100%;",
 		"  max-width: 320px;",
@@ -1111,8 +1114,13 @@
 		"  box-shadow: 0 18px 60px rgb(0 0 0 / 42%);",
 		"}",
 		"",
-		".import-fav-card p {",
+		".import-fav-card p,",
+		".modal-card p {",
 		"  margin: 0;",
+		"}",
+		"",
+		".modal-message {",
+		"  overflow-wrap: anywhere;",
 		"}",
 		"",
 		".import-fav-form {",
@@ -1136,13 +1144,15 @@
 		"  border-color: var(--accent);",
 		"}",
 		"",
-		".import-fav-actions {",
+		".import-fav-actions,",
+		".modal-actions {",
 		"  display: flex;",
 		"  justify-content: flex-end;",
 		"  gap: 6px;",
 		"}",
 		"",
-		".import-fav-button {",
+		".import-fav-button,",
+		".modal-button {",
 		"  display: inline-flex;",
 		"  height: 32px;",
 		"  align-items: center;",
@@ -1153,25 +1163,30 @@
 		"  cursor: pointer;",
 		"}",
 		"",
-		".import-fav-button.primary {",
+		".import-fav-button.primary,",
+		".modal-button.primary {",
 		"  color: #fff;",
 		"  background: var(--accent);",
 		"}",
 		"",
-		".import-fav-button.primary:hover {",
+		".import-fav-button.primary:hover,",
+		".modal-button.primary:hover {",
 		"  background: var(--accent-hover);",
 		"}",
 		"",
-		".import-fav-button.secondary {",
+		".import-fav-button.secondary,",
+		".modal-button.secondary {",
 		"  color: var(--text);",
 		"  background: var(--surface);",
 		"}",
 		"",
-		".import-fav-button.secondary:hover {",
+		".import-fav-button.secondary:hover,",
+		".modal-button.secondary:hover {",
 		"  background: var(--surface-hover);",
 		"}",
 		"",
-		".import-fav-button:disabled {",
+		".import-fav-button:disabled,",
+		".modal-button:disabled {",
 		"  cursor: not-allowed;",
 		"  opacity: 0.4;",
 		"}",
@@ -1185,7 +1200,8 @@
 		"  color: var(--muted);",
 		"}",
 		"",
-		".import-fav-warning {",
+		".import-fav-warning,",
+		".modal-warning {",
 		"  color: var(--danger);",
 		"}",
 		"",
@@ -2413,6 +2429,56 @@
 	function readMessage(error) {
 		return error instanceof Error && error.message ? error.message : "导入失败，请重试";
 	}
+	function ConfirmModal({ title, message, warning, confirmLabel = "确定", cancelLabel = "取消", onConfirm, onCancel }) {
+		return (0, preact_jsx_runtime.jsx)("div", {
+			class: "modal-overlay",
+			role: "dialog",
+			"aria-modal": "true",
+			"aria-label": title,
+			children: (0, preact_jsx_runtime.jsxs)("div", {
+				class: "modal-card",
+				children: [
+					(0, preact_jsx_runtime.jsxs)("div", {
+						class: "editor-heading",
+						children: [(0, preact_jsx_runtime.jsx)("strong", { children: title }), (0, preact_jsx_runtime.jsx)("button", {
+							class: "icon-button",
+							type: "button",
+							title: "关闭",
+							"aria-label": "关闭",
+							onClick: onCancel,
+							children: (0, preact_jsx_runtime.jsx)(X, {
+								size: 16,
+								"aria-hidden": "true"
+							})
+						})]
+					}),
+					(0, preact_jsx_runtime.jsx)("p", {
+						class: "modal-message",
+						children: message
+					}),
+					warning && (0, preact_jsx_runtime.jsx)("p", {
+						class: "modal-warning",
+						children: warning
+					}),
+					(0, preact_jsx_runtime.jsxs)("div", {
+						class: "modal-actions",
+						children: [(0, preact_jsx_runtime.jsx)("button", {
+							class: "modal-button secondary",
+							type: "button",
+							autoFocus: true,
+							onClick: onCancel,
+							children: cancelLabel
+						}), (0, preact_jsx_runtime.jsx)("button", {
+							class: "modal-button primary",
+							type: "button",
+							onClick: onConfirm,
+							children: confirmLabel
+						})]
+					})
+				]
+			})
+		});
+	}
 	function createId(prefix) {
 		return `${prefix}-${typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`}`;
 	}
@@ -3206,6 +3272,8 @@
 		const [newPlaylistName, setNewPlaylistName] = (0, preact_hooks.useState)("");
 		const [editorTrack, setEditorTrack] = (0, preact_hooks.useState)();
 		const [importOpen, setImportOpen] = (0, preact_hooks.useState)(false);
+		const [playlistPendingDeletion, setPlaylistPendingDeletion] = (0, preact_hooks.useState)();
+		const [trackPendingDeletion, setTrackPendingDeletion] = (0, preact_hooks.useState)();
 		const launcherDrag = useDraggablePosition("launcher");
 		const panelDrag = useDraggablePosition("panel", { pinDefaultAnchor: true });
 		const data = store.data.value;
@@ -3463,9 +3531,7 @@
 							title: "删除当前歌单",
 							"aria-label": "删除当前歌单",
 							disabled: data.playlists.length <= 1,
-							onClick: () => {
-								if (window.confirm(`确定删除歌单“${activePlaylist.name}”？`)) store.removePlaylist(activePlaylist.id);
-							},
+							onClick: () => setPlaylistPendingDeletion(activePlaylist),
 							children: (0, preact_jsx_runtime.jsx)(Trash2, {
 								size: 17,
 								"aria-hidden": "true"
@@ -3565,9 +3631,7 @@
 								type: "button",
 								title: "删除歌曲",
 								"aria-label": `删除 ${track.title}`,
-								onClick: () => {
-									if (window.confirm(`确定删除歌曲“${track.title}”？`)) store.removeTrack(track.id);
-								},
+								onClick: () => setTrackPendingDeletion(track),
 								children: (0, preact_jsx_runtime.jsx)(Trash2, {
 									size: 15,
 									"aria-hidden": "true"
@@ -3579,6 +3643,26 @@
 				importOpen && (0, preact_jsx_runtime.jsx)(ImportFavModal, {
 					store,
 					onClose: () => setImportOpen(false)
+				}),
+				playlistPendingDeletion && (0, preact_jsx_runtime.jsx)(ConfirmModal, {
+					title: "删除歌单",
+					message: `确定删除歌单“${playlistPendingDeletion.name}”？`,
+					warning: "删除后无法恢复，歌单里的歌曲会一并移除",
+					onCancel: () => setPlaylistPendingDeletion(void 0),
+					onConfirm: () => {
+						store.removePlaylist(playlistPendingDeletion.id);
+						setPlaylistPendingDeletion(void 0);
+					}
+				}),
+				trackPendingDeletion && (0, preact_jsx_runtime.jsx)(ConfirmModal, {
+					title: "删除歌曲",
+					message: `确定删除歌曲“${trackPendingDeletion.title}”？`,
+					warning: "删除后无法恢复。",
+					onCancel: () => setTrackPendingDeletion(void 0),
+					onConfirm: () => {
+						store.removeTrack(trackPendingDeletion.id);
+						setTrackPendingDeletion(void 0);
+					}
 				})
 			]
 		});

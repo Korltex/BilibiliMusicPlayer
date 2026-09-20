@@ -408,8 +408,11 @@ test("exits local playlist playback when another tab deletes its current song", 
   await preparePlayerPage(tabB, TAB_B_URL);
 
   await startPlaylistPlayback(tabA, TRACK_A_TITLE);
-  tabB.on("dialog", (dialog) => void dialog.accept());
   await tabB.getByLabel(`删除 ${TRACK_A_TITLE}`).click();
+  await tabB
+    .getByRole("dialog", { name: "删除歌曲" })
+    .getByRole("button", { name: "确定" })
+    .click();
   await deliverRemoteData(tabB, tabA);
 
   await expect(tabA.locator(".playlist-context-chip")).toBeHidden();

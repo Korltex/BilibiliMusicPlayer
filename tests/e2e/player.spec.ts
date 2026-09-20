@@ -278,57 +278,84 @@ test("displays the 0.1.8 package version in the full player", async ({
   await expect(full.locator(".version")).toHaveText(packageVersion);
 });
 
+/** 删除确认走插件内弹窗，先点击行内/工具栏的垃圾桶图标，再在弹窗里点【确定】。 */
+async function confirmDeletion(page: Page, dialogName: string): Promise<void> {
+  await page
+    .getByRole("dialog", { name: dialogName })
+    .getByRole("button", { name: "确定" })
+    .click();
+}
+
 test("requires confirmation before deleting a track", async ({ page }) => {
   await openMinimalPlayerTestPage(page, {
     initialData: createDeletionTestData(),
+  });
+  const nativeDialogs: string[] = [];
+  page.on("dialog", (dialog) => {
+    nativeDialogs.push(dialog.type());
+    void dialog.dismiss();
   });
   await page.getByRole("button", { name: "打开 Bilibili 音乐播放器" }).click();
 
   const deleteButton = page.getByRole("button", {
     name: "删除 待删除歌曲",
   });
-  const cancelledDialogPromise = page.waitForEvent("dialog");
-  const cancelledClickPromise = deleteButton.click();
-  const cancelledDialog = await cancelledDialogPromise;
-  expect(cancelledDialog.type()).toBe("confirm");
-  expect(cancelledDialog.message()).toBe("确定删除歌曲“待删除歌曲”？");
-  await cancelledDialog.dismiss();
-  await cancelledClickPromise;
+
+  await deleteButton.click();
+  const confirmModal = page.getByRole("dialog", { name: "删除歌曲" });
+  await expect(confirmModal).toBeVisible();
+  await expect(
+    confirmModal.getByText("确定删除歌曲“待删除歌曲”？"),
+  ).toBeVisible();
+
+  await confirmModal.getByRole("button", { name: "取消" }).click();
+  await expect(confirmModal).toHaveCount(0);
   await expect(page.getByText("待删除歌曲", { exact: true })).toBeVisible();
 
-  const acceptedDialogPromise = page.waitForEvent("dialog");
-  const acceptedClickPromise = deleteButton.click();
-  const acceptedDialog = await acceptedDialogPromise;
-  await acceptedDialog.accept();
-  await acceptedClickPromise;
+  await deleteButton.click();
+  await confirmDeletion(page, "删除歌曲");
+  await expect(confirmModal).toHaveCount(0);
   await expect(page.getByText("待删除歌曲", { exact: true })).toHaveCount(0);
+  expect(nativeDialogs).toEqual([]);
 });
 
 test("requires confirmation before deleting a playlist", async ({ page }) => {
   await openMinimalPlayerTestPage(page, {
     initialData: createDeletionTestData(),
   });
+  const nativeDialogs: string[] = [];
+  page.on("dialog", (dialog) => {
+    nativeDialogs.push(dialog.type());
+    void dialog.dismiss();
+  });
   await page.getByRole("button", { name: "打开 Bilibili 音乐播放器" }).click();
 
   const playlistSelect = page.getByLabel("当前歌单", { exact: true });
   const deleteButton = page.getByRole("button", { name: "删除当前歌单" });
-  const cancelledDialogPromise = page.waitForEvent("dialog");
-  const cancelledClickPromise = deleteButton.click();
-  const cancelledDialog = await cancelledDialogPromise;
-  expect(cancelledDialog.type()).toBe("confirm");
-  expect(cancelledDialog.message()).toBe("确定删除歌单“歌单 A”？");
-  await cancelledDialog.dismiss();
-  await cancelledClickPromise;
+
+  await deleteButton.click();
+  const confirmModal = page.getByRole("dialog", { name: "删除歌单" });
+  await expect(confirmModal).toBeVisible();
+  await expect(confirmModal.getByText("确定删除歌单“歌单 A”？")).toBeVisible();
+
+  await confirmModal.getByRole("button", { name: "取消" }).click();
+  await expect(confirmModal).toHaveCount(0);
   await expect(playlistSelect).toHaveValue("playlist-a");
   await expect(playlistSelect.locator("option")).toHaveCount(2);
 
-  const acceptedDialogPromise = page.waitForEvent("dialog");
-  const acceptedClickPromise = deleteButton.click();
-  const acceptedDialog = await acceptedDialogPromise;
-  await acceptedDialog.accept();
-  await acceptedClickPromise;
+  // 右上角关闭图标与【取消】等价：只关弹窗，不删歌单。
+  await deleteButton.click();
+  await confirmModal.getByRole("button", { name: "关闭" }).click();
+  await expect(confirmModal).toHaveCount(0);
+  await expect(playlistSelect).toHaveValue("playlist-a");
+  await expect(playlistSelect.locator("option")).toHaveCount(2);
+
+  await deleteButton.click();
+  await confirmDeletion(page, "删除歌单");
+  await expect(confirmModal).toHaveCount(0);
   await expect(playlistSelect).toHaveValue("playlist-b");
   await expect(playlistSelect.locator("option")).toHaveCount(1);
+  expect(nativeDialogs).toEqual([]);
 });
 
 test("continues as full-video playback after selecting another playlist", async ({
@@ -378,9 +405,9 @@ test("continues as full-video playback after deleting the active playlist", asyn
   page,
 }) => {
   await openPlayingDeletionTestPage(page);
-  page.once("dialog", (dialog) => dialog.accept());
 
   await page.getByRole("button", { name: "删除当前歌单" }).click();
+  await confirmDeletion(page, "删除歌单");
 
   await expectFullVideoContinuesPlaying(page);
   const stored = await readStoredAppData(page);
@@ -401,9 +428,9 @@ test("continues as full-video playback after deleting the current track", async 
   page,
 }) => {
   await openPlayingDeletionTestPage(page);
-  page.once("dialog", (dialog) => dialog.accept());
 
   await page.getByRole("button", { name: "删除 待删除歌曲" }).click();
+  await confirmDeletion(page, "删除歌曲");
 
   await expectFullVideoContinuesPlaying(page);
   const stored = await readStoredAppData(page);
@@ -433,9 +460,8 @@ test("keeps playlist playback when deleting a non-current track", async ({
   await expect(
     page.getByRole("button", { name: "暂停", exact: true }),
   ).toBeVisible();
-  page.once("dialog", (dialog) => dialog.accept());
-
   await page.getByRole("button", { name: "删除 非当前歌曲" }).click();
+  await confirmDeletion(page, "删除歌曲");
 
   const panel = page.getByRole("region", {
     name: "Bilibili 音乐播放器",
@@ -498,10 +524,7 @@ test("switches between full, minimal, and launcher modes", async ({ page }) => {
   const fullBeforeMinimal = (await full.boundingBox())!;
   const headerButtons = full.locator(".header-actions > button");
   await expect(headerButtons).toHaveCount(4);
-  await expect(headerButtons.nth(0)).toHaveAttribute(
-    "aria-label",
-    "批量导入",
-  );
+  await expect(headerButtons.nth(0)).toHaveAttribute("aria-label", "批量导入");
   await expect(headerButtons.nth(1)).toHaveAttribute(
     "aria-label",
     "重置图标和播放器位置",

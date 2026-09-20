@@ -960,7 +960,9 @@ select:focus-visible {
   color: var(--muted);
 }
 
-.import-fav-modal {
+/* 「批量导入」与通用确认弹窗共用同一套模态外壳规则。 */
+.import-fav-modal,
+.modal-overlay {
   position: absolute;
   inset: 0;
   z-index: 10;
@@ -970,7 +972,8 @@ select:focus-visible {
   background: rgb(0 0 0 / 45%);
 }
 
-.import-fav-card {
+.import-fav-card,
+.modal-card {
   display: flex;
   width: 100%;
   max-width: 320px;
@@ -985,8 +988,13 @@ select:focus-visible {
   box-shadow: 0 18px 60px rgb(0 0 0 / 42%);
 }
 
-.import-fav-card p {
+.import-fav-card p,
+.modal-card p {
   margin: 0;
+}
+
+.modal-message {
+  overflow-wrap: anywhere;
 }
 
 .import-fav-form {
@@ -1010,13 +1018,15 @@ select:focus-visible {
   border-color: var(--accent);
 }
 
-.import-fav-actions {
+.import-fav-actions,
+.modal-actions {
   display: flex;
   justify-content: flex-end;
   gap: 6px;
 }
 
-.import-fav-button {
+.import-fav-button,
+.modal-button {
   display: inline-flex;
   height: 32px;
   align-items: center;
@@ -1027,25 +1037,30 @@ select:focus-visible {
   cursor: pointer;
 }
 
-.import-fav-button.primary {
+.import-fav-button.primary,
+.modal-button.primary {
   color: #fff;
   background: var(--accent);
 }
 
-.import-fav-button.primary:hover {
+.import-fav-button.primary:hover,
+.modal-button.primary:hover {
   background: var(--accent-hover);
 }
 
-.import-fav-button.secondary {
+.import-fav-button.secondary,
+.modal-button.secondary {
   color: var(--text);
   background: var(--surface);
 }
 
-.import-fav-button.secondary:hover {
+.import-fav-button.secondary:hover,
+.modal-button.secondary:hover {
   background: var(--surface-hover);
 }
 
-.import-fav-button:disabled {
+.import-fav-button:disabled,
+.modal-button:disabled {
   cursor: not-allowed;
   opacity: 0.4;
 }
@@ -1059,7 +1074,8 @@ select:focus-visible {
   color: var(--muted);
 }
 
-.import-fav-warning {
+.import-fav-warning,
+.modal-warning {
   color: var(--danger);
 }
 
