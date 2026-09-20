@@ -2985,6 +2985,7 @@
 		"single-loop": "单曲循环",
 		shuffle: "随机播放"
 	};
+	var AUDIO_ONLY_BUTTON_LABEL = "纯音频模式";
 	function PlayerControls({ variant, playMode, runtime, audioOnlyState, progress, onToggleAudioOnly, onCyclePlayMode, onPrevious, onTogglePlayback, onNext, onToggleMute, onSetVolume }) {
 		const playButton = (0, preact_jsx_runtime.jsx)("button", {
 			class: "play-button",
@@ -3009,8 +3010,8 @@
 				(0, preact_jsx_runtime.jsx)("button", {
 					class: `icon-button audio-mode-button ${audioOnlyState.status}`,
 					type: "button",
-					title: audioOnlyButtonLabel(audioOnlyState),
-					"aria-label": audioOnlyButtonLabel(audioOnlyState),
+					title: AUDIO_ONLY_BUTTON_LABEL,
+					"aria-label": AUDIO_ONLY_BUTTON_LABEL,
 					"aria-pressed": audioOnlyState.requested,
 					onClick: onToggleAudioOnly,
 					children: (0, preact_jsx_runtime.jsx)(Headphones, {
@@ -3129,14 +3130,6 @@
 				size: 19,
 				"aria-hidden": "true"
 			});
-		}
-	}
-	function audioOnlyButtonLabel(state) {
-		switch (state.status) {
-			case "detecting": return "纯音频模式正在检测播放流；点击关闭并重载";
-			case "active": return "纯音频模式已生效；点击关闭并重载";
-			case "fallback": return `纯音频模式未生效，已回退正常视频：${audioOnlyReasonLabel(state.reason)}；点击关闭并重载`;
-			default: return "开启纯音频模式并重载页面";
 		}
 	}
 	function audioOnlyReasonLabel(reason) {
@@ -3394,8 +3387,8 @@
 							(0, preact_jsx_runtime.jsx)("button", {
 								class: "icon-button reset-position-button",
 								type: "button",
-								title: "重置图标和播放器位置",
-								"aria-label": "重置图标和播放器位置",
+								title: "重置位置",
+								"aria-label": "重置位置",
 								onClick: () => {
 									launcherDrag.resetPosition();
 									panelDrag.resetPosition();
@@ -3408,8 +3401,8 @@
 							(0, preact_jsx_runtime.jsx)("button", {
 								class: "icon-button",
 								type: "button",
-								title: "进入极简模式",
-								"aria-label": "进入极简模式",
+								title: "极简模式",
+								"aria-label": "极简模式",
 								onClick: () => showPanel("minimal"),
 								children: (0, preact_jsx_runtime.jsx)(Minimize2, {
 									size: 18,

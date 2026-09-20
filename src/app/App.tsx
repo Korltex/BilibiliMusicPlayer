@@ -212,8 +212,8 @@ export function App({ store, engine, audioOnly }: AppProps) {
           <button
             class="icon-button reset-position-button"
             type="button"
-            title="重置图标和播放器位置"
-            aria-label="重置图标和播放器位置"
+            title="重置位置"
+            aria-label="重置位置"
             onClick={() => {
               launcherDrag.resetPosition();
               panelDrag.resetPosition();
@@ -224,8 +224,8 @@ export function App({ store, engine, audioOnly }: AppProps) {
           <button
             class="icon-button"
             type="button"
-            title="进入极简模式"
-            aria-label="进入极简模式"
+            title="极简模式"
+            aria-label="极简模式"
             onClick={() => showPanel("minimal")}
           >
             <Minimize2 size={18} aria-hidden="true" />

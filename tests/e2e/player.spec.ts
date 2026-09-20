@@ -525,14 +525,8 @@ test("switches between full, minimal, and launcher modes", async ({ page }) => {
   const headerButtons = full.locator(".header-actions > button");
   await expect(headerButtons).toHaveCount(4);
   await expect(headerButtons.nth(0)).toHaveAttribute("aria-label", "批量导入");
-  await expect(headerButtons.nth(1)).toHaveAttribute(
-    "aria-label",
-    "重置图标和播放器位置",
-  );
-  await expect(headerButtons.nth(2)).toHaveAttribute(
-    "aria-label",
-    "进入极简模式",
-  );
+  await expect(headerButtons.nth(1)).toHaveAttribute("aria-label", "重置位置");
+  await expect(headerButtons.nth(2)).toHaveAttribute("aria-label", "极简模式");
   await expect(headerButtons.nth(3)).toHaveAttribute(
     "aria-label",
     "收起播放器",
@@ -592,7 +586,7 @@ test("minimal player keeps controls visible and persists its mode", async ({
       exact: true,
     })
     .boundingBox())!;
-  await page.getByRole("button", { name: "进入极简模式" }).click();
+  await page.getByRole("button", { name: "极简模式" }).click();
 
   const minimal = page.getByRole("region", {
     name: "Bilibili 音乐播放器（极简模式）",
@@ -606,7 +600,7 @@ test("minimal player keeps controls visible and persists its mode", async ({
   await expect(minimal.getByRole("button", { name: "上一首" })).toBeDisabled();
   await expect(minimal.getByRole("button", { name: "下一首" })).toBeDisabled();
   await expect(
-    minimal.getByRole("button", { name: "开启纯音频模式并重载页面" }),
+    minimal.getByRole("button", { name: "纯音频模式" }),
   ).toBeEnabled();
   const playModeButton = minimal.locator(
     '[aria-label="顺序播放"], [aria-label="列表循环"], [aria-label="单曲循环"], [aria-label="随机播放"]',
@@ -674,7 +668,7 @@ test("minimal circular progress remains distinct from the play button", async ({
     duration: 200,
   });
   await page.getByRole("button", { name: "打开 Bilibili 音乐播放器" }).click();
-  await page.getByRole("button", { name: "进入极简模式" }).click();
+  await page.getByRole("button", { name: "极简模式" }).click();
 
   const minimal = page.getByRole("region", {
     name: "Bilibili 音乐播放器（极简模式）",
@@ -765,7 +759,7 @@ test("minimal player keeps every control visible on a narrow viewport", async ({
   await page.setViewportSize({ width: 320, height: 720 });
   await openMinimalPlayerTestPage(page);
   await page.getByRole("button", { name: "打开 Bilibili 音乐播放器" }).click();
-  await page.getByRole("button", { name: "进入极简模式" }).click();
+  await page.getByRole("button", { name: "极简模式" }).click();
 
   const minimal = page.getByRole("region", {
     name: "Bilibili 音乐播放器（极简模式）",
@@ -815,7 +809,7 @@ test("minimal interaction prompt retries playback and clears immediately", async
 }) => {
   await openMinimalPlayerTestPage(page, { rejectFirstPlay: true });
   await page.getByRole("button", { name: "打开 Bilibili 音乐播放器" }).click();
-  await page.getByRole("button", { name: "进入极简模式" }).click();
+  await page.getByRole("button", { name: "极简模式" }).click();
 
   const minimal = page.getByRole("region", {
     name: "Bilibili 音乐播放器（极简模式）",
@@ -876,7 +870,7 @@ test("minimal controls are keyboard accessible without triggering page shortcuts
 }) => {
   await openMinimalPlayerTestPage(page);
   await page.getByRole("button", { name: "打开 Bilibili 音乐播放器" }).click();
-  await page.getByRole("button", { name: "进入极简模式" }).click();
+  await page.getByRole("button", { name: "极简模式" }).click();
   await page.evaluate(() => {
     const pageState = window as Window & { spaceShortcutCount?: number };
     pageState.spaceShortcutCount = 0;
@@ -1746,7 +1740,7 @@ test("hides the player UI in web fullscreen and restores its previous state", as
   });
   await expect(panel).toBeVisible();
 
-  await panel.getByRole("button", { name: "进入极简模式" }).click();
+  await panel.getByRole("button", { name: "极简模式" }).click();
   const minimal = page.getByRole("region", {
     name: "Bilibili 音乐播放器（极简模式）",
   });
@@ -1826,7 +1820,7 @@ test("drags and persists the launcher and player panel", async ({ page }) => {
   expect(panelMoved.x).toBeCloseTo(panelBefore.x - 300, 0);
   expect(panelMoved.y).toBeCloseTo(panelBefore.y - 140, 0);
 
-  await panel.getByRole("button", { name: "进入极简模式" }).click();
+  await panel.getByRole("button", { name: "极简模式" }).click();
   const minimal = page.getByRole("region", {
     name: "Bilibili 音乐播放器（极简模式）",
   });
@@ -1919,7 +1913,7 @@ test("drags and persists the launcher and player panel", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await launcher.click();
   const resetButton = panel.getByRole("button", {
-    name: "重置图标和播放器位置",
+    name: "重置位置",
   });
   const closeButton = panel.getByRole("button", { name: "收起播放器" });
   const resetBounds = (await resetButton.boundingBox())!;

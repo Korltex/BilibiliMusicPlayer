@@ -450,7 +450,7 @@ test("keeps playlist playback independent while the player UI is minimal or coll
   await preparePlayerPage(tabB, TAB_B_URL);
 
   await startPlaylistPlayback(tabA, TRACK_A_TITLE);
-  await tabA.getByRole("button", { name: "进入极简模式" }).click();
+  await tabA.getByRole("button", { name: "极简模式" }).click();
   const minimalA = tabA.getByRole("region", {
     name: "Bilibili 音乐播放器（极简模式）",
   });

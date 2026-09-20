@@ -37,6 +37,13 @@ const PLAY_MODE_LABELS: Record<PlayMode, string> = {
   shuffle: "随机播放",
 };
 
+/**
+ * 纯音频按钮的统一短文案，四态（off/detecting/active/fallback）取值一致：
+ * 状态只体现在按钮配色（`.audio-mode-button.<status>`）和面板状态条上。
+ * 不附带「点击重载页面」提示——移动端没有 hover，`title` 本来就看不到。
+ */
+export const AUDIO_ONLY_BUTTON_LABEL = "纯音频模式";
+
 export function PlayerControls({
   variant,
   playMode,
@@ -73,8 +80,8 @@ export function PlayerControls({
       <button
         class={`icon-button audio-mode-button ${audioOnlyState.status}`}
         type="button"
-        title={audioOnlyButtonLabel(audioOnlyState)}
-        aria-label={audioOnlyButtonLabel(audioOnlyState)}
+        title={AUDIO_ONLY_BUTTON_LABEL}
+        aria-label={AUDIO_ONLY_BUTTON_LABEL}
         aria-pressed={audioOnlyState.requested}
         onClick={onToggleAudioOnly}
       >
@@ -176,19 +183,6 @@ function PlayModeIcon({ mode }: { mode: PlayMode }) {
       return <Shuffle size={19} aria-hidden="true" />;
     default:
       return <ListMusic size={19} aria-hidden="true" />;
-  }
-}
-
-export function audioOnlyButtonLabel(state: AudioOnlyState): string {
-  switch (state.status) {
-    case "detecting":
-      return "纯音频模式正在检测播放流；点击关闭并重载";
-    case "active":
-      return "纯音频模式已生效；点击关闭并重载";
-    case "fallback":
-      return `纯音频模式未生效，已回退正常视频：${audioOnlyReasonLabel(state.reason)}；点击关闭并重载`;
-    default:
-      return "开启纯音频模式并重载页面";
   }
 }
 

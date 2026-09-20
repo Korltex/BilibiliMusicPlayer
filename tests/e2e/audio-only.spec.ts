@@ -61,10 +61,7 @@ test("rewrites initial __playinfo__ and hides only the video picture", async ({
   await openPlayerPanel(page);
   const audioModeButton = page.locator(".audio-mode-button");
   await expect(audioModeButton).toHaveClass(/active/);
-  await expect(audioModeButton).toHaveAttribute(
-    "aria-label",
-    "纯音频模式已生效；点击关闭并重载",
-  );
+  await expect(audioModeButton).toHaveAttribute("aria-label", "纯音频模式");
   await expect(page.locator(".status-message")).toHaveCount(0);
 });
 
@@ -284,9 +281,10 @@ test("falls back to visible video in full and minimal players for durl-only play
     fallbackMessage,
   );
   await expect(page.locator(".audio-mode-button")).toHaveClass(/fallback/);
+  // 退化为正常视频时原因只出现在可见状态条里；按钮文案四态统一。
   await expect(page.locator(".audio-mode-button")).toHaveAttribute(
     "aria-label",
-    `${fallbackMessage}；点击关闭并重载`,
+    "纯音频模式",
   );
   await expect(page.locator(".playlist-context-chip")).toHaveText(
     "播放完整视频",
@@ -301,15 +299,12 @@ test("falls back to visible video in full and minimal players for durl-only play
   await expect(page.locator(".status-message")).toHaveClass(/actionable/);
   await expect(page.locator(".playlist-context-chip")).toBeVisible();
 
-  await page.getByRole("button", { name: "进入极简模式" }).click();
+  await page.getByRole("button", { name: "极简模式" }).click();
   const minimalAudioButton = page
     .getByRole("region", { name: "Bilibili 音乐播放器（极简模式）" })
     .locator(".audio-mode-button");
   await expect(minimalAudioButton).toHaveClass(/fallback/);
-  await expect(minimalAudioButton).toHaveAttribute(
-    "title",
-    "纯音频模式未生效，已回退正常视频：当前视频只提供音视频混流；点击关闭并重载",
-  );
+  await expect(minimalAudioButton).toHaveAttribute("title", "纯音频模式");
 });
 
 test("persists both toggle directions and preserves navigation context", async ({
@@ -361,7 +356,7 @@ test("persists both toggle directions and preserves navigation context", async (
     page.getByRole("button", { name: "将当前视频添加到歌单" }),
   ).toBeEnabled();
 
-  await page.getByRole("button", { name: "开启纯音频模式并重载页面" }).click();
+  await page.getByRole("button", { name: "纯音频模式" }).click();
   await page.waitForURL((url) => url.searchParams.get("t") === "42");
 
   let url = new URL(page.url());
@@ -383,7 +378,7 @@ test("persists both toggle directions and preserves navigation context", async (
   });
   await page
     .getByRole("button", {
-      name: "纯音频模式已生效；点击关闭并重载",
+      name: "纯音频模式",
     })
     .click();
   await page.waitForURL((nextUrl) => !nextUrl.searchParams.has("t"));

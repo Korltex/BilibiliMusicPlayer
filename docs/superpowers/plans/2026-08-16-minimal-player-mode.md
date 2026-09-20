@@ -1,5 +1,7 @@
 # Minimal Player Mode Implementation Plan
 
+> **注记（2026-09-20）**：本计划是当时的历史记录，正文与勾选状态一律保留。此后按钮文案有变更，阅读代码片段时请注意：`重置图标和播放器位置` → `重置位置`、`进入极简模式` → `极简模式`；纯音频按钮的 `audioOnlyButtonLabel(state)` 已改为常量 `AUDIO_ONLY_BUTTON_LABEL = "纯音频模式"`，四态取值一致（不含「点击重载」提示），状态只体现在按钮配色与面板状态条上。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add a persistent `396 × 56px` single-row minimal player that reuses the existing playback controls and can switch to and from the full panel without changing playback state.
