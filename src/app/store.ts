@@ -97,6 +97,49 @@ export class AppStore {
     this.selectPlaylist(playlist.id);
   }
 
+  /**
+   * 备份导入专用：用传入的歌单**整体替换**歌单库，不做按 ID 合并。
+   *
+   * 与 `importPlaylist()` 的区别是这里无条件覆盖 `playlists` 数组（导入文件里
+   * 没有的歌单会被删除），并且只写一次 GM 存储，避免其它标签页看到中间状态。
+   * `volume` 与共享的 `playMode` 历史字段保留，本标签页会话重置到第一张歌单并
+   * 清空当前曲目 / 进度 / 恢复请求；不自动播放，也不跳转视频。
+   */
+  replaceLibrary(playlists: Playlist[]): void {
+    if (playlists.length === 0) {
+      return;
+    }
+
+    const current = this.data.peek();
+    const now = Date.now();
+    const activePlaylistId = playlists[0].id;
+
+    const next: AppData = {
+      ...current,
+      playlists,
+      activePlaylistId,
+      playback: {
+        playlistId: activePlaylistId,
+        currentTime: 0,
+        resumeRequested: false,
+        updatedAt: now,
+      },
+    };
+
+    this.data.value = next;
+    this.repository.save(next);
+    this.commitSession((session) => ({
+      ...session,
+      activePlaylistId,
+      playback: {
+        playlistId: activePlaylistId,
+        currentTime: 0,
+        resumeRequested: false,
+        updatedAt: now,
+      },
+    }));
+  }
+
   removePlaylist(playlistId: string): void {
     const current = this.data.peek();
     if (current.playlists.length <= 1) {

@@ -1243,6 +1243,48 @@
 		"  font-variant-numeric: tabular-nums;",
 		"}",
 		"",
+		"/* 「导入 / 导出歌单」弹窗：外壳与按钮沿用上面 .modal-* / .import-fav-* 的规范。 */",
+		".backup-section {",
+		"  display: flex;",
+		"  flex-direction: column;",
+		"  gap: 6px;",
+		"}",
+		"",
+		".backup-section + .backup-section {",
+		"  border-top: 1px solid var(--border);",
+		"  padding-top: 10px;",
+		"}",
+		"",
+		".backup-note,",
+		".backup-status,",
+		".backup-error {",
+		"  font-size: 12px;",
+		"}",
+		"",
+		".backup-note {",
+		"  color: var(--muted);",
+		"}",
+		"",
+		".backup-count {",
+		"  font-variant-numeric: tabular-nums;",
+		"}",
+		"",
+		".backup-status {",
+		"  color: var(--cyan);",
+		"}",
+		"",
+		".backup-error {",
+		"  overflow-wrap: anywhere;",
+		"  color: var(--danger);",
+		"}",
+		"",
+		".backup-preview,",
+		".backup-done {",
+		"  display: flex;",
+		"  flex-direction: column;",
+		"  gap: 8px;",
+		"}",
+		"",
 		"@media (max-width: 520px) {",
 		"  .player-panel {",
 		"    right: 12px;",
@@ -1330,6 +1372,21 @@
 				cy: "12",
 				r: "10"
 			}), (0, preact_jsx_runtime.jsx)("path", { d: "M12 6v6h4" })]
+		});
+	}
+	function Database(props) {
+		return (0, preact_jsx_runtime.jsxs)(SvgIcon, {
+			...props,
+			children: [
+				(0, preact_jsx_runtime.jsx)("ellipse", {
+					cx: "12",
+					cy: "5",
+					rx: "9",
+					ry: "3"
+				}),
+				(0, preact_jsx_runtime.jsx)("path", { d: "M3 5v14a9 3 0 0 0 18 0V5" }),
+				(0, preact_jsx_runtime.jsx)("path", { d: "M3 12a9 3 0 0 0 18 0" })
+			]
 		});
 	}
 	function Headphones(props) {
@@ -2188,7 +2245,7 @@
 				setPhase("confirm");
 			} catch (err) {
 				if (next.signal.aborted) return;
-				setError(readMessage(err));
+				setError(readMessage$1(err));
 				setPhase("error");
 			}
 		};
@@ -2250,7 +2307,7 @@
 			} catch (err) {
 				if (next.signal.aborted) setPhase("input");
 				else {
-					setError(readMessage(err));
+					setError(readMessage$1(err));
 					setPhase("error");
 				}
 			}
@@ -2427,8 +2484,480 @@
 			})
 		});
 	}
-	function readMessage(error) {
+	function readMessage$1(error) {
 		return error instanceof Error && error.message ? error.message : "导入失败，请重试";
+	}
+	function createId(prefix) {
+		return `${prefix}-${typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`}`;
+	}
+	var STORAGE_KEY$1 = "bilibili-music-player:data";
+	function createDefaultData(now = Date.now()) {
+		const playlist = {
+			id: createId("playlist"),
+			name: "默认歌单",
+			tracks: [],
+			createdAt: now,
+			updatedAt: now
+		};
+		return {
+			version: 1,
+			playlists: [playlist],
+			activePlaylistId: playlist.id,
+			playMode: "list-loop",
+			volume: 1,
+			playback: {
+				playlistId: playlist.id,
+				currentTime: 0,
+				resumeRequested: false,
+				updatedAt: now
+			}
+		};
+	}
+	function migrateAppData(raw) {
+		if (!raw || typeof raw !== "object") return createDefaultData();
+		const candidate = raw;
+		if (candidate.version !== 1 || !Array.isArray(candidate.playlists)) return createDefaultData();
+		const fallback = createDefaultData();
+		const playlists = candidate.playlists.filter((playlist) => Boolean(playlist && typeof playlist.id === "string" && typeof playlist.name === "string" && Array.isArray(playlist.tracks)));
+		if (playlists.length === 0) return fallback;
+		const activePlaylistId = playlists.some((playlist) => playlist.id === candidate.activePlaylistId) ? candidate.activePlaylistId : playlists[0].id;
+		return {
+			version: 1,
+			playlists,
+			activePlaylistId,
+			playMode: candidate.playMode === "sequence" || candidate.playMode === "list-loop" || candidate.playMode === "single-loop" || candidate.playMode === "shuffle" ? candidate.playMode : "list-loop",
+			volume: typeof candidate.volume === "number" ? Math.min(1, Math.max(0, candidate.volume)) : 1,
+			playback: {
+				playlistId: candidate.playback?.playlistId ?? activePlaylistId,
+				trackId: candidate.playback?.trackId,
+				currentTime: candidate.playback?.currentTime ?? 0,
+				resumeRequested: candidate.playback?.resumeRequested ?? false,
+				updatedAt: candidate.playback?.updatedAt ?? Date.now()
+			}
+		};
+	}
+	var BACKUP_FORMAT = "bilibili-music-player-backup";
+	var MAX_BACKUP_BYTES = 10 * 1024 * 1024;
+	var TRACK_SOURCES = [
+		"manual",
+		"collection",
+		"favorite"
+	];
+	var BackupError = class extends Error {
+		constructor(message) {
+			super(message);
+			this.name = "BackupError";
+		}
+	};
+	function createPlaylistBackup(data, appVersion, exportedAt = new Date()) {
+		return {
+			format: BACKUP_FORMAT,
+			formatVersion: 1,
+			exportedAt: exportedAt.toISOString(),
+			appVersion,
+			library: {
+				version: 1,
+				playlists: data.playlists.map(copyPlaylist)
+			}
+		};
+	}
+	function serializePlaylistBackup(backup) {
+		return JSON.stringify(backup, null, 2);
+	}
+	function backupFileName(exportedAt = new Date()) {
+		const pad = (value) => String(value).padStart(2, "0");
+		return `bilibili-music-player-playlists-${`${exportedAt.getFullYear()}${pad(exportedAt.getMonth() + 1)}${pad(exportedAt.getDate())}`}-${`${pad(exportedAt.getHours())}${pad(exportedAt.getMinutes())}${pad(exportedAt.getSeconds())}`}.json`;
+	}
+	function backupByteLength(text) {
+		return new TextEncoder().encode(text).length;
+	}
+	function assertBackupSize(bytes) {
+		if (bytes > 10485760) throw new BackupError(`文件超过 ${MAX_BACKUP_BYTES / 1024 / 1024} MiB 上限，不是歌单备份`);
+	}
+	function parsePlaylistBackup(text, now = Date.now()) {
+		assertBackupSize(backupByteLength(text));
+		let raw;
+		try {
+			raw = JSON.parse(text);
+		} catch {
+			throw new BackupError("文件不是有效的 JSON");
+		}
+		if (!isRecord$1(raw)) throw new BackupError("文件内容必须是 JSON 对象");
+		const { library, source, exportedAt, appVersion } = readEnvelope(raw);
+		if (!isRecord$1(library)) throw new BackupError("文件里没有歌单库数据");
+		if (library.version !== 1) throw new BackupError(`歌单库版本不受支持：${describe(library.version)}（当前支持 1）`);
+		if (!Array.isArray(library.playlists)) throw new BackupError("文件里没有歌单列表");
+		if (library.playlists.length === 0) throw new BackupError("文件里没有任何歌单");
+		const playlistIds = new Set();
+		const trackIds = new Set();
+		const playlists = library.playlists.map((value, index) => readPlaylist(value, index, {
+			playlistIds,
+			trackIds,
+			now
+		}));
+		return {
+			source,
+			playlists,
+			playlistCount: playlists.length,
+			trackCount: playlists.reduce((total, playlist) => total + playlist.tracks.length, 0),
+			...exportedAt ? { exportedAt } : {},
+			...appVersion ? { appVersion } : {}
+		};
+	}
+	function countTracks(playlists) {
+		return playlists.reduce((total, playlist) => total + playlist.tracks.length, 0);
+	}
+	function readEnvelope(raw) {
+		if (raw.format === "bilibili-music-player-backup") {
+			const formatVersion = raw.formatVersion;
+			if (formatVersion !== 1) throw new BackupError(`备份文件版本不受支持：${describe(formatVersion)}（当前支持 1）`);
+			return {
+				library: raw.library,
+				source: "backup",
+				...typeof raw.exportedAt === "string" ? { exportedAt: raw.exportedAt } : {},
+				...typeof raw.appVersion === "string" ? { appVersion: raw.appVersion } : {}
+			};
+		}
+		if (Object.prototype.hasOwnProperty.call(raw, "bilibili-music-player:data")) return {
+			library: raw[STORAGE_KEY$1],
+			source: "tampermonkey-storage"
+		};
+		if (raw.format !== void 0 || raw.formatVersion !== void 0) throw new BackupError("这不是 Bilibili 音乐播放器的歌单备份");
+		return {
+			library: raw,
+			source: "legacy-app-data"
+		};
+	}
+	function readPlaylist(value, index, context) {
+		const label = `第 ${index + 1} 个歌单`;
+		if (!isRecord$1(value)) throw new BackupError(`${label}不是有效对象`);
+		const id = readId(value.id, `${label}缺少有效 ID`);
+		if (context.playlistIds.has(id)) throw new BackupError(`歌单 ID 重复：${id}`);
+		context.playlistIds.add(id);
+		if (typeof value.name !== "string" || value.name.trim() === "") throw new BackupError(`${label}缺少有效名称`);
+		const name = value.name;
+		if (!Array.isArray(value.tracks)) throw new BackupError(`歌单「${name}」没有歌曲列表`);
+		return {
+			id,
+			name,
+			tracks: value.tracks.map((track, trackIndex) => readTrack(track, trackIndex, name, context)),
+			createdAt: readOptionalTimestamp(value.createdAt, context.now),
+			updatedAt: readOptionalTimestamp(value.updatedAt, context.now)
+		};
+	}
+	function readTrack(value, index, playlistName, context) {
+		const label = `歌单「${playlistName}」的第 ${index + 1} 首歌`;
+		if (!isRecord$1(value)) throw new BackupError(`${label}不是有效对象`);
+		const id = readId(value.id, `${label}缺少有效 ID`);
+		if (context.trackIds.has(id)) throw new BackupError(`歌曲 ID 重复：${id}`);
+		context.trackIds.add(id);
+		const bvid = readText$1(value.bvid, `${label}缺少有效 bvid`);
+		const title = readText$1(value.title, `${label}缺少有效标题`);
+		const startTime = readNumber(value.startTime, `${label}的 startTime 无效`);
+		if (startTime < 0) throw new BackupError(`${label}的 startTime 不能是负数`);
+		const duration = readNumber(value.duration, `${label}的 duration 无效`);
+		if (duration < 0) throw new BackupError(`${label}的 duration 不能是负数`);
+		const addedAt = readNumber(value.addedAt, `${label}的 addedAt 无效`);
+		const source = value.source;
+		if (!isTrackSource(source)) throw new BackupError(`${label}的 source 无效（只接受 ${TRACK_SOURCES.join(" / ")}）`);
+		const track = {
+			id,
+			bvid,
+			title,
+			startTime,
+			duration,
+			addedAt,
+			source
+		};
+		if (value.endTime !== void 0 && value.endTime !== null) {
+			const endTime = readNumber(value.endTime, `${label}的 endTime 无效`);
+			if (endTime <= startTime) throw new BackupError(`${label}的 endTime 必须晚于 startTime`);
+			track.endTime = endTime;
+		}
+		if (typeof value.uploader === "string" && value.uploader !== "") track.uploader = value.uploader;
+		if (typeof value.cover === "string" && value.cover !== "") track.cover = value.cover;
+		if (isPositiveInteger(value.cid)) track.cid = value.cid;
+		if (isPositiveInteger(value.page)) track.page = value.page;
+		return track;
+	}
+	function copyPlaylist(playlist) {
+		return {
+			id: playlist.id,
+			name: playlist.name,
+			tracks: playlist.tracks.map(copyTrack),
+			createdAt: playlist.createdAt,
+			updatedAt: playlist.updatedAt
+		};
+	}
+	function copyTrack(track) {
+		return {
+			id: track.id,
+			bvid: track.bvid,
+			...track.cid !== void 0 ? { cid: track.cid } : {},
+			...track.page !== void 0 ? { page: track.page } : {},
+			title: track.title,
+			...track.uploader !== void 0 ? { uploader: track.uploader } : {},
+			...track.cover !== void 0 ? { cover: track.cover } : {},
+			startTime: track.startTime,
+			...track.endTime !== void 0 ? { endTime: track.endTime } : {},
+			duration: track.duration,
+			addedAt: track.addedAt,
+			source: track.source
+		};
+	}
+	function isRecord$1(value) {
+		return typeof value === "object" && value !== null && !Array.isArray(value);
+	}
+	function isTrackSource(value) {
+		return typeof value === "string" && TRACK_SOURCES.includes(value);
+	}
+	function isPositiveInteger(value) {
+		return typeof value === "number" && Number.isInteger(value) && value > 0;
+	}
+	function readId(value, message) {
+		return readText$1(value, message);
+	}
+	function readText$1(value, message) {
+		if (typeof value !== "string" || value.trim() === "") throw new BackupError(message);
+		return value;
+	}
+	function readNumber(value, message) {
+		if (typeof value !== "number" || !Number.isFinite(value)) throw new BackupError(message);
+		return value;
+	}
+	function readOptionalTimestamp(value, now) {
+		return typeof value === "number" && Number.isFinite(value) ? value : now;
+	}
+	function describe(value) {
+		if (typeof value === "string") return `"${value}"`;
+		if (typeof value === "number" || typeof value === "boolean") return String(value);
+		return "缺失";
+	}
+	var SOURCE_LABELS = {
+		backup: "Bilibili 音乐播放器备份",
+		"tampermonkey-storage": "Tampermonkey 存储数据",
+		"legacy-app-data": "旧版歌单数据"
+	};
+	function BackupModal({ store, onRestore, onClose }) {
+		const [phase, setPhase] = (0, preact_hooks.useState)("idle");
+		const [parsed, setParsed] = (0, preact_hooks.useState)();
+		const [error, setError] = (0, preact_hooks.useState)("");
+		const [exportStatus, setExportStatus] = (0, preact_hooks.useState)("");
+		const fileInput = (0, preact_hooks.useRef)(null);
+		const playlists = store.data.value.playlists;
+		const currentSummary = `${playlists.length} 个歌单 · ${countTracks(playlists)} 首歌曲`;
+		const importedSummary = parsed ? `${parsed.playlistCount} 个歌单、${parsed.trackCount} 首歌曲` : "";
+		const exportLibrary = () => {
+			setError("");
+			const text = serializePlaylistBackup(createPlaylistBackup({ playlists }, version));
+			downloadTextFile(backupFileName(), text);
+			setExportStatus("已开始下载备份文件");
+		};
+		const readFile = async (file) => {
+			setError("");
+			setExportStatus("");
+			try {
+				assertBackupSize(file.size);
+				const next = parsePlaylistBackup(await file.text());
+				setParsed(next);
+				setPhase("preview");
+			} catch (err) {
+				setParsed(void 0);
+				setPhase("idle");
+				setError(readMessage(err));
+			}
+		};
+		const confirmRestore = () => {
+			if (!parsed) return;
+			onRestore(parsed.playlists);
+			setPhase("done");
+		};
+		return (0, preact_jsx_runtime.jsx)("div", {
+			class: "modal-overlay",
+			role: "dialog",
+			"aria-modal": "true",
+			"aria-label": phase === "confirming" ? "确认导入歌单" : "歌单导入导出",
+			children: (0, preact_jsx_runtime.jsxs)("div", {
+				class: "modal-card",
+				children: [
+					(0, preact_jsx_runtime.jsxs)("div", {
+						class: "editor-heading",
+						children: [(0, preact_jsx_runtime.jsx)("strong", { children: phase === "confirming" ? "确认导入歌单" : "歌单导入导出" }), (0, preact_jsx_runtime.jsx)("button", {
+							class: "icon-button",
+							type: "button",
+							title: "关闭",
+							"aria-label": "关闭",
+							onClick: onClose,
+							children: (0, preact_jsx_runtime.jsx)(X, {
+								size: 16,
+								"aria-hidden": "true"
+							})
+						})]
+					}),
+					phase === "idle" && (0, preact_jsx_runtime.jsxs)(preact_jsx_runtime.Fragment, { children: [(0, preact_jsx_runtime.jsxs)("section", {
+						class: "backup-section",
+						children: [
+							(0, preact_jsx_runtime.jsx)("strong", { children: "导出歌单" }),
+							(0, preact_jsx_runtime.jsx)("p", {
+								class: "backup-note",
+								children: "导出当前全部歌单和歌曲为本地 JSON 文件。"
+							}),
+							(0, preact_jsx_runtime.jsxs)("p", {
+								class: "backup-count",
+								children: ["当前：", currentSummary]
+							}),
+							(0, preact_jsx_runtime.jsx)("button", {
+								class: "modal-button primary",
+								type: "button",
+								onClick: exportLibrary,
+								children: "导出歌单"
+							}),
+							exportStatus && (0, preact_jsx_runtime.jsx)("p", {
+								class: "backup-status",
+								role: "status",
+								children: exportStatus
+							})
+						]
+					}), (0, preact_jsx_runtime.jsxs)("section", {
+						class: "backup-section",
+						children: [
+							(0, preact_jsx_runtime.jsx)("strong", { children: "导入歌单" }),
+							(0, preact_jsx_runtime.jsx)("p", {
+								class: "backup-note",
+								children: "选择此前导出的歌单 JSON 文件，导入会替换当前全部歌单和歌曲。"
+							}),
+							(0, preact_jsx_runtime.jsx)("input", {
+								ref: fileInput,
+								class: "visually-hidden",
+								type: "file",
+								accept: ".json,application/json",
+								"aria-label": "选择歌单文件",
+								onChange: (event) => {
+									const file = event.currentTarget.files?.[0];
+									event.currentTarget.value = "";
+									if (file) readFile(file);
+								}
+							}),
+							(0, preact_jsx_runtime.jsx)("button", {
+								class: "modal-button secondary",
+								type: "button",
+								onClick: () => fileInput.current?.click(),
+								children: "选择歌单文件"
+							}),
+							error && (0, preact_jsx_runtime.jsx)("p", {
+								class: "backup-error",
+								role: "alert",
+								children: error
+							})
+						]
+					})] }),
+					phase === "preview" && parsed && (0, preact_jsx_runtime.jsxs)(preact_jsx_runtime.Fragment, { children: [
+						(0, preact_jsx_runtime.jsxs)("div", {
+							class: "backup-preview",
+							children: [
+								(0, preact_jsx_runtime.jsxs)("p", { children: ["来源：", SOURCE_LABELS[parsed.source]] }),
+								(0, preact_jsx_runtime.jsxs)("p", {
+									class: "backup-count",
+									children: ["将导入：", importedSummary]
+								}),
+								(0, preact_jsx_runtime.jsxs)("p", {
+									class: "backup-count",
+									children: ["当前歌库：", currentSummary]
+								})
+							]
+						}),
+						(0, preact_jsx_runtime.jsx)("p", {
+							class: "modal-warning",
+							children: "导入会替换当前全部歌单和歌曲。"
+						}),
+						(0, preact_jsx_runtime.jsxs)("div", {
+							class: "modal-actions",
+							children: [(0, preact_jsx_runtime.jsx)("button", {
+								class: "modal-button secondary",
+								type: "button",
+								onClick: () => {
+									setParsed(void 0);
+									setPhase("idle");
+								},
+								children: "取消"
+							}), (0, preact_jsx_runtime.jsx)("button", {
+								class: "modal-button primary",
+								type: "button",
+								onClick: () => setPhase("confirming"),
+								children: "导入并覆盖"
+							})]
+						})
+					] }),
+					phase === "confirming" && parsed && (0, preact_jsx_runtime.jsxs)(preact_jsx_runtime.Fragment, { children: [
+						(0, preact_jsx_runtime.jsxs)("div", {
+							class: "backup-preview",
+							children: [
+								(0, preact_jsx_runtime.jsxs)("p", { children: [
+									"备份中有 ",
+									importedSummary,
+									"。"
+								] }),
+								(0, preact_jsx_runtime.jsx)("p", { children: "这会替换当前全部歌单和歌曲。" }),
+								(0, preact_jsx_runtime.jsx)("p", { children: "当前未包含在导入文件中的歌单将被删除。" })
+							]
+						}),
+						(0, preact_jsx_runtime.jsx)("p", {
+							class: "modal-warning",
+							children: "此操作不会自动备份，且无法撤销。"
+						}),
+						(0, preact_jsx_runtime.jsxs)("div", {
+							class: "modal-actions",
+							children: [(0, preact_jsx_runtime.jsx)("button", {
+								class: "modal-button secondary",
+								type: "button",
+								autoFocus: true,
+								onClick: () => setPhase("preview"),
+								children: "取消"
+							}), (0, preact_jsx_runtime.jsx)("button", {
+								class: "modal-button primary",
+								type: "button",
+								onClick: confirmRestore,
+								children: "确认导入"
+							})]
+						})
+					] }),
+					phase === "done" && parsed && (0, preact_jsx_runtime.jsxs)("div", {
+						class: "backup-done",
+						children: [(0, preact_jsx_runtime.jsxs)("p", {
+							role: "status",
+							children: [
+								"导入成功：已恢复 ",
+								importedSummary,
+								"。"
+							]
+						}), (0, preact_jsx_runtime.jsx)("div", {
+							class: "modal-actions",
+							children: (0, preact_jsx_runtime.jsx)("button", {
+								class: "modal-button primary",
+								type: "button",
+								autoFocus: true,
+								onClick: onClose,
+								children: "完成"
+							})
+						})]
+					})
+				]
+			})
+		});
+	}
+	function downloadTextFile(fileName, text) {
+		const url = URL.createObjectURL(new Blob([text], { type: "application/json" }));
+		const anchor = document.createElement("a");
+		anchor.href = url;
+		anchor.download = fileName;
+		anchor.style.display = "none";
+		document.body.append(anchor);
+		anchor.click();
+		anchor.remove();
+		window.setTimeout(() => URL.revokeObjectURL(url), 1e3);
+	}
+	function readMessage(error) {
+		return error instanceof Error && error.message ? error.message : "读取歌单文件失败，请重试";
 	}
 	function ConfirmModal({ title, message, warning, confirmLabel = "确定", cancelLabel = "取消", onConfirm, onCancel }) {
 		return (0, preact_jsx_runtime.jsx)("div", {
@@ -2479,9 +3008,6 @@
 				]
 			})
 		});
-	}
-	function createId(prefix) {
-		return `${prefix}-${typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`}`;
 	}
 	function getBvid(url = location.href) {
 		return new URL(url).pathname.match(/\/video\/(BV[\w]+)/i)?.[1];
@@ -3266,6 +3792,7 @@
 		const [newPlaylistName, setNewPlaylistName] = (0, preact_hooks.useState)("");
 		const [editorTrack, setEditorTrack] = (0, preact_hooks.useState)();
 		const [importOpen, setImportOpen] = (0, preact_hooks.useState)(false);
+		const [backupOpen, setBackupOpen] = (0, preact_hooks.useState)(false);
 		const [playlistPendingDeletion, setPlaylistPendingDeletion] = (0, preact_hooks.useState)();
 		const [trackPendingDeletion, setTrackPendingDeletion] = (0, preact_hooks.useState)();
 		const launcherDrag = useDraggablePosition("launcher");
@@ -3291,6 +3818,13 @@
 		const cyclePlayMode = () => {
 			const currentIndex = PLAY_MODES$1.indexOf(session.playMode);
 			engine.setPlayMode(PLAY_MODES$1[(currentIndex + 1) % PLAY_MODES$1.length]);
+		};
+		const restoreLibrary = (playlists) => {
+			if (runtime.playbackContext === "playlist") {
+				engine.currentMedia?.pause();
+				engine.exitPlaylistPlayback();
+			}
+			store.replaceLibrary(playlists);
 		};
 		const showPanel = (mode) => {
 			if (displayMode !== "launcher" && displayMode !== mode) panelDrag.saveCurrentPosition();
@@ -3530,6 +4064,17 @@
 								size: 17,
 								"aria-hidden": "true"
 							})
+						}),
+						(0, preact_jsx_runtime.jsx)("button", {
+							class: "icon-button",
+							type: "button",
+							title: "导入 / 导出歌单",
+							"aria-label": "导入 / 导出歌单",
+							onClick: () => setBackupOpen(true),
+							children: (0, preact_jsx_runtime.jsx)(Database, {
+								size: 17,
+								"aria-hidden": "true"
+							})
 						})
 					]
 				}),
@@ -3637,6 +4182,11 @@
 				importOpen && (0, preact_jsx_runtime.jsx)(ImportFavModal, {
 					store,
 					onClose: () => setImportOpen(false)
+				}),
+				backupOpen && (0, preact_jsx_runtime.jsx)(BackupModal, {
+					store,
+					onRestore: restoreLibrary,
+					onClose: () => setBackupOpen(false)
 				}),
 				playlistPendingDeletion && (0, preact_jsx_runtime.jsx)(ConfirmModal, {
 					title: "删除歌单",
@@ -4027,52 +4577,6 @@
 	function isPlayMode(value) {
 		return typeof value === "string" && PLAY_MODES.includes(value);
 	}
-	var STORAGE_KEY$1 = "bilibili-music-player:data";
-	function createDefaultData(now = Date.now()) {
-		const playlist = {
-			id: createId("playlist"),
-			name: "默认歌单",
-			tracks: [],
-			createdAt: now,
-			updatedAt: now
-		};
-		return {
-			version: 1,
-			playlists: [playlist],
-			activePlaylistId: playlist.id,
-			playMode: "list-loop",
-			volume: 1,
-			playback: {
-				playlistId: playlist.id,
-				currentTime: 0,
-				resumeRequested: false,
-				updatedAt: now
-			}
-		};
-	}
-	function migrateAppData(raw) {
-		if (!raw || typeof raw !== "object") return createDefaultData();
-		const candidate = raw;
-		if (candidate.version !== 1 || !Array.isArray(candidate.playlists)) return createDefaultData();
-		const fallback = createDefaultData();
-		const playlists = candidate.playlists.filter((playlist) => Boolean(playlist && typeof playlist.id === "string" && typeof playlist.name === "string" && Array.isArray(playlist.tracks)));
-		if (playlists.length === 0) return fallback;
-		const activePlaylistId = playlists.some((playlist) => playlist.id === candidate.activePlaylistId) ? candidate.activePlaylistId : playlists[0].id;
-		return {
-			version: 1,
-			playlists,
-			activePlaylistId,
-			playMode: candidate.playMode === "sequence" || candidate.playMode === "list-loop" || candidate.playMode === "single-loop" || candidate.playMode === "shuffle" ? candidate.playMode : "list-loop",
-			volume: typeof candidate.volume === "number" ? Math.min(1, Math.max(0, candidate.volume)) : 1,
-			playback: {
-				playlistId: candidate.playback?.playlistId ?? activePlaylistId,
-				trackId: candidate.playback?.trackId,
-				currentTime: candidate.playback?.currentTime ?? 0,
-				resumeRequested: candidate.playback?.resumeRequested ?? false,
-				updatedAt: candidate.playback?.updatedAt ?? Date.now()
-			}
-		};
-	}
 	var AppRepository = class {
 		load() {
 			return migrateAppData(_GM_getValue(STORAGE_KEY$1));
@@ -4139,6 +4643,35 @@
 				playlists: exists ? data.playlists.map((item) => item.id === playlist.id ? playlist : item) : [...data.playlists, playlist]
 			}));
 			this.selectPlaylist(playlist.id);
+		}
+		replaceLibrary(playlists) {
+			if (playlists.length === 0) return;
+			const current = this.data.peek();
+			const now = Date.now();
+			const activePlaylistId = playlists[0].id;
+			const next = {
+				...current,
+				playlists,
+				activePlaylistId,
+				playback: {
+					playlistId: activePlaylistId,
+					currentTime: 0,
+					resumeRequested: false,
+					updatedAt: now
+				}
+			};
+			this.data.value = next;
+			this.repository.save(next);
+			this.commitSession((session) => ({
+				...session,
+				activePlaylistId,
+				playback: {
+					playlistId: activePlaylistId,
+					currentTime: 0,
+					resumeRequested: false,
+					updatedAt: now
+				}
+			}));
 		}
 		removePlaylist(playlistId) {
 			if (this.data.peek().playlists.length <= 1) return;

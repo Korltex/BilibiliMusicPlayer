@@ -3,6 +3,7 @@ import { version } from "../../package.json";
 import {
   ChevronDown,
   Clock3,
+  Database,
   ListMusic,
   Minimize2,
   Music2,
@@ -16,6 +17,7 @@ import {
   X,
 } from "./icons";
 import { ImportFavModal } from "./ImportFavModal";
+import { BackupModal } from "./BackupModal";
 import { ConfirmModal } from "./ConfirmModal";
 import type { AppStore } from "./store";
 import type { PlayerEngine } from "../playback/player-engine";
@@ -56,6 +58,7 @@ export function App({ store, engine, audioOnly }: AppProps) {
   const [newPlaylistName, setNewPlaylistName] = useState("");
   const [editorTrack, setEditorTrack] = useState<Track | "new">();
   const [importOpen, setImportOpen] = useState(false);
+  const [backupOpen, setBackupOpen] = useState(false);
   // 待删除对象即“确认弹窗是否打开”的唯一来源，同时快照住点击那一刻的名称，
   // 避免弹窗期间下游数据变化导致文案或删除目标漂移。
   const [playlistPendingDeletion, setPlaylistPendingDeletion] =
@@ -100,6 +103,16 @@ export function App({ store, engine, audioOnly }: AppProps) {
   const cyclePlayMode = () => {
     const currentIndex = PLAY_MODES.indexOf(session.playMode);
     engine.setPlayMode(PLAY_MODES[(currentIndex + 1) % PLAY_MODES.length]);
+  };
+
+  const restoreLibrary = (playlists: Playlist[]) => {
+    // 导入会整体替换歌单库：先退出插件歌单播放并暂停媒体，
+    // 否则引擎可能拿着已经不存在于歌库里的 trackId 继续恢复播放。
+    if (runtime.playbackContext === "playlist") {
+      engine.currentMedia?.pause();
+      engine.exitPlaylistPlayback();
+    }
+    store.replaceLibrary(playlists);
   };
 
   const showPanel = (mode: OpenPanelMode) => {
@@ -360,6 +373,15 @@ export function App({ store, engine, audioOnly }: AppProps) {
         >
           <Trash2 size={17} aria-hidden="true" />
         </button>
+        <button
+          class="icon-button"
+          type="button"
+          title="导入 / 导出歌单"
+          aria-label="导入 / 导出歌单"
+          onClick={() => setBackupOpen(true)}
+        >
+          <Database size={17} aria-hidden="true" />
+        </button>
       </div>
 
       {creatingPlaylist && (
@@ -472,6 +494,14 @@ export function App({ store, engine, audioOnly }: AppProps) {
 
       {importOpen && (
         <ImportFavModal store={store} onClose={() => setImportOpen(false)} />
+      )}
+
+      {backupOpen && (
+        <BackupModal
+          store={store}
+          onRestore={restoreLibrary}
+          onClose={() => setBackupOpen(false)}
+        />
       )}
 
       {playlistPendingDeletion && (

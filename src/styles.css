@@ -1116,6 +1116,48 @@ select:focus-visible {
   font-variant-numeric: tabular-nums;
 }
 
+/* 「导入 / 导出歌单」弹窗：外壳与按钮沿用上面 .modal-* / .import-fav-* 的规范。 */
+.backup-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.backup-section + .backup-section {
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+.backup-note,
+.backup-status,
+.backup-error {
+  font-size: 12px;
+}
+
+.backup-note {
+  color: var(--muted);
+}
+
+.backup-count {
+  font-variant-numeric: tabular-nums;
+}
+
+.backup-status {
+  color: var(--cyan);
+}
+
+.backup-error {
+  overflow-wrap: anywhere;
+  color: var(--danger);
+}
+
+.backup-preview,
+.backup-done {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 @media (max-width: 520px) {
   .player-panel {
     right: 12px;

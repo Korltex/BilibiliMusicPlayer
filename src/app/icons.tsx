@@ -53,6 +53,17 @@ export function Clock3(props: IconProps) {
   );
 }
 
+/** 数据库/归档图标（「导入 / 导出歌单」入口）。 */
+export function Database(props: IconProps) {
+  return (
+    <SvgIcon {...props}>
+      <ellipse cx="12" cy="5" rx="9" ry="3" />
+      <path d="M3 5v14a9 3 0 0 0 18 0V5" />
+      <path d="M3 12a9 3 0 0 0 18 0" />
+    </SvgIcon>
+  );
+}
+
 export function Headphones(props: IconProps) {
   return (
     <SvgIcon {...props}>
