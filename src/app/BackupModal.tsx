@@ -1,13 +1,9 @@
 import { useRef, useState } from "preact/hooks";
-import { version } from "../../package.json";
 import type { Playlist } from "../core/types";
 import {
   assertBackupSize,
-  backupFileName,
-  countTracks,
-  createPlaylistBackup,
   parsePlaylistBackup,
-  serializePlaylistBackup,
+  summarizeLibrary,
   type BackupSource,
   type ParsedPlaylistBackup,
 } from "../storage/backup";
@@ -30,37 +26,25 @@ interface BackupModalProps {
 }
 
 /**
- * 「导入 / 导出歌单」弹窗。
+ * 「导入歌单」弹窗（设置的「数据管理 → 导入备份」入口）。
  *
- * 导出只是把当前歌单库序列化成本地 JSON 下载，绝不修改任何数据。
- * 导入是**全量覆盖**：解析校验 → 预览 → 二次确认 → 才写存储，任何一步失败
- * （取消、关闭、读取失败、校验失败）都必须保持当前歌单库原样。
+ * 导出已经由设置页内联一步完成，这里只负责导入：解析校验 → 预览 → 二次确认
+ * → 才写存储。任何一步失败（取消、关闭、读取失败、校验失败）都必须保持
+ * 当前歌单库原样。
  */
 export function BackupModal({ store, onRestore, onClose }: BackupModalProps) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [parsed, setParsed] = useState<ParsedPlaylistBackup>();
   const [error, setError] = useState("");
-  const [exportStatus, setExportStatus] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
 
-  const playlists = store.data.value.playlists;
-  const currentSummary = `${playlists.length} 个歌单 · ${countTracks(playlists)} 首歌曲`;
+  const currentSummary = summarizeLibrary(store.data.value.playlists);
   const importedSummary = parsed
     ? `${parsed.playlistCount} 个歌单、${parsed.trackCount} 首歌曲`
     : "";
 
-  const exportLibrary = () => {
-    setError("");
-    const text = serializePlaylistBackup(
-      createPlaylistBackup({ playlists }, version),
-    );
-    downloadTextFile(backupFileName(), text);
-    setExportStatus("已开始下载备份文件");
-  };
-
   const readFile = async (file: File) => {
     setError("");
-    setExportStatus("");
 
     try {
       assertBackupSize(file.size);
@@ -88,13 +72,11 @@ export function BackupModal({ store, onRestore, onClose }: BackupModalProps) {
       class="modal-overlay"
       role="dialog"
       aria-modal="true"
-      aria-label={phase === "confirming" ? "确认导入歌单" : "歌单导入导出"}
+      aria-label={modalTitle(phase)}
     >
       <div class="modal-card">
         <div class="editor-heading">
-          <strong>
-            {phase === "confirming" ? "确认导入歌单" : "歌单导入导出"}
-          </strong>
+          <strong>{modalTitle(phase)}</strong>
           <button
             class="icon-button"
             type="button"
@@ -109,30 +91,11 @@ export function BackupModal({ store, onRestore, onClose }: BackupModalProps) {
         {phase === "idle" && (
           <>
             <section class="backup-section">
-              <strong>导出歌单</strong>
-              <p class="backup-note">
-                导出当前全部歌单为本地 JSON 文件
-              </p>
-              <p class="backup-count">当前：{currentSummary}</p>
-              <button
-                class="modal-button primary"
-                type="button"
-                onClick={exportLibrary}
-              >
-                导出歌单
-              </button>
-              {exportStatus && (
-                <p class="backup-status" role="status">
-                  {exportStatus}
-                </p>
-              )}
-            </section>
-
-            <section class="backup-section">
               <strong>导入歌单</strong>
               <p class="backup-note">
                 选择此前导出的歌单 JSON 文件，导入会替换当前全部歌单
               </p>
+              <p class="backup-count">当前：{currentSummary}</p>
               <input
                 ref={fileInput}
                 class="visually-hidden"
@@ -242,19 +205,9 @@ export function BackupModal({ store, onRestore, onClose }: BackupModalProps) {
   );
 }
 
-function downloadTextFile(fileName: string, text: string): void {
-  const url = URL.createObjectURL(
-    new Blob([text], { type: "application/json" }),
-  );
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = fileName;
-  anchor.style.display = "none";
-  document.body.append(anchor);
-  anchor.click();
-  anchor.remove();
-  // 立刻 revoke 会打断部分浏览器的下载，延后释放这次性的 blob URL。
-  window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
+/** 导入确认阶段要换标题，让用户一眼看出这是不可撤销的最后一步。 */
+function modalTitle(phase: Phase): string {
+  return phase === "confirming" ? "确认导入歌单" : "导入歌单";
 }
 
 function readMessage(error: unknown): string {

@@ -35,6 +35,8 @@ button {
   --border: #383b44;
   --text: #f4f4f5;
   --muted: #a8abb4;
+  /* 说明文字比 --muted 稍亮，长句在深色底上更易读。 */
+  --muted-strong: #c4c7cf;
   --accent: #fb7299;
   --accent-hover: #ff8bad;
   --cyan: #36c5b7;
@@ -203,15 +205,10 @@ button {
   gap: 2px;
 }
 
-.brand-icon {
-  display: grid;
-  width: 26px;
-  height: 26px;
+/* 品牌图标自带渐变圆角底，这里只负责尺寸与不被压缩。 */
+.brand-logo {
+  display: block;
   flex: 0 0 auto;
-  place-items: center;
-  border-radius: 6px;
-  color: #fff;
-  background: var(--accent);
 }
 
 .brand strong {
@@ -970,6 +967,8 @@ select:focus-visible {
   place-items: center;
   padding: 16px;
   background: rgb(0 0 0 / 45%);
+  /* 宿主根节点是 pointer-events: none，弹窗必须自己接收指针事件。 */
+  pointer-events: auto;
 }
 
 .import-fav-card,
@@ -1116,7 +1115,7 @@ select:focus-visible {
   font-variant-numeric: tabular-nums;
 }
 
-/* 「导入 / 导出歌单」弹窗：外壳与按钮沿用上面 .modal-* / .import-fav-* 的规范。 */
+/* 「导入歌单」弹窗（设置的「数据管理 → 导入备份」入口）：外壳与按钮沿用上面 .modal-* 规范。 */
 .backup-section {
   display: flex;
   flex-direction: column;
@@ -1156,6 +1155,278 @@ select:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+/* 设置视图：与播放器面板共用容器和拖拽坐标，只把内容换成三个可折叠分区。 */
+.settings-header {
+  justify-content: flex-start;
+  gap: 6px;
+  padding: 0 8px 0 10px;
+}
+
+.settings-title {
+  overflow: hidden;
+  min-width: 0;
+  flex: 1 1 auto;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-body {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  padding: 12px 14px;
+  scrollbar-width: thin;
+}
+
+/* 分区之间只用一条分隔线，不做叠层卡片。 */
+.settings-section {
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-section + .settings-section {
+  margin-top: 6px;
+  border-top: 1px solid var(--border);
+  padding-top: 6px;
+}
+
+.settings-section-header {
+  display: flex;
+  min-height: 36px;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 6px;
+  padding: 6px 10px;
+  color: var(--text);
+  background: var(--surface);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.settings-section-header:hover {
+  background: var(--surface-hover);
+}
+
+.settings-section-header:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.settings-section-icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  color: var(--accent);
+}
+
+.settings-section-title {
+  min-width: 0;
+  flex: 0 0 auto;
+  font-size: 13px;
+}
+
+.settings-section-summary {
+  overflow: hidden;
+  min-width: 0;
+  flex: 1 1 auto;
+  color: var(--muted-strong);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-chevron {
+  flex: 0 0 auto;
+  color: var(--muted);
+  transition: transform 120ms ease;
+}
+
+.settings-section-header[aria-expanded="true"] .settings-chevron {
+  transform: rotate(180deg);
+}
+
+.settings-section-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  /* 左右不留内边距：控件右边缘与分区标题行右边缘对齐。 */
+  padding: 10px 0 2px;
+}
+
+/* 标签与控件同一行：模式选择和重置位置各占一行，不留大段空白。 */
+.settings-row {
+  display: flex;
+  min-height: 32px;
+  align-items: center;
+  gap: 10px;
+}
+
+/* 标签列定宽，让「打开时」的模式选择器与「悬浮位置」的重置按钮左边缘对齐。 */
+.settings-label {
+  flex: 0 0 auto;
+  min-width: 56px;
+  color: var(--muted-strong);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* 左边缘从标签列后开始（与「重置位置」对齐），右边缘铺到分区右边缘。 */
+.segmented-control {
+  display: grid;
+  min-width: 0;
+  flex: 1 1 auto;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 2px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 2px;
+}
+
+.segment {
+  position: relative;
+  display: block;
+  cursor: pointer;
+}
+
+/* 输入框铺满整段并置顶：点击任意位置都命中真正的控件，键盘与 :focus-visible 也都成立。 */
+.segment input {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.segment span {
+  position: relative;
+  display: block;
+  border-radius: 5px;
+  padding: 6px 10px;
+  color: var(--muted-strong);
+  font-size: 11px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.segment:hover span {
+  color: var(--text);
+}
+
+.segment input:checked + span {
+  color: #fff;
+  background: var(--accent);
+  font-weight: 700;
+}
+
+.segment input:focus-visible + span {
+  outline: 2px solid var(--accent-hover);
+  outline-offset: 1px;
+}
+
+.settings-actions {
+  display: flex;
+  gap: 10px;
+}
+
+/* 中性按钮：恢复备份是覆盖操作，不用强调色把它做成首选动作。 */
+.settings-action {
+  display: flex;
+  min-height: 34px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid #484b54;
+  border-radius: 6px;
+  padding: 0 12px;
+  color: var(--text);
+  background: var(--surface-hover);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.settings-actions > .settings-action {
+  flex: 1 1 0;
+}
+
+.settings-action:hover:not(:disabled) {
+  border-color: var(--muted);
+}
+
+.settings-action:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.settings-status {
+  color: var(--cyan);
+  font-size: 11px;
+}
+
+.settings-error {
+  overflow-wrap: anywhere;
+  color: var(--danger);
+  font-size: 11px;
+}
+
+.settings-warning {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  border-radius: 6px;
+  padding: 8px 10px;
+  color: #e7c49d;
+  background: #27231f;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.settings-warning-badge {
+  display: grid;
+  width: 16px;
+  height: 16px;
+  place-items: center;
+  border-radius: 50%;
+  color: #ffc078;
+  background: #59412c;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.settings-about {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 6px 10px;
+  margin: 0;
+  font-size: 11px;
+}
+
+.settings-about dt {
+  color: var(--muted-strong);
+}
+
+.settings-about dd {
+  overflow-wrap: anywhere;
+  margin: 0;
+}
+
+.settings-footnote {
+  color: var(--muted-strong);
+  font-size: 10px;
 }
 
 @media (max-width: 520px) {

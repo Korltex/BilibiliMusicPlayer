@@ -13,6 +13,7 @@ const BACKUP_URL = "https://www.bilibili.com/video/BV1BackupTest/";
 const DATA_KEY = "bilibili-music-player:data";
 const AUDIO_ONLY_KEY = "bilibili-music-player:audio-only";
 const LAYOUT_KEY = "bilibili-music-player:layout";
+const SETTINGS_KEY = "bilibili-music-player:settings";
 
 async function installLocalStorageGm(
   page: Page,
@@ -168,12 +169,36 @@ async function openPanel(page: Page, initialData: AppData): Promise<void> {
   await page.getByRole("button", { name: "打开 Bilibili 音乐播放器" }).click();
 }
 
-async function openBackupModal(
+/** 打开设置视图（备份入口现在只住在设置里）。 */
+async function openSettingsView(
   page: Page,
   initialData: AppData,
 ): Promise<void> {
   await openPanel(page, initialData);
-  await page.getByRole("button", { name: "导入 / 导出歌单" }).click();
+  await page.getByRole("button", { name: "设置", exact: true }).click();
+  await expect(
+    page.getByRole("region", { name: "Bilibili 音乐播放器（设置）" }),
+  ).toBeVisible();
+}
+
+/** 数据管理默认折叠，展开后才能看到备份按钮。 */
+async function openDataSection(page: Page): Promise<void> {
+  const header = page.getByRole("button", { name: /数据管理/ });
+  if ((await header.getAttribute("aria-expanded")) !== "true") {
+    await header.click();
+  }
+  await expect(header).toHaveAttribute("aria-expanded", "true");
+}
+
+/** 从设置进入导入弹窗。 */
+async function openBackupImport(
+  page: Page,
+  initialData: AppData,
+): Promise<void> {
+  await openSettingsView(page, initialData);
+  await openDataSection(page);
+  await page.getByRole("button", { name: "从备份恢复" }).click();
+  await expect(page.getByRole("dialog", { name: "导入歌单" })).toBeVisible();
 }
 
 async function chooseBackupFile(
@@ -202,7 +227,9 @@ test("pauses playlist playback before replacing the library", async ({
   expect(new URL(page.url()).searchParams.get("bili_music")).toBe("1");
   expect(await isPaused(page)).toBe(false);
 
-  await page.getByRole("button", { name: "导入 / 导出歌单" }).click();
+  await page.getByRole("button", { name: "设置", exact: true }).click();
+  await openDataSection(page);
+  await page.getByRole("button", { name: "从备份恢复" }).click();
   await chooseBackupFile(
     page,
     serializePlaylistBackup(
@@ -224,19 +251,23 @@ test("pauses playlist playback before replacing the library", async ({
 test("exports the whole library as a readable JSON download", async ({
   page,
 }) => {
-  await openBackupModal(page, createInitialData());
+  await openSettingsView(page, createInitialData());
 
-  const dialog = page.getByRole("dialog", { name: "歌单导入导出" });
-  await expect(dialog.getByText("当前：2 个歌单 · 1 首歌曲")).toBeVisible();
+  const settings = page.getByRole("region", {
+    name: "Bilibili 音乐播放器（设置）",
+  });
+  // 歌单数量在「数据管理」标题旁，折叠时也可见。
+  await expect(settings.getByText("2 个歌单 · 1 首歌曲")).toBeVisible();
 
+  await openDataSection(page);
   const downloadPromise = page.waitForEvent("download");
-  await dialog.getByRole("button", { name: "导出歌单", exact: true }).click();
+  await settings.getByRole("button", { name: "导出备份" }).click();
   const download = await downloadPromise;
 
   expect(download.suggestedFilename()).toMatch(
     /^bilibili-music-player-playlists-\d{8}-\d{6}\.json$/,
   );
-  await expect(dialog.getByRole("status")).toHaveText("已开始下载备份文件");
+  await expect(settings.getByRole("status")).toHaveText("已开始下载备份文件");
 
   const file = readFileSync((await download.path())!, "utf8");
   const raw = JSON.parse(file) as Record<string, unknown>;
@@ -258,7 +289,7 @@ test("exports the whole library as a readable JSON download", async ({
 });
 
 test("restores a backup by replacing the whole library", async ({ page }) => {
-  await openBackupModal(page, createInitialData());
+  await openBackupImport(page, createInitialData());
 
   const backup = serializePlaylistBackup(
     createPlaylistBackup({ playlists: createImportedPlaylists() }, "9.9.9"),
@@ -279,9 +310,10 @@ test("restores a backup by replacing the whole library", async ({ page }) => {
     page.getByText("导入成功：已恢复 1 个歌单、2 首歌曲。"),
   ).toBeVisible();
   await page.getByRole("button", { name: "完成" }).click();
-  await expect(page.getByRole("dialog", { name: "歌单导入导出" })).toHaveCount(
-    0,
-  );
+  await expect(page.getByRole("dialog", { name: "导入歌单" })).toHaveCount(0);
+
+  // 导入入口在设置里，回到播放器面板才能看到歌单库。
+  await page.getByRole("button", { name: "返回播放器" }).click();
 
   // 歌单选择器只剩导入的那一张，并自动选中它。
   const playlistSelect = page.getByLabel("当前歌单", { exact: true });
@@ -302,10 +334,10 @@ test("restores a backup by replacing the whole library", async ({ page }) => {
 test("imports a raw Tampermonkey storage dump without touching other keys", async ({
   page,
 }) => {
-  await openBackupModal(page, createInitialData());
+  await openBackupImport(page, createInitialData());
 
   await page.evaluate(
-    ({ layoutKey, audioOnlyKey }) => {
+    ({ layoutKey, audioOnlyKey, settingsKey }) => {
       localStorage.setItem(
         `__bili_music__:${layoutKey}`,
         JSON.stringify({
@@ -318,8 +350,16 @@ test("imports a raw Tampermonkey storage dump without touching other keys", asyn
         `__bili_music__:${audioOnlyKey}`,
         JSON.stringify(true),
       );
+      localStorage.setItem(
+        `__bili_music__:${settingsKey}`,
+        JSON.stringify({ version: 1, openMode: "minimal" }),
+      );
     },
-    { layoutKey: LAYOUT_KEY, audioOnlyKey: AUDIO_ONLY_KEY },
+    {
+      layoutKey: LAYOUT_KEY,
+      audioOnlyKey: AUDIO_ONLY_KEY,
+      settingsKey: SETTINGS_KEY,
+    },
   );
 
   const dump = {
@@ -329,6 +369,7 @@ test("imports a raw Tampermonkey storage dump without touching other keys", asyn
       playlists: createImportedPlaylists(),
     },
     "bilibili-music-player:layout": { version: 1, lastOpenMode: "full" },
+    "bilibili-music-player:settings": { version: 1, openMode: "full" },
   };
   await chooseBackupFile(page, JSON.stringify(dump, null, 2));
 
@@ -341,19 +382,23 @@ test("imports a raw Tampermonkey storage dump without touching other keys", asyn
 
   const stored = (await readStored(page, DATA_KEY)) as AppData;
   expect(stored.playlists).toEqual(createImportedPlaylists());
-  // 备份文件里的 audio-only / layout 不得覆盖本机设置。
+  // 备份文件里的 audio-only / layout / settings 不得覆盖本机设置。
   expect(await readStored(page, AUDIO_ONLY_KEY)).toBe(true);
   expect(await readStored(page, LAYOUT_KEY)).toEqual({
     version: 1,
     lastOpenMode: "minimal",
     panel: { x: 11, y: 22 },
   });
+  expect(await readStored(page, SETTINGS_KEY)).toEqual({
+    version: 1,
+    openMode: "minimal",
+  });
 });
 
 test("keeps the current library when the import is cancelled", async ({
   page,
 }) => {
-  await openBackupModal(page, createInitialData());
+  await openBackupImport(page, createInitialData());
 
   const backup = serializePlaylistBackup(
     createPlaylistBackup({ playlists: createImportedPlaylists() }, "9.9.9"),
@@ -371,10 +416,10 @@ test("keeps the current library when the import is cancelled", async ({
   await expect(page.getByRole("button", { name: "导入并覆盖" })).toBeVisible();
   await page.getByRole("button", { name: "关闭" }).click();
 
-  await expect(page.getByRole("dialog", { name: "歌单导入导出" })).toHaveCount(
-    0,
-  );
+  await expect(page.getByRole("dialog", { name: "导入歌单" })).toHaveCount(0);
   expect(await readStored(page, DATA_KEY)).toEqual(createInitialData());
+
+  await page.getByRole("button", { name: "返回播放器" }).click();
   await expect(
     page.getByLabel("当前歌单", { exact: true }).locator("option"),
   ).toHaveText(["默认歌单", "Test"]);
@@ -383,7 +428,7 @@ test("keeps the current library when the import is cancelled", async ({
 test("reports invalid files and never modifies the library", async ({
   page,
 }) => {
-  await openBackupModal(page, createInitialData());
+  await openBackupImport(page, createInitialData());
 
   await chooseBackupFile(page, "{ oops");
   await expect(page.getByRole("alert")).toHaveText("文件不是有效的 JSON");
@@ -405,6 +450,9 @@ test("reports invalid files and never modifies the library", async ({
   );
 
   expect(await readStored(page, DATA_KEY)).toEqual(createInitialData());
+
+  await page.getByRole("button", { name: "关闭" }).click();
+  await page.getByRole("button", { name: "返回播放器" }).click();
   await expect(
     page.getByLabel("当前歌单", { exact: true }).locator("option"),
   ).toHaveText(["默认歌单", "Test"]);

@@ -21,7 +21,7 @@
 | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 产物形态     | 单个用户脚本 `dist/bilibili-music-player.user.js`（`dist/` 已被 git 跟踪）                                                                                                    |
 | 技术栈       | TypeScript（strict）+ Preact 10 + `@preact/signals` + Vite + `vite-plugin-monkey`                                                                                             |
-| 包名 / 版本  | `bilibili-music-player` / `0.1.8`（`package.json`，用户脚本头部 `@version` 必须与之一致）                                                                                     |
+| 包名 / 版本  | `bilibili-music-player` / `0.1.9`（`package.json`，用户脚本头部 `@version` 必须与之一致）                                                                                     |
 | 作者 / 许可  | Korltex / MIT                                                                                                                                                                 |
 | 匹配范围     | `https://www.bilibili.com/video/*` 与 `https://space.bilibili.com/*`（后者只在空间收藏页 `favlist` 挂载 UI，其它空间页保持惰性）                                              |
 | 注入时机     | `@run-at document-start`；`@noframes`                                                                                                                                         |
@@ -43,7 +43,7 @@
 6. **新增第三方依赖要过审计。** 依赖必须是 `package.json` 中的直接依赖并锁定精确版本，同时登记到 `scripts/userscript-runtime.json`（模块名、全局变量名、jsDelivr URL、本地文件路径、版本）和 `THIRD_PARTY_NOTICES.txt`。图标不允许打包 `lucide-preact`，图标是手写内联在 `src/app/icons.tsx` 里的。
 7. **存储结构必须向后兼容。** 所有持久化数据都带 `version` 字段；字段变更要在 `src/storage/*-schema.ts` 中写迁移逻辑，直接改结构会丢用户歌单。
 8. **不改 B 站页面本身的行为（除纯音频模式外）。** 纯音频模式关闭时，不得覆盖任何页面网络 API。
-9. **歌单备份导入必须「失败即停」。** 校验只能走 `storage/backup.ts` 的 `parsePlaylistBackup()`，**不得**用 `migrateAppData()` 兜底（它对非法输入会静默回退成默认空歌单，用在导入上等于悄悄清空用户歌单）；解析失败、读取失败、用户取消都必须保留当前歌单库。导入是**全量覆盖**，只写 `bilibili-music-player:data`（经 `AppStore.replaceLibrary()` 一次写入），不得改写 `audio-only`、`layout` 等其它键。
+9. **歌单备份导入必须「失败即停」。** 校验只能走 `storage/backup.ts` 的 `parsePlaylistBackup()`，**不得**用 `migrateAppData()` 兜底（它对非法输入会静默回退成默认空歌单，用在导入上等于悄悄清空用户歌单）；解析失败、读取失败、用户取消都必须保留当前歌单库。导入是**全量覆盖**，只写 `bilibili-music-player:data`（经 `AppStore.replaceLibrary()` 一次写入），不得改写 `audio-only`、`layout`、`settings` 等其它键。
 
 ---
 
@@ -54,10 +54,12 @@ src/
 ├── entry.tsx                    入口：Shadow DOM 挂载、Web 全屏隐藏、键盘事件隔离、生命周期清理
 ├── styles.css                   播放器全部样式（注入 Shadow DOM，与页面样式隔离）
 ├── app/                         Preact UI + 应用状态 + 本地布局
-│   ├── App.tsx                  主界面（三种显示形态 + 完整面板 + 歌曲编辑器）
+│   ├── App.tsx                  主界面（四种显示形态 + 完整面板 + 歌曲编辑器 + 设置接线）
 │   ├── ConfirmModal.tsx         插件内确认弹窗（删除歌单 / 删除歌曲，替代 window.confirm）
 │   ├── ImportFavModal.tsx       「批量导入」弹窗（收藏夹 / 合集 / 视频选集）
-│   ├── BackupModal.tsx          「导入 / 导出歌单」弹窗（本地 JSON 备份，全量覆盖前二次确认）
+│   ├── SettingsPanel.tsx        设置视图（窗口与外观 / 数据管理 / 关于，三个可折叠分区）
+│   ├── BackupModal.tsx          「导入歌单」弹窗（本地 JSON 备份的全量覆盖二次确认）
+│   ├── download.ts              触发本地文件下载（blob URL，延后释放）
 │   ├── minimal-player.tsx       单行极简播放器
 │   ├── player-controls.tsx      共用传输控件条（完整/极简两种 variant）
 │   ├── store.ts                 AppStore：两个 signal（共享数据 / 本标签页会话）+ 持久化写入门面
@@ -90,6 +92,7 @@ src/
     ├── backup.ts                歌单备份：导出格式、文件名、严格解析与校验（纯逻辑，可单测）
     ├── playback-session.ts      PlaybackSession 迁移与 sessionStorage 仓库
     ├── layout-schema.ts / layout.ts  UI 位置与上次打开模式（GM key: bilibili-music-player:layout）
+    └── settings-schema.ts / settings.ts  界面偏好：播放器打开方式与迁移（GM key: bilibili-music-player:settings）
 ```
 
 依赖方向是单向的：`app → playback → bili/storage/core`，`app → sources`（外部来源适配层，被 `app` 使用），`storage` 与 `playback/queue`、`bili/playurl-rewriter`、`sources/bilibili-fav` 都是可单测的纯逻辑层。**新增功能时优先把逻辑放进纯函数模块，而不是塞进组件。**
@@ -190,6 +193,7 @@ B 站是 SPA，`<video>` 会被替换。`MediaLocator` 用三条互补的路径�
 | 歌单、歌曲、音量                             | GM 存储          | `bilibili-music-player:data`                    | 所有标签页共享                        |
 | 当前歌单、播放模式、当前歌曲、进度、恢复请求 | `sessionStorage` | `bilibili-music-player:playback-session`        | **单个标签页**，关闭标签页即消失      |
 | UI 位置、上次打开模式                        | GM 存储          | `bilibili-music-player:layout`                  | 所有标签页共享                        |
+| 界面偏好（播放器打开方式）                   | GM 存储          | `bilibili-music-player:settings`                | 所有标签页共享，**不并入 layout**     |
 | 纯音频开关                                   | GM 存储          | `bilibili-music-player:audio-only`              | 启动期偏好，**不进入歌单数据结构**    |
 | 歌单备份文件                                 | 用户本地磁盘     | `bilibili-music-player-playlists-<时间戳>.json` | 手动导出 / 导入，插件不自动写、不上传 |
 
@@ -201,9 +205,11 @@ B 站是 SPA，`<video>` 会被替换。`MediaLocator` 用三条互补的路径�
 
 ### 6.7 界面形态与拖动（`src/app/App.tsx`）
 
-三种显示形态，状态在组件内：`launcher`（圆形悬浮按钮）→ `full`（完整面板）→ `minimal`（单行极简播放器，宽 ≤400px）。形态切换**不改变任何播放状态**（不暂停、不跳时间、不改模式/音量/纯音频）。上次打开的形态持久化在布局存储里，默认 `full`。
+四种显示形态，状态在组件内：`launcher`（圆形悬浮按钮）→ `full`（完整面板）→ `minimal`（单行极简播放器，宽 ≤400px）→ `settings`（设置视图，见 6.10）。形态切换**不改变任何播放状态**（不暂停、不跳时间、不改模式/音量/纯音频）。上次打开的形态持久化在布局存储里，默认 `full`；悬浮按钮打开哪个形态由 `settings` 里的 `openMode` 偏好决定（`remember` 时用 `lastOpenMode`）。
 
-`useDraggablePosition("launcher" | "panel")` 实现指针拖动：4px 阈值区分点击与拖动、`setPointerCapture`、实时按视口钳制坐标（`clampPosition`）、结束后写入布局存储，并提供 `consumeSuppressedClick()` 防止拖动末尾误触发点击。完整面板与极简播放器**共用 `panel` 坐标**；标题栏的「重置位置」按钮清空两处坐标。发生 `resize` 或元素尺寸变化时用 `ResizeObserver` 重新钳制。`panel` 额外开启 `pinDefaultAnchor`：没有已保存坐标时（首次打开或重置后）把 CSS 默认的右下角停靠位置量成显式左上角坐标，此后**面板顶边固定**，歌单内容变多/变少只让底边向下延伸或向上收起；「重置位置」后重新固化，布局存储里不会写入这组默认坐标。
+完整面板标题栏的按钮固定为四个：批量导入（`StarPlus`）、极简模式（`Minimize2`）、设置（`Settings` 齿轮）、收起播放器（`X`）。**「重置位置」不在标题栏**，它住在设置的「窗口与外观」里。
+
+`useDraggablePosition("launcher" | "panel")` 实现指针拖动：4px 阈值区分点击与拖动、`setPointerCapture`、实时按视口钳制坐标（`clampPosition`）、结束后写入布局存储，并提供 `consumeSuppressedClick()` 防止拖动末尾误触发点击。完整面板、极简播放器与设置视图**共用 `panel` 坐标**；设置里的「重置位置」清空两处坐标。发生 `resize` 或元素尺寸变化时用 `ResizeObserver` 重新钳制。`panel` 额外开启 `pinDefaultAnchor`：没有已保存坐标时（首次打开或重置后）把 CSS 默认的右下角停靠位置量成显式左上角坐标，此后**面板顶边固定**，歌单内容变多/变少只让底边向下延伸或向上收起；「重置位置」后重新固化，布局存储里不会写入这组默认坐标。
 
 `App` 里还包含歌曲编辑器（`TrackEditor`）：可改标题、起止时间，并用 `fetchVideoChapters()` 调用 B 站公开接口（`/x/web-interface/view` 解析 cid → `/x/player/wbi/v2` 取 `view_points`）识别视频章节。章节以可键盘操作的下拉列表（combobox）呈现，**选中某章即把歌名与起止时间填入表单，保存后成为一首歌（一次一首，不是批量导入）**；没有章节时仍可完全手动填写。章节解析（`parseVideoChapters`）是纯函数，只接受 `content` + 合法 `from`/`to` 的条目，封面 `http:` 会被升成 `https:`。
 
@@ -227,9 +233,11 @@ B 站是 SPA，`<video>` 会被替换。`MediaLocator` 用三条互补的路径�
 
 第三条约定：**「这一条拿不到」不等于「整单失败」**。收藏夹列表的 `medias[].attr` 只标"删除"类失效（`1` 其他原因删除、`9` UP 自删），**稿件记录已被清掉但条目仍是 `attr = 0`** 的情况（详情接口返回 `-404`、`62002` 等）只有 `/x/web-interface/view` 能发现。所以收藏夹路径里「多P 条目查详情」必须**按条目** try/catch：命中 `VideoUnavailableError`（`bilibili-video.ts`，覆盖 `-404/-400/62002/62004` 与"响应里没有稿件"）就计入 `skipped` 继续下一条，并 `console.warn` 出 bvid/标题（跳过但不静默；UI 摘要只报「已跳过 N 个失效视频」，不再细分来源）；风控（HTTP 412 / `code` -352）与网络异常照旧上抛，不要一起吞掉。**不要**为了发现"不可见的单P"而对每个条目都查详情——那是每条一次请求，等于把刚拆掉的坑挖回来；单P 的不可见条目目前仍会静默进歌单，这是已知限制。
 
-### 6.9 歌单备份：导出与全量导入（`src/storage/backup.ts` + `src/app/BackupModal.tsx`）
+### 6.9 歌单备份：导出与全量导入（`src/storage/backup.ts` + `src/app/SettingsPanel.tsx` + `src/app/BackupModal.tsx`）
 
-面板工具栏的数据库图标（`aria-label="导入 / 导出歌单"`）打开 `BackupModal`。导出/导入只针对**歌单库**——歌单名称、歌曲、`bvid`、分P（`page`/`cid`）、片段起止时间、标题、UP 主、封面、`source`。**不进备份也不覆盖**：音量、播放进度与当前播放会话、纯音频开关、悬浮按钮/面板位置、极简模式状态。
+入口只有一处：设置的「数据管理」分区（工具栏的数据库按钮与标题栏都**不再**提供备份入口）。`导出备份` 在设置里**内联一步完成**——`createPlaylistBackup()` + `serializePlaylistBackup()` + `app/download.ts` 的 `downloadTextFile()`，行内显示「已开始下载备份文件」；`从备份恢复` 打开 `BackupModal`（**导入专用**，没有导出小节）走下面的确认流程。概念设计的页脚也是这个分工：「选择项立即生效；备份操作单独确认。」
+
+导出/导入只针对**歌单库**——歌单名称、歌曲、`bvid`、分P（`page`/`cid`）、片段起止时间、标题、UP 主、封面、`source`。**不进备份也不覆盖**：音量、播放进度与当前播放会话、纯音频开关、悬浮按钮/面板位置、极简模式状态、设置偏好。
 
 备份文件格式（`PlaylistLibraryBackup`，`JSON.stringify(data, null, 2)`，可读）：
 
@@ -238,7 +246,7 @@ B 站是 SPA，`<video>` 会被替换。`MediaLocator` 用三条互补的路径�
   "format": "bilibili-music-player-backup",
   "formatVersion": 1,
   "exportedAt": "2026-10-01T03:04:05.000Z",
-  "appVersion": "0.1.8",
+  "appVersion": "0.1.9",
   "library": { "version": 1, "playlists": [] }
 }
 ```
@@ -254,6 +262,20 @@ B 站是 SPA，`<video>` 会被替换。`MediaLocator` 用三条互补的路径�
 导入流程（`BackupModal` 的状态机 `idle → preview → confirming → done`）：选择文件 → 解析校验 → 预览「来源 / 将导入 X 个歌单 · Y 首歌曲 / 当前歌库 A 个歌单 · B 首歌曲」→【导入并覆盖】→ 二次确认「会替换全部歌单…不会自动备份，且无法撤销」→【确认导入】。取消、关闭弹窗、读取失败、校验失败都不会写存储。
 
 确认后由 `App.tsx` 的 `restoreLibrary()` 处理：**若当前是插件歌单播放上下文（`playbackContext === "playlist"`），先 `engine.currentMedia?.pause()` + `engine.exitPlaylistPlayback()`**（清 `resumeRequested`、上下文回 `"page"`、移除 URL 上的 `bili_music=1`），再调用 `store.replaceLibrary(parsed.playlists)`。`replaceLibrary()` 与 `importPlaylist()` 不同，是**无条件整体替换** `playlists`（文件里没有的歌单会被删除）、不做按 ID 合并；它保留本机 `volume` 与 `AppData.playMode` 历史字段，把 `activePlaylistId` 设为导入列表第一张歌单，清空 `playback` 的当前曲目/进度/恢复请求，并把本标签页会话重置到第一张歌单（保留本标签页 `PlaybackSession.playMode`），**只调用一次 `GM_setValue`** 写歌单库，避免其它标签页观察到中间状态。导入后不自动播放、不跳转视频。
+
+导入完成后弹窗停在设置视图里，要看歌单库需按「返回播放器」——`tests/e2e/backup.spec.ts` 里的相关用例都补了这一步。
+
+### 6.10 设置视图（`src/app/SettingsPanel.tsx`）
+
+标题栏齿轮（`aria-label="设置"`）把 `displayMode` 切到 `settings`。它**复用 `.player-panel` 容器与 `panel` 拖拽坐标**（同宽、内容区内部滚动），因此没有第二套窗口/位置存储；头部是「← 返回播放器 / 设置 / × 收起播放器」，返回箭头回到进入设置前的形态（`settingsOrigin`），并且**不写 `lastOpenMode`**——否则「记住上次」会被一次设置跳转污染。
+
+三个分区都用 `<button aria-expanded aria-controls>` + `role="region"` 的可折叠结构，**一次只展开一个**（默认只展开「窗口与外观」，点已展开的标题可收起；打开别的分区会自动收起当前分区），这样设置面板不会因为三个分区同时展开被拉得很长。标题行统一底色、分区之间用一条分隔线，分区图标用强调色，说明文字用比 `--muted` 稍亮的 `--muted-strong`；粉色只留给分区图标、选中项（分段控件）与主要交互，覆盖风险只用琥珀提示卡：
+
+1. **窗口与外观**（两行）：`打开时 [记住上次 | 完整模式 | 极简模式]` 是三段原生 `input[type=radio]`（`role="radiogroup"`，标签与控件同一行），写 `settingsRepository.saveOpenMode()`；`悬浮位置 [重置位置]` 同一行，调用既有的 `launcherDrag.resetPosition()` + `panelDrag.resetPosition()`。标签列 `min-width: 56px`，分段控件铺满剩余宽度：左边缘与「重置位置」同列、右边缘与分区标题行右边缘对齐（`tests/e2e/settings.spec.ts` 断言两者 `boundingBox()` 的 `x` 与右边界相等）。
+2. **数据管理**：标题旁常显 `N 个歌单 · M 首歌曲`；展开后是 `导出备份`（内联下载）与 `从备份恢复`（打开 `BackupModal`）+ 琥珀色警告卡。两个按钮都刻意用中性色——恢复是覆盖操作，不做成看起来首选的强调按钮。
+3. **关于**：标题旁常显 `版本 x.y.z`；展开后给出常用信息（应用、版本、许可、存储）。
+
+`SettingsPanel` 不写任何存储：偏好、导出、导入、重置全部由 `App` 以回调传入，组件只持有折叠状态。弹窗通过 `children` 渲染在面板 `<section>` 内部——这样 `.modal-overlay`（`position: absolute; inset: 0`）才会相对面板定位并继承 `.player-panel` 的 `pointer-events: auto`；`.modal-overlay` 自身也显式声明了 `pointer-events: auto` 作为兜底。
 
 ---
 
@@ -294,8 +316,8 @@ B 站是 SPA，`<video>` 会被替换。`MediaLocator` 用三条互补的路径�
 
 ## 9. 测试体系
 
-- **单元测试（Vitest，node 环境，`tests/**/*.test.ts`）**：覆盖纯逻辑——时间格式化与钳制、四种播放模式的边界、播放条目的合成与变化比较（`tests/now-playing.test.ts`）、封面 URL 规范化与按 bvid 缓存/退避（`tests/video-cover.test.ts`）、默认歌单/非法持久化数据恢复、播放会话初始化与无效歌曲回退、playurl 改写（三种 DASH 结构 + `durl`/缺音频/畸形 JSON 的失败开放且不修改输入）、章节解析、进度百分比，以及导入链路的**契约测试**：`tests/sources-bilibili-season.test.ts` 里有「408 条合集 = **5 次列表请求** + **0 次详情请求**」「`page_size=100`」「逐条进度 = 1…408」「多P 条目只产出单条 `-p1`」「HTTP 412 退避后重试同一页」「退避阶梯用尽才报风控错」「翻页礼让间隔 200~400ms」的用例，`tests/sources-bilibili-fav.test.ts` 锁住收藏夹的分页/失效过滤/多P 拆分、「进度只数条目、不数多P 拆分后的曲目数」（`loaded <= total`）、以及「列表没标失效但详情 `-404` 的条目只跳过自己、风控 412 仍然上抛」。`tests/backup.test.ts` 锁住歌单备份：导出→解析往返字段完整、文件里不含音量/播放会话/纯音频/布局、文件名格式、Tampermonkey 原始存储与旧版 `AppData` 两种兼容输入、以及空/损坏/未来版本/空歌单/重复 ID/错误时间范围/非法 source/超 10 MiB **一律抛错且不产生默认歌单**。
-- **浏览器测试（Playwright，`tests/e2e/`）**：**加载的是构建产物**（`tests/helpers/userscript.ts` 读 `dist/*.user.js` 并把 CDN 运行时文件内联进去），所以必须先 `npm run build`。测试用 `page.route()` 把 `https://www.bilibili.com/video/BV1…` 伪造成假 B 站页面，用 `addInitScript` 注入 `localStorage` 版的 `GM_*` 替身，并用 `Object.defineProperties` 伪造 `<video>` 的 `paused/currentTime/duration/readyState/volume/muted` 与 `play()/pause()`。`tests/e2e/player.spec.ts` 覆盖挂载与媒体控制、拖拽位置持久化、面板顶边固定、片段整秒边界与旧数据归一化、章节选择、删除确认（弹窗取消/关闭/确定三条路径，并断言全程不弹原生 dialog）、队列游标与上下文判定、歌单播放会话刷新恢复、bfcache 恢复、网页全屏隐藏、极简模式布局/进度/键盘可达性；`tests/e2e/audio-only.spec.ts` 覆盖 `__playinfo__`、fetch、XHR 三种拦截与失败回退、开关双向重载；`tests/e2e/tab-coordination.spec.ts` 覆盖多标签页**互相独立**播放、以及远端删除当前歌曲后本标签页安全退出歌单播放；`tests/e2e/metadata-refresh.spec.ts` 用 `history.pushState` + 延迟写 DOM 复现 B 站同文档跳转，锁住「面板标题/UP 主自动收敛」「无变化时不重建 MediaMetadata」，以及封面三层兜底：接口封面优先、接口风控/无封面时退回分享卡片封面、每个视频只请求一次接口；`tests/e2e/import-fav.spec.ts` 覆盖收藏夹/合集/视频三种入口的导入与覆盖导入、错误提示，并断言合集导入期间详情接口被请求 **0** 次（`viewRequests === 0`）；`tests/e2e/backup.spec.ts` 覆盖歌单备份：导出产生可读 JSON 下载（文件名 + 核心内容 + 不修改数据）、备份全量替换歌单库（选择器只剩导入的歌单、音量与共享 playMode 保留）、Tampermonkey 原始存储导入且 `audio-only`/`layout` 不被改动、取消/关闭/非法文件都不动数据、以及「导入前先暂停媒体并退出插件歌单播放上下文」。
+- **单元测试（Vitest，node 环境，`tests/**/*.test.ts`）**：覆盖纯逻辑——时间格式化与钳制、四种播放模式的边界、播放条目的合成与变化比较（`tests/now-playing.test.ts`）、封面 URL 规范化与按 bvid 缓存/退避（`tests/video-cover.test.ts`）、设置偏好迁移与 `resolveOpenMode()` 透传（`tests/settings-schema.test.ts`）、默认歌单/非法持久化数据恢复、播放会话初始化与无效歌曲回退、playurl 改写（三种 DASH 结构 + `durl`/缺音频/畸形 JSON 的失败开放且不修改输入）、章节解析、进度百分比，以及导入链路的**契约测试**：`tests/sources-bilibili-season.test.ts` 里有「408 条合集 = **5 次列表请求** + **0 次详情请求**」「`page_size=100`」「逐条进度 = 1…408」「多P 条目只产出单条 `-p1`」「HTTP 412 退避后重试同一页」「退避阶梯用尽才报风控错」「翻页礼让间隔 200~400ms」的用例，`tests/sources-bilibili-fav.test.ts` 锁住收藏夹的分页/失效过滤/多P 拆分、「进度只数条目、不数多P 拆分后的曲目数」（`loaded <= total`）、以及「列表没标失效但详情 `-404` 的条目只跳过自己、风控 412 仍然上抛」。`tests/backup.test.ts` 锁住歌单备份：导出→解析往返字段完整、文件里不含音量/播放会话/纯音频/布局、文件名格式、Tampermonkey 原始存储与旧版 `AppData` 两种兼容输入、以及空/损坏/未来版本/空歌单/重复 ID/错误时间范围/非法 source/超 10 MiB **一律抛错且不产生默认歌单**。
+- **浏览器测试（Playwright，`tests/e2e/`）**：**加载的是构建产物**（`tests/helpers/userscript.ts` 读 `dist/*.user.js` 并把 CDN 运行时文件内联进去），所以必须先 `npm run build`。测试用 `page.route()` 把 `https://www.bilibili.com/video/BV1…` 伪造成假 B 站页面，用 `addInitScript` 注入 `localStorage` 版的 `GM_*` 替身，并用 `Object.defineProperties` 伪造 `<video>` 的 `paused/currentTime/duration/readyState/volume/muted` 与 `play()/pause()`。`tests/e2e/player.spec.ts` 覆盖挂载与媒体控制、拖拽位置持久化、面板顶边固定、片段整秒边界与旧数据归一化、章节选择、删除确认（弹窗取消/关闭/确定三条路径，并断言全程不弹原生 dialog）、队列游标与上下文判定、歌单播放会话刷新恢复、bfcache 恢复、网页全屏隐藏、极简模式布局/进度/键盘可达性；`tests/e2e/audio-only.spec.ts` 覆盖 `__playinfo__`、fetch、XHR 三种拦截与失败回退、开关双向重载；`tests/e2e/tab-coordination.spec.ts` 覆盖多标签页**互相独立**播放、以及远端删除当前歌曲后本标签页安全退出歌单播放；`tests/e2e/metadata-refresh.spec.ts` 用 `history.pushState` + 延迟写 DOM 复现 B 站同文档跳转，锁住「面板标题/UP 主自动收敛」「无变化时不重建 MediaMetadata」，以及封面三层兜底：接口封面优先、接口风控/无封面时退回分享卡片封面、每个视频只请求一次接口；`tests/e2e/import-fav.spec.ts` 覆盖收藏夹/合集/视频三种入口的导入与覆盖导入、错误提示，并断言合集导入期间详情接口被请求 **0** 次（`viewRequests === 0`）；`tests/e2e/backup.spec.ts` 覆盖歌单备份：从设置内联导出产生可读 JSON 下载（文件名 + 核心内容 + 不修改数据）、经设置进入导入弹窗并全量替换歌单库（选择器只剩导入的歌单、音量与共享 playMode 保留）、Tampermonkey 原始存储导入且 `audio-only`/`layout`/`settings` 不被改动、取消/关闭/非法文件都不动数据、以及「导入前先暂停媒体并退出插件歌单播放上下文」；`tests/e2e/settings.spec.ts` 覆盖设置视图：齿轮打开 / ← 返回原形态 / × 回悬浮按钮、三种打开方式落盘并决定悬浮按钮的打开结果（含「记住上次」透传 `lastOpenMode`）、设置内重置位置清空两个坐标、内联导出下载内容可被 `parsePlaylistBackup` 解析、`导入备份` 打开弹窗、「关于」默认折叠并显示真实版本与备份格式、折叠区 `aria-expanded` 切换、键盘可选分段控件、打开设置不打断歌单播放、390px 窄视口不越界。
 - **真实网站烟雾测试（`tests/real/`，独立配置 `playwright.real.config.ts`）**：访问真实公开 B 站视频页注入正式构建，验证媒体定位与面板挂载；其中一个用例断言纯音频模式下只请求音频分片、不请求视频分片。它依赖外部网络，不纳入默认命令。
 
 ---

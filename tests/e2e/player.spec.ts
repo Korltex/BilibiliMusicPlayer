@@ -264,10 +264,10 @@ async function readPlaybackSession(page: Page): Promise<PlaybackSession> {
   });
 }
 
-test("displays the 0.1.8 package version in the full player", async ({
+test("displays the 0.1.9 package version in the full player", async ({
   page,
 }) => {
-  expect(packageVersion).toBe("0.1.8");
+  expect(packageVersion).toBe("0.1.9");
   await openMinimalPlayerTestPage(page);
   await page.getByRole("button", { name: "打开 Bilibili 音乐播放器" }).click();
 
@@ -525,14 +525,14 @@ test("switches between full, minimal, and launcher modes", async ({ page }) => {
   const headerButtons = full.locator(".header-actions > button");
   await expect(headerButtons).toHaveCount(4);
   await expect(headerButtons.nth(0)).toHaveAttribute("aria-label", "批量导入");
-  await expect(headerButtons.nth(1)).toHaveAttribute("aria-label", "重置位置");
-  await expect(headerButtons.nth(2)).toHaveAttribute("aria-label", "极简模式");
+  await expect(headerButtons.nth(1)).toHaveAttribute("aria-label", "极简模式");
+  await expect(headerButtons.nth(2)).toHaveAttribute("aria-label", "设置");
   await expect(headerButtons.nth(3)).toHaveAttribute(
     "aria-label",
     "收起播放器",
   );
 
-  await headerButtons.nth(2).click();
+  await headerButtons.nth(1).click();
   const minimal = page.getByRole("region", {
     name: "Bilibili 音乐播放器（极简模式）",
   });
@@ -1912,19 +1912,23 @@ test("drags and persists the launcher and player panel", async ({ page }) => {
 
   await page.setViewportSize({ width: 1440, height: 900 });
   await launcher.click();
-  const resetButton = panel.getByRole("button", {
-    name: "重置位置",
-  });
+  // 重置位置现在住在设置里；标题栏保留的两个图标按钮仍应同尺寸。
+  const settingsButton = panel.getByRole("button", { name: "设置" });
   const closeButton = panel.getByRole("button", { name: "收起播放器" });
-  const resetBounds = (await resetButton.boundingBox())!;
+  const settingsBounds = (await settingsButton.boundingBox())!;
   const closeBounds = (await closeButton.boundingBox())!;
-  expect(resetBounds.width).toBe(closeBounds.width);
-  expect(resetBounds.height).toBe(closeBounds.height);
+  expect(settingsBounds.width).toBe(closeBounds.width);
+  expect(settingsBounds.height).toBe(closeBounds.height);
 
-  await resetButton.click();
+  await settingsButton.click();
+  const settingsPanel = page.getByRole("region", {
+    name: "Bilibili 音乐播放器（设置）",
+  });
+  await expect(settingsPanel).toBeVisible();
+  await settingsPanel.getByRole("button", { name: "重置位置" }).click();
   await expect
     .poll(async () => {
-      const bounds = await panel.boundingBox();
+      const bounds = await settingsPanel.boundingBox();
       return Boolean(
         bounds &&
         Math.abs(1440 - bounds.x - bounds.width - 20) <= 0.5 &&
@@ -1941,7 +1945,7 @@ test("drags and persists the launcher and player panel", async ({ page }) => {
   });
   expect(storedLayout).toEqual({ version: 1, lastOpenMode: "full" });
 
-  await closeButton.click();
+  await settingsPanel.getByRole("button", { name: "收起播放器" }).click();
   const resetLauncher = (await launcher.boundingBox())!;
   expect(1440 - resetLauncher.x - resetLauncher.width).toBeCloseTo(24, 0);
   expect(900 - resetLauncher.y - resetLauncher.height).toBeCloseTo(76, 0);

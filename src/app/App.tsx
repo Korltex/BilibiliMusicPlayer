@@ -1,16 +1,16 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { version } from "../../package.json";
 import {
+  BrandLogo,
   ChevronDown,
   Clock3,
-  Database,
   ListMusic,
   Minimize2,
   Music2,
   Pencil,
   Plus,
-  RotateCcw,
   Save,
+  Settings,
   StarPlus,
   Trash2,
   Volume2,
@@ -19,6 +19,8 @@ import {
 import { ImportFavModal } from "./ImportFavModal";
 import { BackupModal } from "./BackupModal";
 import { ConfirmModal } from "./ConfirmModal";
+import { downloadTextFile } from "./download";
+import { SettingsPanel } from "./SettingsPanel";
 import type { AppStore } from "./store";
 import type { PlayerEngine } from "../playback/player-engine";
 import type { AudioOnlyController } from "../bili/audio-only-controller";
@@ -28,11 +30,22 @@ import {
 } from "../bili/metadata";
 import { fetchVideoChapters, type VideoChapter } from "../bili/chapters";
 import { isVideoPage } from "../bili/page-route";
+import {
+  backupFileName,
+  createPlaylistBackup,
+  serializePlaylistBackup,
+  summarizeLibrary,
+} from "../storage/backup";
 import { formatTime, toEndSecond, toStartSecond } from "../core/time";
 import type { PlayMode, Playlist, Track } from "../core/types";
 import { useDraggablePosition } from "./use-draggable-position";
 import { LayoutRepository } from "../storage/layout";
 import type { OpenPanelMode } from "../storage/layout-schema";
+import { SettingsRepository } from "../storage/settings";
+import {
+  resolveOpenMode,
+  type OpenModePreference,
+} from "../storage/settings-schema";
 import { MinimalPlayer } from "./minimal-player";
 import { audioOnlyReasonLabel, PlayerControls } from "./player-controls";
 
@@ -50,7 +63,8 @@ const PLAY_MODES: PlayMode[] = [
 ];
 
 const layoutRepository = new LayoutRepository();
-type DisplayMode = "launcher" | OpenPanelMode;
+const settingsRepository = new SettingsRepository();
+type DisplayMode = "launcher" | OpenPanelMode | "settings";
 
 export function App({ store, engine, audioOnly }: AppProps) {
   const [displayMode, setDisplayMode] = useState<DisplayMode>("launcher");
@@ -59,6 +73,15 @@ export function App({ store, engine, audioOnly }: AppProps) {
   const [editorTrack, setEditorTrack] = useState<Track | "new">();
   const [importOpen, setImportOpen] = useState(false);
   const [backupOpen, setBackupOpen] = useState(false);
+  // 设置视图里的偏好与导出结果；写存储与下载都由下面的回调负责。
+  const [openMode, setOpenMode] = useState<OpenModePreference>(
+    () => settingsRepository.load().openMode,
+  );
+  const [settingsOrigin, setSettingsOrigin] = useState<OpenPanelMode>();
+  const [exportResult, setExportResult] = useState<{
+    status?: string;
+    error?: string;
+  }>({});
   // 待删除对象即“确认弹窗是否打开”的唯一来源，同时快照住点击那一刻的名称，
   // 避免弹窗期间下游数据变化导致文案或删除目标漂移。
   const [playlistPendingDeletion, setPlaylistPendingDeletion] =
@@ -123,6 +146,85 @@ export function App({ store, engine, audioOnly }: AppProps) {
     setDisplayMode(mode);
   };
 
+  const openSettings = () => {
+    panelDrag.saveCurrentPosition();
+    setSettingsOrigin(displayMode === "minimal" ? "minimal" : "full");
+    setExportResult({});
+    setDisplayMode("settings");
+  };
+
+  const selectOpenMode = (mode: OpenModePreference) => {
+    settingsRepository.saveOpenMode(mode);
+    setOpenMode(mode);
+  };
+
+  /** 导出是纯本地动作：序列化当前歌单库并触发下载，不改任何数据。 */
+  const exportLibrary = () => {
+    try {
+      const text = serializePlaylistBackup(
+        createPlaylistBackup({ playlists: data.playlists }, version),
+      );
+      downloadTextFile(backupFileName(), text);
+      setExportResult({ status: "已开始下载备份文件" });
+    } catch (error) {
+      setExportResult({
+        error:
+          error instanceof Error && error.message
+            ? error.message
+            : "导出失败，请重试",
+      });
+    }
+  };
+
+  const openImportBackup = () => {
+    setExportResult({});
+    setBackupOpen(true);
+  };
+
+  // 面板与设置两个视图共用同一批弹窗：设置页只需要备份导入，
+  // 其余弹窗在设置页不会被触发，因此可以原样复用。
+  const overlays = (
+    <>
+      {importOpen && (
+        <ImportFavModal store={store} onClose={() => setImportOpen(false)} />
+      )}
+
+      {backupOpen && (
+        <BackupModal
+          store={store}
+          onRestore={restoreLibrary}
+          onClose={() => setBackupOpen(false)}
+        />
+      )}
+
+      {playlistPendingDeletion && (
+        <ConfirmModal
+          title="删除歌单"
+          message={`确定删除歌单“${playlistPendingDeletion.name}”？`}
+          warning="删除后无法恢复，歌单里的歌曲会一并移除"
+          onCancel={() => setPlaylistPendingDeletion(undefined)}
+          onConfirm={() => {
+            store.removePlaylist(playlistPendingDeletion.id);
+            setPlaylistPendingDeletion(undefined);
+          }}
+        />
+      )}
+
+      {trackPendingDeletion && (
+        <ConfirmModal
+          title="删除歌曲"
+          message={`确定删除歌曲“${trackPendingDeletion.title}”？`}
+          warning="删除后无法恢复。"
+          onCancel={() => setTrackPendingDeletion(undefined)}
+          onConfirm={() => {
+            store.removeTrack(trackPendingDeletion.id);
+            setTrackPendingDeletion(undefined);
+          }}
+        />
+      )}
+    </>
+  );
+
   if (displayMode === "launcher") {
     return (
       <button
@@ -150,11 +252,36 @@ export function App({ store, engine, audioOnly }: AppProps) {
             return;
           }
 
-          showPanel(layoutRepository.load().lastOpenMode);
+          showPanel(
+            resolveOpenMode(openMode, layoutRepository.load().lastOpenMode),
+          );
         }}
       >
         <Music2 size={22} aria-hidden="true" />
       </button>
+    );
+  }
+
+  if (displayMode === "settings") {
+    return (
+      <SettingsPanel
+        openMode={openMode}
+        librarySummary={summarizeLibrary(data.playlists)}
+        drag={panelDrag}
+        exportStatus={exportResult.status}
+        exportError={exportResult.error}
+        onSelectOpenMode={selectOpenMode}
+        onResetPositions={() => {
+          launcherDrag.resetPosition();
+          panelDrag.resetPosition();
+        }}
+        onExportBackup={exportLibrary}
+        onImportBackup={openImportBackup}
+        onBack={() => setDisplayMode(settingsOrigin ?? "full")}
+        onClose={() => setDisplayMode("launcher")}
+      >
+        {overlays}
+      </SettingsPanel>
     );
   }
 
@@ -206,9 +333,7 @@ export function App({ store, engine, audioOnly }: AppProps) {
         onPointerCancel={panelDrag.onPointerCancel}
       >
         <div class="brand">
-          <span class="brand-icon">
-            <Music2 size={18} aria-hidden="true" />
-          </span>
+          <BrandLogo class="brand-logo" size={26} aria-hidden="true" />
           <strong>Bilibili 音乐播放器</strong>
           <span class="version">{version}</span>
         </div>
@@ -223,18 +348,6 @@ export function App({ store, engine, audioOnly }: AppProps) {
             <StarPlus size={18} aria-hidden="true" />
           </button>
           <button
-            class="icon-button reset-position-button"
-            type="button"
-            title="重置位置"
-            aria-label="重置位置"
-            onClick={() => {
-              launcherDrag.resetPosition();
-              panelDrag.resetPosition();
-            }}
-          >
-            <RotateCcw size={18} aria-hidden="true" />
-          </button>
-          <button
             class="icon-button"
             type="button"
             title="极简模式"
@@ -242,6 +355,15 @@ export function App({ store, engine, audioOnly }: AppProps) {
             onClick={() => showPanel("minimal")}
           >
             <Minimize2 size={18} aria-hidden="true" />
+          </button>
+          <button
+            class="icon-button"
+            type="button"
+            title="设置"
+            aria-label="设置"
+            onClick={openSettings}
+          >
+            <Settings size={18} aria-hidden="true" />
           </button>
           <button
             class="icon-button close-panel-button"
@@ -373,15 +495,6 @@ export function App({ store, engine, audioOnly }: AppProps) {
         >
           <Trash2 size={17} aria-hidden="true" />
         </button>
-        <button
-          class="icon-button"
-          type="button"
-          title="导入 / 导出歌单"
-          aria-label="导入 / 导出歌单"
-          onClick={() => setBackupOpen(true)}
-        >
-          <Database size={17} aria-hidden="true" />
-        </button>
       </div>
 
       {creatingPlaylist && (
@@ -492,43 +605,7 @@ export function App({ store, engine, audioOnly }: AppProps) {
         )}
       </div>
 
-      {importOpen && (
-        <ImportFavModal store={store} onClose={() => setImportOpen(false)} />
-      )}
-
-      {backupOpen && (
-        <BackupModal
-          store={store}
-          onRestore={restoreLibrary}
-          onClose={() => setBackupOpen(false)}
-        />
-      )}
-
-      {playlistPendingDeletion && (
-        <ConfirmModal
-          title="删除歌单"
-          message={`确定删除歌单“${playlistPendingDeletion.name}”？`}
-          warning="删除后无法恢复，歌单里的歌曲会一并移除"
-          onCancel={() => setPlaylistPendingDeletion(undefined)}
-          onConfirm={() => {
-            store.removePlaylist(playlistPendingDeletion.id);
-            setPlaylistPendingDeletion(undefined);
-          }}
-        />
-      )}
-
-      {trackPendingDeletion && (
-        <ConfirmModal
-          title="删除歌曲"
-          message={`确定删除歌曲“${trackPendingDeletion.title}”？`}
-          warning="删除后无法恢复。"
-          onCancel={() => setTrackPendingDeletion(undefined)}
-          onConfirm={() => {
-            store.removeTrack(trackPendingDeletion.id);
-            setTrackPendingDeletion(undefined);
-          }}
-        />
-      )}
+      {overlays}
     </section>
   );
 }

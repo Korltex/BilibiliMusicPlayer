@@ -36,6 +36,96 @@ function SvgIcon({
   return <svg {...svgAttributes}>{children}</svg>;
 }
 
+/**
+ * 播放器标题栏的品牌图标（`images/bilibili-music-player-logo-v2.svg`）。
+ *
+ * 自带粉红渐变圆角底 + 白色电视/播放/均衡器图形，所以既不复用 `SvgIcon` 的
+ * 24 视口与描边默认值，也不需要额外的 CSS 背景。渐变 id 加了前缀，
+ * 避免同一文档里出现同名 id（宿主页面或第二个内联 SVG）。
+ */
+export function BrandLogo({ size = 24, ...props }: IconProps) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width={size}
+      height={size}
+      viewBox="0 0 1024 1024"
+      focusable="false"
+      {...props}
+    >
+      <defs>
+        <linearGradient id="bmp-brand-logo-tile" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#ff82a6" />
+          <stop offset="1" stop-color="#f05284" />
+        </linearGradient>
+      </defs>
+      <rect
+        width="1024"
+        height="1024"
+        rx="224"
+        fill="url(#bmp-brand-logo-tile)"
+      />
+      <g
+        fill="none"
+        stroke="#fff"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path d="M405 279 331 205M619 279l74-74" stroke-width="32" />
+        <rect
+          x="214"
+          y="285"
+          width="596"
+          height="470"
+          rx="96"
+          stroke-width="42"
+        />
+      </g>
+      <path
+        d="M380 412c0-18 20-29 36-20l177 103c16 9 16 32 0 41L416 639c-16 9-36-2-36-20V412Z"
+        transform="translate(-34 0)"
+        fill="#fff"
+      />
+      <g fill="#fff">
+        <rect x="612" y="474" width="30" height="112" rx="15" />
+        <rect x="661" y="438" width="30" height="184" rx="15" />
+        <rect x="710" y="492" width="30" height="76" rx="15" />
+      </g>
+    </svg>
+  );
+}
+
+/**
+ * 窗口图标（设置里「窗口与外观」分区）。
+ *
+ * 几何取自 Lucide `app-window`：外框 20×16、圆角 2，标题栏横线在 y=8，
+ * 两个 4px 高的竖线端点模拟标题栏按钮，与概念图里「窗口 + 顶栏」一致。
+ */
+export function AppWindow(props: IconProps) {
+  return (
+    <SvgIcon {...props}>
+      <rect x="2" y="4" width="20" height="16" rx="2" />
+      <path d="M10 4v4" />
+      <path d="M2 8h20" />
+      <path d="M6 4v4" />
+    </SvgIcon>
+  );
+}
+
+/**
+ * 左箭头（设置视图的「返回播放器」）。
+ *
+ * 几何取自 Lucide `arrow-left`：横线 y=12、长 14，箭头张口 7。
+ */
+export function ArrowLeft(props: IconProps) {
+  return (
+    <SvgIcon {...props}>
+      <path d="m12 19-7-7 7-7" />
+      <path d="M19 12H5" />
+    </SvgIcon>
+  );
+}
+
 export function ChevronDown(props: IconProps) {
   return (
     <SvgIcon {...props}>
@@ -53,7 +143,7 @@ export function Clock3(props: IconProps) {
   );
 }
 
-/** 数据库/归档图标（「导入 / 导出歌单」入口）。 */
+/** 数据库/归档图标（数据管理分区）。 */
 export function Database(props: IconProps) {
   return (
     <SvgIcon {...props}>
@@ -64,10 +154,40 @@ export function Database(props: IconProps) {
   );
 }
 
+/**
+ * 下载图标（设置里「导出备份」）。
+ *
+ * 几何取自 Lucide `download`：托盘 18×6 开口向上、圆角 2，箭头竖线 x=12 从 y=3 到 y=15。
+ */
+export function Download(props: IconProps) {
+  return (
+    <SvgIcon {...props}>
+      <path d="M12 3v12" />
+      <path d="m7 10 5 5 5-5" />
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+    </SvgIcon>
+  );
+}
+
 export function Headphones(props: IconProps) {
   return (
     <SvgIcon {...props}>
       <path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3" />
+    </SvgIcon>
+  );
+}
+
+/**
+ * 信息图标（设置里「关于」分区）。
+ *
+ * 几何取自 Lucide `info`：圆 r=10，竖线从 y=11 到 y=16，圆点在 (12, 8)。
+ */
+export function Info(props: IconProps) {
+  return (
+    <SvgIcon {...props}>
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 16v-4" />
+      <path d="M12 8h.01" />
     </SvgIcon>
   );
 }
@@ -192,6 +312,30 @@ export function Save(props: IconProps) {
   );
 }
 
+/**
+ * 齿轮图标（标题栏「设置」入口）。
+ *
+ * 几何来自用户提供的 B 站风格图标（1024 视口、填充式），因此不走 `SvgIcon` 的
+ * 24 视口 + 描边默认值：外框是圆角六边形，内部两圈同心圆由相反的绕向挖空。
+ * 原图写死 `fill="#222429"`，这里改成 `currentColor`，让按钮的悬停/激活色生效。
+ * 四个子路径必须留在同一个 `<path>` 里——拆开会让内侧轮廓从「洞」变成实心块。
+ */
+export function Settings({ size = 24, ...props }: IconProps) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width={size}
+      height={size}
+      viewBox="0 0 1024 1024"
+      fill="currentColor"
+      focusable="false"
+      {...props}
+    >
+      <path d="M469.333333 60.693333a85.333333 85.333333 0 0 1 85.333334 0l326.826666 188.714667a85.333333 85.333333 0 0 1 42.666667 73.898667v377.386666a85.333333 85.333333 0 0 1-42.666667 73.898667L554.666667 963.306667a85.333333 85.333333 0 0 1-85.333334 0L142.506667 774.592a85.333333 85.333333 0 0 1-42.666667-73.898667v-377.386666a85.333333 85.333333 0 0 1 42.666667-73.898667z m42.666667 73.898667L185.173333 323.306667v377.386666L512 889.408l326.826667-188.714667v-377.386666L512 134.592zM512 341.333333a170.666667 170.666667 0 1 1 0 341.333334 170.666667 170.666667 0 0 1 0-341.333334z m0 85.333334a85.333333 85.333333 0 1 0 0 170.666666 85.333333 85.333333 0 0 0 0-170.666666z" />
+    </svg>
+  );
+}
+
 export function Shuffle(props: IconProps) {
   return (
     <SvgIcon {...props}>
@@ -247,6 +391,21 @@ export function Trash2(props: IconProps) {
       <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
       <path d="M3 6h18" />
       <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+    </SvgIcon>
+  );
+}
+
+/**
+ * 上传图标（设置里「导入备份」）。
+ *
+ * 几何取自 Lucide `upload`：与 `Download` 镜像，箭头向上、竖线 x=12 从 y=15 到 y=3。
+ */
+export function Upload(props: IconProps) {
+  return (
+    <SvgIcon {...props}>
+      <path d="M12 15V3" />
+      <path d="m7 8 5-5 5 5" />
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
     </SvgIcon>
   );
 }

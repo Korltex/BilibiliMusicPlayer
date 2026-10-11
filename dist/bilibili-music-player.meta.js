@@ -4,7 +4,7 @@
 // @name:zh-CN         Bilibili 音乐播放器
 // @name:zh-TW         Bilibili 音樂播放器
 // @namespace          bilibili-music-player
-// @version            0.1.8
+// @version            0.1.9
 // @author             Korltex
 // @description        A music playlist player for Bilibili videos.
 // @description:en     A music playlist player for Bilibili videos.

@@ -168,6 +168,11 @@ export function countTracks(playlists: Playlist[]): number {
   );
 }
 
+/** 当前歌单库的一行摘要（设置页与备份弹窗共用同一句文案）。 */
+export function summarizeLibrary(playlists: Playlist[]): string {
+  return `${playlists.length} 个歌单 · ${countTracks(playlists)} 首歌曲`;
+}
+
 interface Envelope {
   library: unknown;
   source: BackupSource;

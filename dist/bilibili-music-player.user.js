@@ -4,7 +4,7 @@
 // @name:zh-CN         Bilibili 音乐播放器
 // @name:zh-TW         Bilibili 音樂播放器
 // @namespace          bilibili-music-player
-// @version            0.1.8
+// @version            0.1.9
 // @author             Korltex
 // @description        A music playlist player for Bilibili videos.
 // @description:en     A music playlist player for Bilibili videos.
@@ -162,6 +162,8 @@
 		"  --border: #383b44;",
 		"  --text: #f4f4f5;",
 		"  --muted: #a8abb4;",
+		"  /* 说明文字比 --muted 稍亮，长句在深色底上更易读。 */",
+		"  --muted-strong: #c4c7cf;",
 		"  --accent: #fb7299;",
 		"  --accent-hover: #ff8bad;",
 		"  --cyan: #36c5b7;",
@@ -330,15 +332,10 @@
 		"  gap: 2px;",
 		"}",
 		"",
-		".brand-icon {",
-		"  display: grid;",
-		"  width: 26px;",
-		"  height: 26px;",
+		"/* 品牌图标自带渐变圆角底，这里只负责尺寸与不被压缩。 */",
+		".brand-logo {",
+		"  display: block;",
 		"  flex: 0 0 auto;",
-		"  place-items: center;",
-		"  border-radius: 6px;",
-		"  color: #fff;",
-		"  background: var(--accent);",
 		"}",
 		"",
 		".brand strong {",
@@ -1097,6 +1094,8 @@
 		"  place-items: center;",
 		"  padding: 16px;",
 		"  background: rgb(0 0 0 / 45%);",
+		"  /* 宿主根节点是 pointer-events: none，弹窗必须自己接收指针事件。 */",
+		"  pointer-events: auto;",
 		"}",
 		"",
 		".import-fav-card,",
@@ -1243,7 +1242,7 @@
 		"  font-variant-numeric: tabular-nums;",
 		"}",
 		"",
-		"/* 「导入 / 导出歌单」弹窗：外壳与按钮沿用上面 .modal-* / .import-fav-* 的规范。 */",
+		"/* 「导入歌单」弹窗（设置的「数据管理 → 导入备份」入口）：外壳与按钮沿用上面 .modal-* 规范。 */",
 		".backup-section {",
 		"  display: flex;",
 		"  flex-direction: column;",
@@ -1283,6 +1282,278 @@
 		"  display: flex;",
 		"  flex-direction: column;",
 		"  gap: 8px;",
+		"}",
+		"",
+		"/* 设置视图：与播放器面板共用容器和拖拽坐标，只把内容换成三个可折叠分区。 */",
+		".settings-header {",
+		"  justify-content: flex-start;",
+		"  gap: 6px;",
+		"  padding: 0 8px 0 10px;",
+		"}",
+		"",
+		".settings-title {",
+		"  overflow: hidden;",
+		"  min-width: 0;",
+		"  flex: 1 1 auto;",
+		"  font-size: 14px;",
+		"  text-overflow: ellipsis;",
+		"  white-space: nowrap;",
+		"}",
+		"",
+		".settings-body {",
+		"  display: flex;",
+		"  min-height: 0;",
+		"  flex: 1 1 auto;",
+		"  flex-direction: column;",
+		"  gap: 6px;",
+		"  overflow-y: auto;",
+		"  padding: 12px 14px;",
+		"  scrollbar-width: thin;",
+		"}",
+		"",
+		"/* 分区之间只用一条分隔线，不做叠层卡片。 */",
+		".settings-section {",
+		"  display: flex;",
+		"  flex-direction: column;",
+		"}",
+		"",
+		".settings-section + .settings-section {",
+		"  margin-top: 6px;",
+		"  border-top: 1px solid var(--border);",
+		"  padding-top: 6px;",
+		"}",
+		"",
+		".settings-section-header {",
+		"  display: flex;",
+		"  min-height: 36px;",
+		"  align-items: center;",
+		"  gap: 8px;",
+		"  border: 0;",
+		"  border-radius: 6px;",
+		"  padding: 6px 10px;",
+		"  color: var(--text);",
+		"  background: var(--surface);",
+		"  font-size: 13px;",
+		"  text-align: left;",
+		"  cursor: pointer;",
+		"}",
+		"",
+		".settings-section-header:hover {",
+		"  background: var(--surface-hover);",
+		"}",
+		"",
+		".settings-section-header:focus-visible {",
+		"  outline: 2px solid var(--accent);",
+		"  outline-offset: 1px;",
+		"}",
+		"",
+		".settings-section-icon {",
+		"  display: grid;",
+		"  flex: 0 0 auto;",
+		"  place-items: center;",
+		"  color: var(--accent);",
+		"}",
+		"",
+		".settings-section-title {",
+		"  min-width: 0;",
+		"  flex: 0 0 auto;",
+		"  font-size: 13px;",
+		"}",
+		"",
+		".settings-section-summary {",
+		"  overflow: hidden;",
+		"  min-width: 0;",
+		"  flex: 1 1 auto;",
+		"  color: var(--muted-strong);",
+		"  font-size: 11px;",
+		"  font-variant-numeric: tabular-nums;",
+		"  text-align: right;",
+		"  text-overflow: ellipsis;",
+		"  white-space: nowrap;",
+		"}",
+		"",
+		".settings-chevron {",
+		"  flex: 0 0 auto;",
+		"  color: var(--muted);",
+		"  transition: transform 120ms ease;",
+		"}",
+		"",
+		".settings-section-header[aria-expanded=\"true\"] .settings-chevron {",
+		"  transform: rotate(180deg);",
+		"}",
+		"",
+		".settings-section-body {",
+		"  display: flex;",
+		"  flex-direction: column;",
+		"  gap: 8px;",
+		"  /* 左右不留内边距：控件右边缘与分区标题行右边缘对齐。 */",
+		"  padding: 10px 0 2px;",
+		"}",
+		"",
+		"/* 标签与控件同一行：模式选择和重置位置各占一行，不留大段空白。 */",
+		".settings-row {",
+		"  display: flex;",
+		"  min-height: 32px;",
+		"  align-items: center;",
+		"  gap: 10px;",
+		"}",
+		"",
+		"/* 标签列定宽，让「打开时」的模式选择器与「悬浮位置」的重置按钮左边缘对齐。 */",
+		".settings-label {",
+		"  flex: 0 0 auto;",
+		"  min-width: 56px;",
+		"  color: var(--muted-strong);",
+		"  font-size: 12px;",
+		"  white-space: nowrap;",
+		"}",
+		"",
+		"/* 左边缘从标签列后开始（与「重置位置」对齐），右边缘铺到分区右边缘。 */",
+		".segmented-control {",
+		"  display: grid;",
+		"  min-width: 0;",
+		"  flex: 1 1 auto;",
+		"  grid-template-columns: repeat(3, minmax(0, 1fr));",
+		"  gap: 2px;",
+		"  border: 1px solid var(--border);",
+		"  border-radius: 7px;",
+		"  padding: 2px;",
+		"}",
+		"",
+		".segment {",
+		"  position: relative;",
+		"  display: block;",
+		"  cursor: pointer;",
+		"}",
+		"",
+		"/* 输入框铺满整段并置顶：点击任意位置都命中真正的控件，键盘与 :focus-visible 也都成立。 */",
+		".segment input {",
+		"  position: absolute;",
+		"  inset: 0;",
+		"  z-index: 1;",
+		"  width: 100%;",
+		"  height: 100%;",
+		"  margin: 0;",
+		"  opacity: 0;",
+		"  cursor: pointer;",
+		"}",
+		"",
+		".segment span {",
+		"  position: relative;",
+		"  display: block;",
+		"  border-radius: 5px;",
+		"  padding: 6px 10px;",
+		"  color: var(--muted-strong);",
+		"  font-size: 11px;",
+		"  text-align: center;",
+		"  white-space: nowrap;",
+		"}",
+		"",
+		".segment:hover span {",
+		"  color: var(--text);",
+		"}",
+		"",
+		".segment input:checked + span {",
+		"  color: #fff;",
+		"  background: var(--accent);",
+		"  font-weight: 700;",
+		"}",
+		"",
+		".segment input:focus-visible + span {",
+		"  outline: 2px solid var(--accent-hover);",
+		"  outline-offset: 1px;",
+		"}",
+		"",
+		".settings-actions {",
+		"  display: flex;",
+		"  gap: 10px;",
+		"}",
+		"",
+		"/* 中性按钮：恢复备份是覆盖操作，不用强调色把它做成首选动作。 */",
+		".settings-action {",
+		"  display: flex;",
+		"  min-height: 34px;",
+		"  flex: 0 0 auto;",
+		"  align-items: center;",
+		"  justify-content: center;",
+		"  gap: 6px;",
+		"  border: 1px solid #484b54;",
+		"  border-radius: 6px;",
+		"  padding: 0 12px;",
+		"  color: var(--text);",
+		"  background: var(--surface-hover);",
+		"  font-size: 11px;",
+		"  cursor: pointer;",
+		"}",
+		"",
+		".settings-actions > .settings-action {",
+		"  flex: 1 1 0;",
+		"}",
+		"",
+		".settings-action:hover:not(:disabled) {",
+		"  border-color: var(--muted);",
+		"}",
+		"",
+		".settings-action:focus-visible {",
+		"  outline: 2px solid var(--accent);",
+		"  outline-offset: 1px;",
+		"}",
+		"",
+		".settings-status {",
+		"  color: var(--cyan);",
+		"  font-size: 11px;",
+		"}",
+		"",
+		".settings-error {",
+		"  overflow-wrap: anywhere;",
+		"  color: var(--danger);",
+		"  font-size: 11px;",
+		"}",
+		"",
+		".settings-warning {",
+		"  display: grid;",
+		"  grid-template-columns: auto minmax(0, 1fr);",
+		"  align-items: center;",
+		"  gap: 8px;",
+		"  border-radius: 6px;",
+		"  padding: 8px 10px;",
+		"  color: #e7c49d;",
+		"  background: #27231f;",
+		"  font-size: 10px;",
+		"  line-height: 1.45;",
+		"}",
+		"",
+		".settings-warning-badge {",
+		"  display: grid;",
+		"  width: 16px;",
+		"  height: 16px;",
+		"  place-items: center;",
+		"  border-radius: 50%;",
+		"  color: #ffc078;",
+		"  background: #59412c;",
+		"  font-size: 10px;",
+		"  font-weight: 700;",
+		"}",
+		"",
+		".settings-about {",
+		"  display: grid;",
+		"  grid-template-columns: auto minmax(0, 1fr);",
+		"  gap: 6px 10px;",
+		"  margin: 0;",
+		"  font-size: 11px;",
+		"}",
+		"",
+		".settings-about dt {",
+		"  color: var(--muted-strong);",
+		"}",
+		"",
+		".settings-about dd {",
+		"  overflow-wrap: anywhere;",
+		"  margin: 0;",
+		"}",
+		"",
+		".settings-footnote {",
+		"  color: var(--muted-strong);",
+		"  font-size: 10px;",
 		"}",
 		"",
 		"@media (max-width: 520px) {",
@@ -1341,7 +1612,7 @@
 	].join("\n");
 	var _style = (b, a = document.createElement("style")) => (a.append(b), a);
 	var styles_css_default = _style(styles_default);
-	var version = "0.1.8";
+	var version = "0.1.9";
 	function SvgIcon({ size = 24, strokeWidth = 2, children, ...props }) {
 		return (0, preact_jsx_runtime.jsx)("svg", {
 			xmlns: "http://www.w3.org/2000/svg",
@@ -1356,6 +1627,109 @@
 			focusable: "false",
 			...props,
 			children
+		});
+	}
+	function BrandLogo({ size = 24, ...props }) {
+		return (0, preact_jsx_runtime.jsxs)("svg", {
+			xmlns: "http://www.w3.org/2000/svg",
+			width: size,
+			height: size,
+			viewBox: "0 0 1024 1024",
+			focusable: "false",
+			...props,
+			children: [
+				(0, preact_jsx_runtime.jsx)("defs", { children: (0, preact_jsx_runtime.jsxs)("linearGradient", {
+					id: "bmp-brand-logo-tile",
+					x1: "0",
+					y1: "0",
+					x2: "1",
+					y2: "1",
+					children: [(0, preact_jsx_runtime.jsx)("stop", {
+						offset: "0",
+						"stop-color": "#ff82a6"
+					}), (0, preact_jsx_runtime.jsx)("stop", {
+						offset: "1",
+						"stop-color": "#f05284"
+					})]
+				}) }),
+				(0, preact_jsx_runtime.jsx)("rect", {
+					width: "1024",
+					height: "1024",
+					rx: "224",
+					fill: "url(#bmp-brand-logo-tile)"
+				}),
+				(0, preact_jsx_runtime.jsxs)("g", {
+					fill: "none",
+					stroke: "#fff",
+					"stroke-linecap": "round",
+					"stroke-linejoin": "round",
+					children: [(0, preact_jsx_runtime.jsx)("path", {
+						d: "M405 279 331 205M619 279l74-74",
+						"stroke-width": "32"
+					}), (0, preact_jsx_runtime.jsx)("rect", {
+						x: "214",
+						y: "285",
+						width: "596",
+						height: "470",
+						rx: "96",
+						"stroke-width": "42"
+					})]
+				}),
+				(0, preact_jsx_runtime.jsx)("path", {
+					d: "M380 412c0-18 20-29 36-20l177 103c16 9 16 32 0 41L416 639c-16 9-36-2-36-20V412Z",
+					transform: "translate(-34 0)",
+					fill: "#fff"
+				}),
+				(0, preact_jsx_runtime.jsxs)("g", {
+					fill: "#fff",
+					children: [
+						(0, preact_jsx_runtime.jsx)("rect", {
+							x: "612",
+							y: "474",
+							width: "30",
+							height: "112",
+							rx: "15"
+						}),
+						(0, preact_jsx_runtime.jsx)("rect", {
+							x: "661",
+							y: "438",
+							width: "30",
+							height: "184",
+							rx: "15"
+						}),
+						(0, preact_jsx_runtime.jsx)("rect", {
+							x: "710",
+							y: "492",
+							width: "30",
+							height: "76",
+							rx: "15"
+						})
+					]
+				})
+			]
+		});
+	}
+	function AppWindow(props) {
+		return (0, preact_jsx_runtime.jsxs)(SvgIcon, {
+			...props,
+			children: [
+				(0, preact_jsx_runtime.jsx)("rect", {
+					x: "2",
+					y: "4",
+					width: "20",
+					height: "16",
+					rx: "2"
+				}),
+				(0, preact_jsx_runtime.jsx)("path", { d: "M10 4v4" }),
+				(0, preact_jsx_runtime.jsx)("path", { d: "M2 8h20" }),
+				(0, preact_jsx_runtime.jsx)("path", { d: "M6 4v4" })
+			]
+		});
+	}
+	function ArrowLeft(props) {
+		return (0, preact_jsx_runtime.jsxs)(SvgIcon, {
+			...props,
+			children: [(0, preact_jsx_runtime.jsx)("path", { d: "m12 19-7-7 7-7" }), (0, preact_jsx_runtime.jsx)("path", { d: "M19 12H5" })]
 		});
 	}
 	function ChevronDown(props) {
@@ -1389,10 +1763,34 @@
 			]
 		});
 	}
+	function Download(props) {
+		return (0, preact_jsx_runtime.jsxs)(SvgIcon, {
+			...props,
+			children: [
+				(0, preact_jsx_runtime.jsx)("path", { d: "M12 3v12" }),
+				(0, preact_jsx_runtime.jsx)("path", { d: "m7 10 5 5 5-5" }),
+				(0, preact_jsx_runtime.jsx)("path", { d: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" })
+			]
+		});
+	}
 	function Headphones(props) {
 		return (0, preact_jsx_runtime.jsx)(SvgIcon, {
 			...props,
 			children: (0, preact_jsx_runtime.jsx)("path", { d: "M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3" })
+		});
+	}
+	function Info(props) {
+		return (0, preact_jsx_runtime.jsxs)(SvgIcon, {
+			...props,
+			children: [
+				(0, preact_jsx_runtime.jsx)("circle", {
+					cx: "12",
+					cy: "12",
+					r: "10"
+				}),
+				(0, preact_jsx_runtime.jsx)("path", { d: "M12 16v-4" }),
+				(0, preact_jsx_runtime.jsx)("path", { d: "M12 8h.01" })
+			]
 		});
 	}
 	function ListMusic(props) {
@@ -1518,6 +1916,18 @@
 			]
 		});
 	}
+	function Settings({ size = 24, ...props }) {
+		return (0, preact_jsx_runtime.jsx)("svg", {
+			xmlns: "http://www.w3.org/2000/svg",
+			width: size,
+			height: size,
+			viewBox: "0 0 1024 1024",
+			fill: "currentColor",
+			focusable: "false",
+			...props,
+			children: (0, preact_jsx_runtime.jsx)("path", { d: "M469.333333 60.693333a85.333333 85.333333 0 0 1 85.333334 0l326.826666 188.714667a85.333333 85.333333 0 0 1 42.666667 73.898667v377.386666a85.333333 85.333333 0 0 1-42.666667 73.898667L554.666667 963.306667a85.333333 85.333333 0 0 1-85.333334 0L142.506667 774.592a85.333333 85.333333 0 0 1-42.666667-73.898667v-377.386666a85.333333 85.333333 0 0 1 42.666667-73.898667z m42.666667 73.898667L185.173333 323.306667v377.386666L512 889.408l326.826667-188.714667v-377.386666L512 134.592zM512 341.333333a170.666667 170.666667 0 1 1 0 341.333334 170.666667 170.666667 0 0 1 0-341.333334z m0 85.333334a85.333333 85.333333 0 1 0 0 170.666666 85.333333 85.333333 0 0 0 0-170.666666z" })
+		});
+	}
 	function Shuffle(props) {
 		return (0, preact_jsx_runtime.jsxs)(SvgIcon, {
 			...props,
@@ -1567,6 +1977,16 @@
 				(0, preact_jsx_runtime.jsx)("path", { d: "M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" }),
 				(0, preact_jsx_runtime.jsx)("path", { d: "M3 6h18" }),
 				(0, preact_jsx_runtime.jsx)("path", { d: "M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" })
+			]
+		});
+	}
+	function Upload(props) {
+		return (0, preact_jsx_runtime.jsxs)(SvgIcon, {
+			...props,
+			children: [
+				(0, preact_jsx_runtime.jsx)("path", { d: "M12 15V3" }),
+				(0, preact_jsx_runtime.jsx)("path", { d: "m7 8 5-5 5 5" }),
+				(0, preact_jsx_runtime.jsx)("path", { d: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" })
 			]
 		});
 	}
@@ -2607,6 +3027,9 @@
 	function countTracks(playlists) {
 		return playlists.reduce((total, playlist) => total + playlist.tracks.length, 0);
 	}
+	function summarizeLibrary(playlists) {
+		return `${playlists.length} 个歌单 · ${countTracks(playlists)} 首歌曲`;
+	}
 	function readEnvelope(raw) {
 		if (raw.format === "bilibili-music-player-backup") {
 			const formatVersion = raw.formatVersion;
@@ -2742,20 +3165,11 @@
 		const [phase, setPhase] = (0, preact_hooks.useState)("idle");
 		const [parsed, setParsed] = (0, preact_hooks.useState)();
 		const [error, setError] = (0, preact_hooks.useState)("");
-		const [exportStatus, setExportStatus] = (0, preact_hooks.useState)("");
 		const fileInput = (0, preact_hooks.useRef)(null);
-		const playlists = store.data.value.playlists;
-		const currentSummary = `${playlists.length} 个歌单 · ${countTracks(playlists)} 首歌曲`;
+		const currentSummary = summarizeLibrary(store.data.value.playlists);
 		const importedSummary = parsed ? `${parsed.playlistCount} 个歌单、${parsed.trackCount} 首歌曲` : "";
-		const exportLibrary = () => {
-			setError("");
-			const text = serializePlaylistBackup(createPlaylistBackup({ playlists }, version));
-			downloadTextFile(backupFileName(), text);
-			setExportStatus("已开始下载备份文件");
-		};
 		const readFile = async (file) => {
 			setError("");
-			setExportStatus("");
 			try {
 				assertBackupSize(file.size);
 				const next = parsePlaylistBackup(await file.text());
@@ -2776,13 +3190,13 @@
 			class: "modal-overlay",
 			role: "dialog",
 			"aria-modal": "true",
-			"aria-label": phase === "confirming" ? "确认导入歌单" : "歌单导入导出",
+			"aria-label": modalTitle(phase),
 			children: (0, preact_jsx_runtime.jsxs)("div", {
 				class: "modal-card",
 				children: [
 					(0, preact_jsx_runtime.jsxs)("div", {
 						class: "editor-heading",
-						children: [(0, preact_jsx_runtime.jsx)("strong", { children: phase === "confirming" ? "确认导入歌单" : "歌单导入导出" }), (0, preact_jsx_runtime.jsx)("button", {
+						children: [(0, preact_jsx_runtime.jsx)("strong", { children: modalTitle(phase) }), (0, preact_jsx_runtime.jsx)("button", {
 							class: "icon-button",
 							type: "button",
 							title: "关闭",
@@ -2794,37 +3208,17 @@
 							})
 						})]
 					}),
-					phase === "idle" && (0, preact_jsx_runtime.jsxs)(preact_jsx_runtime.Fragment, { children: [(0, preact_jsx_runtime.jsxs)("section", {
-						class: "backup-section",
-						children: [
-							(0, preact_jsx_runtime.jsx)("strong", { children: "导出歌单" }),
-							(0, preact_jsx_runtime.jsx)("p", {
-								class: "backup-note",
-								children: "导出当前全部歌单和歌曲为本地 JSON 文件。"
-							}),
-							(0, preact_jsx_runtime.jsxs)("p", {
-								class: "backup-count",
-								children: ["当前：", currentSummary]
-							}),
-							(0, preact_jsx_runtime.jsx)("button", {
-								class: "modal-button primary",
-								type: "button",
-								onClick: exportLibrary,
-								children: "导出歌单"
-							}),
-							exportStatus && (0, preact_jsx_runtime.jsx)("p", {
-								class: "backup-status",
-								role: "status",
-								children: exportStatus
-							})
-						]
-					}), (0, preact_jsx_runtime.jsxs)("section", {
+					phase === "idle" && (0, preact_jsx_runtime.jsx)(preact_jsx_runtime.Fragment, { children: (0, preact_jsx_runtime.jsxs)("section", {
 						class: "backup-section",
 						children: [
 							(0, preact_jsx_runtime.jsx)("strong", { children: "导入歌单" }),
 							(0, preact_jsx_runtime.jsx)("p", {
 								class: "backup-note",
-								children: "选择此前导出的歌单 JSON 文件，导入会替换当前全部歌单和歌曲。"
+								children: "选择此前导出的歌单 JSON 文件，导入会替换当前全部歌单"
+							}),
+							(0, preact_jsx_runtime.jsxs)("p", {
+								class: "backup-count",
+								children: ["当前：", currentSummary]
 							}),
 							(0, preact_jsx_runtime.jsx)("input", {
 								ref: fileInput,
@@ -2850,7 +3244,7 @@
 								children: error
 							})
 						]
-					})] }),
+					}) }),
 					phase === "preview" && parsed && (0, preact_jsx_runtime.jsxs)(preact_jsx_runtime.Fragment, { children: [
 						(0, preact_jsx_runtime.jsxs)("div", {
 							class: "backup-preview",
@@ -2945,16 +3339,8 @@
 			})
 		});
 	}
-	function downloadTextFile(fileName, text) {
-		const url = URL.createObjectURL(new Blob([text], { type: "application/json" }));
-		const anchor = document.createElement("a");
-		anchor.href = url;
-		anchor.download = fileName;
-		anchor.style.display = "none";
-		document.body.append(anchor);
-		anchor.click();
-		anchor.remove();
-		window.setTimeout(() => URL.revokeObjectURL(url), 1e3);
+	function modalTitle(phase) {
+		return phase === "confirming" ? "确认导入歌单" : "导入歌单";
 	}
 	function readMessage(error) {
 		return error instanceof Error && error.message ? error.message : "读取歌单文件失败，请重试";
@@ -3007,6 +3393,226 @@
 					})
 				]
 			})
+		});
+	}
+	function downloadTextFile(fileName, text) {
+		const url = URL.createObjectURL(new Blob([text], { type: "application/json" }));
+		const anchor = document.createElement("a");
+		anchor.href = url;
+		anchor.download = fileName;
+		anchor.style.display = "none";
+		document.body.append(anchor);
+		anchor.click();
+		anchor.remove();
+		window.setTimeout(() => URL.revokeObjectURL(url), 1e3);
+	}
+	var OPEN_MODE_OPTIONS = [
+		{
+			value: "remember",
+			label: "记住上次"
+		},
+		{
+			value: "full",
+			label: "完整模式"
+		},
+		{
+			value: "minimal",
+			label: "极简模式"
+		}
+	];
+	function SettingsPanel({ openMode, librarySummary, drag, exportStatus, exportError, onSelectOpenMode, onResetPositions, onExportBackup, onImportBackup, onBack, onClose, children }) {
+		const [openSection, setOpenSection] = (0, preact_hooks.useState)("appearance");
+		const toggle = (section) => {
+			setOpenSection((current) => current === section ? void 0 : section);
+		};
+		const isOpen = (section) => openSection === section;
+		const sectionHeader = (section, title, icon, summary) => (0, preact_jsx_runtime.jsxs)("button", {
+			class: "settings-section-header",
+			type: "button",
+			"aria-expanded": isOpen(section),
+			"aria-controls": `bmp-settings-${section}`,
+			onClick: () => toggle(section),
+			children: [
+				(0, preact_jsx_runtime.jsx)("span", {
+					class: "settings-section-icon",
+					"aria-hidden": "true",
+					children: icon
+				}),
+				(0, preact_jsx_runtime.jsx)("strong", {
+					class: "settings-section-title",
+					children: title
+				}),
+				summary && (0, preact_jsx_runtime.jsx)("span", {
+					class: "settings-section-summary",
+					children: summary
+				}),
+				(0, preact_jsx_runtime.jsx)(ChevronDown, {
+					class: "settings-chevron",
+					size: 16,
+					"aria-hidden": "true"
+				})
+			]
+		});
+		return (0, preact_jsx_runtime.jsxs)("section", {
+			ref: drag.ref,
+			class: "player-panel settings-panel",
+			style: drag.style,
+			"aria-label": "Bilibili 音乐播放器（设置）",
+			children: [
+				(0, preact_jsx_runtime.jsxs)("header", {
+					class: "panel-header settings-header",
+					onPointerDown: (event) => {
+						if (event.target instanceof Element && event.target.closest("button, input, select, textarea, a")) return;
+						drag.onPointerDown(event);
+					},
+					onPointerMove: drag.onPointerMove,
+					onPointerUp: drag.onPointerUp,
+					onPointerCancel: drag.onPointerCancel,
+					children: [
+						(0, preact_jsx_runtime.jsx)("button", {
+							class: "icon-button settings-back",
+							type: "button",
+							title: "返回播放器",
+							"aria-label": "返回播放器",
+							onClick: onBack,
+							children: (0, preact_jsx_runtime.jsx)(ArrowLeft, {
+								size: 18,
+								"aria-hidden": "true"
+							})
+						}),
+						(0, preact_jsx_runtime.jsx)("strong", {
+							class: "settings-title",
+							children: "设置"
+						}),
+						(0, preact_jsx_runtime.jsx)("button", {
+							class: "icon-button close-panel-button",
+							type: "button",
+							title: "收起播放器",
+							"aria-label": "收起播放器",
+							onClick: onClose,
+							children: (0, preact_jsx_runtime.jsx)(X, {
+								size: 18,
+								"aria-hidden": "true"
+							})
+						})
+					]
+				}),
+				(0, preact_jsx_runtime.jsxs)("div", {
+					class: "settings-body",
+					children: [
+						(0, preact_jsx_runtime.jsxs)("section", {
+							class: "settings-section",
+							children: [sectionHeader("appearance", "窗口与外观", (0, preact_jsx_runtime.jsx)(AppWindow, { size: 16 })), isOpen("appearance") && (0, preact_jsx_runtime.jsxs)("div", {
+								class: "settings-section-body",
+								id: "bmp-settings-appearance",
+								role: "region",
+								"aria-label": "窗口与外观",
+								children: [(0, preact_jsx_runtime.jsxs)("div", {
+									class: "settings-row",
+									children: [(0, preact_jsx_runtime.jsx)("span", {
+										class: "settings-label",
+										children: "打开时"
+									}), (0, preact_jsx_runtime.jsx)("div", {
+										class: "segmented-control",
+										role: "radiogroup",
+										"aria-label": "打开时",
+										title: "下次打开播放器时生效",
+										children: OPEN_MODE_OPTIONS.map((option) => (0, preact_jsx_runtime.jsxs)("label", {
+											class: "segment",
+											children: [(0, preact_jsx_runtime.jsx)("input", {
+												type: "radio",
+												name: "bmp-open-mode",
+												value: option.value,
+												checked: openMode === option.value,
+												onChange: () => onSelectOpenMode(option.value)
+											}), (0, preact_jsx_runtime.jsx)("span", { children: option.label })]
+										}, option.value))
+									})]
+								}), (0, preact_jsx_runtime.jsxs)("div", {
+									class: "settings-row",
+									children: [(0, preact_jsx_runtime.jsx)("span", {
+										class: "settings-label",
+										children: "悬浮位置"
+									}), (0, preact_jsx_runtime.jsxs)("button", {
+										class: "settings-action",
+										type: "button",
+										title: "恢复悬浮按钮和播放器面板的默认位置",
+										onClick: onResetPositions,
+										children: [(0, preact_jsx_runtime.jsx)(RotateCcw, {
+											size: 15,
+											"aria-hidden": "true"
+										}), "重置位置"]
+									})]
+								})]
+							})]
+						}),
+						(0, preact_jsx_runtime.jsxs)("section", {
+							class: "settings-section",
+							children: [sectionHeader("data", "数据管理", (0, preact_jsx_runtime.jsx)(Database, { size: 16 }), librarySummary), isOpen("data") && (0, preact_jsx_runtime.jsxs)("div", {
+								class: "settings-section-body",
+								id: "bmp-settings-data",
+								role: "region",
+								"aria-label": "数据管理",
+								children: [
+									(0, preact_jsx_runtime.jsxs)("div", {
+										class: "settings-actions",
+										children: [(0, preact_jsx_runtime.jsxs)("button", {
+											class: "settings-action",
+											type: "button",
+											onClick: onExportBackup,
+											children: [(0, preact_jsx_runtime.jsx)(Download, {
+												size: 15,
+												"aria-hidden": "true"
+											}), "导出备份"]
+										}), (0, preact_jsx_runtime.jsxs)("button", {
+											class: "settings-action",
+											type: "button",
+											onClick: onImportBackup,
+											children: [(0, preact_jsx_runtime.jsx)(Upload, {
+												size: 15,
+												"aria-hidden": "true"
+											}), "从备份恢复"]
+										})]
+									}),
+									exportStatus && (0, preact_jsx_runtime.jsx)("p", {
+										class: "settings-status",
+										role: "status",
+										children: exportStatus
+									}),
+									exportError && (0, preact_jsx_runtime.jsx)("p", {
+										class: "settings-error",
+										role: "alert",
+										children: exportError
+									})
+								]
+							})]
+						}),
+						(0, preact_jsx_runtime.jsxs)("section", {
+							class: "settings-section",
+							children: [sectionHeader("about", "关于", (0, preact_jsx_runtime.jsx)(Info, { size: 16 }), `版本 ${version}`), isOpen("about") && (0, preact_jsx_runtime.jsx)("div", {
+								class: "settings-section-body",
+								id: "bmp-settings-about",
+								role: "region",
+								"aria-label": "关于",
+								children: (0, preact_jsx_runtime.jsxs)("dl", {
+									class: "settings-about",
+									children: [
+										(0, preact_jsx_runtime.jsx)("dt", { children: "应用" }),
+										(0, preact_jsx_runtime.jsx)("dd", { children: "Bilibili 音乐播放器" }),
+										(0, preact_jsx_runtime.jsx)("dt", { children: "版本" }),
+										(0, preact_jsx_runtime.jsx)("dd", { children: "0.1.9" }),
+										(0, preact_jsx_runtime.jsx)("dt", { children: "许可" }),
+										(0, preact_jsx_runtime.jsx)("dd", { children: "MIT License" }),
+										(0, preact_jsx_runtime.jsx)("dt", { children: "存储" }),
+										(0, preact_jsx_runtime.jsx)("dd", { children: "歌单保存在油猴本地存储，当前播放会话只在对应标签页" })
+									]
+								})
+							})]
+						})
+					]
+				}),
+				children
+			]
 		});
 	}
 	function getBvid(url = location.href) {
@@ -3501,6 +4107,42 @@
 			resetPosition
 		};
 	}
+	var SETTINGS_STORAGE_KEY = "bilibili-music-player:settings";
+	var OPEN_MODE_PREFERENCES = [
+		"remember",
+		"full",
+		"minimal"
+	];
+	var DEFAULT_SETTINGS = {
+		version: 1,
+		openMode: "remember"
+	};
+	function migrateSettingsData(raw) {
+		if (!raw || typeof raw !== "object") return DEFAULT_SETTINGS;
+		const candidate = raw;
+		if (candidate.version !== 1) return DEFAULT_SETTINGS;
+		return {
+			version: 1,
+			openMode: readOpenModePreference(candidate.openMode)
+		};
+	}
+	function resolveOpenMode(preference, lastOpenMode) {
+		return preference === "remember" ? lastOpenMode : preference;
+	}
+	function readOpenModePreference(value) {
+		return OPEN_MODE_PREFERENCES.includes(value) ? value : "remember";
+	}
+	var SettingsRepository = class {
+		load() {
+			return migrateSettingsData(_GM_getValue(SETTINGS_STORAGE_KEY));
+		}
+		saveOpenMode(openMode) {
+			_GM_setValue(SETTINGS_STORAGE_KEY, {
+				...this.load(),
+				openMode
+			});
+		}
+	};
 	function calculatePlaybackProgress({ currentTime, startTime, endTime, duration, storedDuration }) {
 		const effectiveEnd = endTime ?? (duration > 0 ? duration : storedDuration);
 		if (!Number.isFinite(currentTime) || !Number.isFinite(startTime) || !Number.isFinite(effectiveEnd) || effectiveEnd <= startTime) return 0;
@@ -3786,6 +4428,7 @@
 		"shuffle"
 	];
 	var layoutRepository = new LayoutRepository();
+	var settingsRepository = new SettingsRepository();
 	function App({ store, engine, audioOnly }) {
 		const [displayMode, setDisplayMode] = (0, preact_hooks.useState)("launcher");
 		const [creatingPlaylist, setCreatingPlaylist] = (0, preact_hooks.useState)(false);
@@ -3793,6 +4436,9 @@
 		const [editorTrack, setEditorTrack] = (0, preact_hooks.useState)();
 		const [importOpen, setImportOpen] = (0, preact_hooks.useState)(false);
 		const [backupOpen, setBackupOpen] = (0, preact_hooks.useState)(false);
+		const [openMode, setOpenMode] = (0, preact_hooks.useState)(() => settingsRepository.load().openMode);
+		const [settingsOrigin, setSettingsOrigin] = (0, preact_hooks.useState)();
+		const [exportResult, setExportResult] = (0, preact_hooks.useState)({});
 		const [playlistPendingDeletion, setPlaylistPendingDeletion] = (0, preact_hooks.useState)();
 		const [trackPendingDeletion, setTrackPendingDeletion] = (0, preact_hooks.useState)();
 		const launcherDrag = useDraggablePosition("launcher");
@@ -3831,6 +4477,60 @@
 			layoutRepository.saveLastOpenMode(mode);
 			setDisplayMode(mode);
 		};
+		const openSettings = () => {
+			panelDrag.saveCurrentPosition();
+			setSettingsOrigin(displayMode === "minimal" ? "minimal" : "full");
+			setExportResult({});
+			setDisplayMode("settings");
+		};
+		const selectOpenMode = (mode) => {
+			settingsRepository.saveOpenMode(mode);
+			setOpenMode(mode);
+		};
+		const exportLibrary = () => {
+			try {
+				const text = serializePlaylistBackup(createPlaylistBackup({ playlists: data.playlists }, version));
+				downloadTextFile(backupFileName(), text);
+				setExportResult({ status: "已开始下载备份文件" });
+			} catch (error) {
+				setExportResult({ error: error instanceof Error && error.message ? error.message : "导出失败，请重试" });
+			}
+		};
+		const openImportBackup = () => {
+			setExportResult({});
+			setBackupOpen(true);
+		};
+		const overlays = (0, preact_jsx_runtime.jsxs)(preact_jsx_runtime.Fragment, { children: [
+			importOpen && (0, preact_jsx_runtime.jsx)(ImportFavModal, {
+				store,
+				onClose: () => setImportOpen(false)
+			}),
+			backupOpen && (0, preact_jsx_runtime.jsx)(BackupModal, {
+				store,
+				onRestore: restoreLibrary,
+				onClose: () => setBackupOpen(false)
+			}),
+			playlistPendingDeletion && (0, preact_jsx_runtime.jsx)(ConfirmModal, {
+				title: "删除歌单",
+				message: `确定删除歌单“${playlistPendingDeletion.name}”？`,
+				warning: "删除后无法恢复，歌单里的歌曲会一并移除",
+				onCancel: () => setPlaylistPendingDeletion(void 0),
+				onConfirm: () => {
+					store.removePlaylist(playlistPendingDeletion.id);
+					setPlaylistPendingDeletion(void 0);
+				}
+			}),
+			trackPendingDeletion && (0, preact_jsx_runtime.jsx)(ConfirmModal, {
+				title: "删除歌曲",
+				message: `确定删除歌曲“${trackPendingDeletion.title}”？`,
+				warning: "删除后无法恢复。",
+				onCancel: () => setTrackPendingDeletion(void 0),
+				onConfirm: () => {
+					store.removeTrack(trackPendingDeletion.id);
+					setTrackPendingDeletion(void 0);
+				}
+			})
+		] });
 		if (displayMode === "launcher") return (0, preact_jsx_runtime.jsx)("button", {
 			ref: launcherDrag.ref,
 			class: "floating-button",
@@ -3852,12 +4552,29 @@
 					setImportOpen(true);
 					return;
 				}
-				showPanel(layoutRepository.load().lastOpenMode);
+				showPanel(resolveOpenMode(openMode, layoutRepository.load().lastOpenMode));
 			},
 			children: (0, preact_jsx_runtime.jsx)(Music2, {
 				size: 22,
 				"aria-hidden": "true"
 			})
+		});
+		if (displayMode === "settings") return (0, preact_jsx_runtime.jsx)(SettingsPanel, {
+			openMode,
+			librarySummary: summarizeLibrary(data.playlists),
+			drag: panelDrag,
+			exportStatus: exportResult.status,
+			exportError: exportResult.error,
+			onSelectOpenMode: selectOpenMode,
+			onResetPositions: () => {
+				launcherDrag.resetPosition();
+				panelDrag.resetPosition();
+			},
+			onExportBackup: exportLibrary,
+			onImportBackup: openImportBackup,
+			onBack: () => setDisplayMode(settingsOrigin ?? "full"),
+			onClose: () => setDisplayMode("launcher"),
+			children: overlays
 		});
 		if (displayMode === "minimal") return (0, preact_jsx_runtime.jsx)(MinimalPlayer, {
 			playMode: session.playMode,
@@ -3892,12 +4609,10 @@
 					children: [(0, preact_jsx_runtime.jsxs)("div", {
 						class: "brand",
 						children: [
-							(0, preact_jsx_runtime.jsx)("span", {
-								class: "brand-icon",
-								children: (0, preact_jsx_runtime.jsx)(Music2, {
-									size: 18,
-									"aria-hidden": "true"
-								})
+							(0, preact_jsx_runtime.jsx)(BrandLogo, {
+								class: "brand-logo",
+								size: 26,
+								"aria-hidden": "true"
 							}),
 							(0, preact_jsx_runtime.jsx)("strong", { children: "Bilibili 音乐播放器" }),
 							(0, preact_jsx_runtime.jsx)("span", {
@@ -3920,15 +4635,12 @@
 								})
 							}),
 							(0, preact_jsx_runtime.jsx)("button", {
-								class: "icon-button reset-position-button",
+								class: "icon-button",
 								type: "button",
-								title: "重置位置",
-								"aria-label": "重置位置",
-								onClick: () => {
-									launcherDrag.resetPosition();
-									panelDrag.resetPosition();
-								},
-								children: (0, preact_jsx_runtime.jsx)(RotateCcw, {
+								title: "极简模式",
+								"aria-label": "极简模式",
+								onClick: () => showPanel("minimal"),
+								children: (0, preact_jsx_runtime.jsx)(Minimize2, {
 									size: 18,
 									"aria-hidden": "true"
 								})
@@ -3936,10 +4648,10 @@
 							(0, preact_jsx_runtime.jsx)("button", {
 								class: "icon-button",
 								type: "button",
-								title: "极简模式",
-								"aria-label": "极简模式",
-								onClick: () => showPanel("minimal"),
-								children: (0, preact_jsx_runtime.jsx)(Minimize2, {
+								title: "设置",
+								"aria-label": "设置",
+								onClick: openSettings,
+								children: (0, preact_jsx_runtime.jsx)(Settings, {
 									size: 18,
 									"aria-hidden": "true"
 								})
@@ -4064,17 +4776,6 @@
 								size: 17,
 								"aria-hidden": "true"
 							})
-						}),
-						(0, preact_jsx_runtime.jsx)("button", {
-							class: "icon-button",
-							type: "button",
-							title: "导入 / 导出歌单",
-							"aria-label": "导入 / 导出歌单",
-							onClick: () => setBackupOpen(true),
-							children: (0, preact_jsx_runtime.jsx)(Database, {
-								size: 17,
-								"aria-hidden": "true"
-							})
 						})
 					]
 				}),
@@ -4179,35 +4880,7 @@
 						]
 					}, track.id))
 				}),
-				importOpen && (0, preact_jsx_runtime.jsx)(ImportFavModal, {
-					store,
-					onClose: () => setImportOpen(false)
-				}),
-				backupOpen && (0, preact_jsx_runtime.jsx)(BackupModal, {
-					store,
-					onRestore: restoreLibrary,
-					onClose: () => setBackupOpen(false)
-				}),
-				playlistPendingDeletion && (0, preact_jsx_runtime.jsx)(ConfirmModal, {
-					title: "删除歌单",
-					message: `确定删除歌单“${playlistPendingDeletion.name}”？`,
-					warning: "删除后无法恢复，歌单里的歌曲会一并移除",
-					onCancel: () => setPlaylistPendingDeletion(void 0),
-					onConfirm: () => {
-						store.removePlaylist(playlistPendingDeletion.id);
-						setPlaylistPendingDeletion(void 0);
-					}
-				}),
-				trackPendingDeletion && (0, preact_jsx_runtime.jsx)(ConfirmModal, {
-					title: "删除歌曲",
-					message: `确定删除歌曲“${trackPendingDeletion.title}”？`,
-					warning: "删除后无法恢复。",
-					onCancel: () => setTrackPendingDeletion(void 0),
-					onConfirm: () => {
-						store.removeTrack(trackPendingDeletion.id);
-						setTrackPendingDeletion(void 0);
-					}
-				})
+				overlays
 			]
 		});
 	}
