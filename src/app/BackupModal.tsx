@@ -91,7 +91,6 @@ export function BackupModal({ store, onRestore, onClose }: BackupModalProps) {
         {phase === "idle" && (
           <>
             <section class="backup-section">
-              <strong>导入歌单</strong>
               <p class="backup-note">
                 选择此前导出的歌单 JSON 文件，导入会替换当前全部歌单
               </p>

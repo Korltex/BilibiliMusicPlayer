@@ -3211,7 +3211,6 @@
 					phase === "idle" && (0, preact_jsx_runtime.jsx)(preact_jsx_runtime.Fragment, { children: (0, preact_jsx_runtime.jsxs)("section", {
 						class: "backup-section",
 						children: [
-							(0, preact_jsx_runtime.jsx)("strong", { children: "导入歌单" }),
 							(0, preact_jsx_runtime.jsx)("p", {
 								class: "backup-note",
 								children: "选择此前导出的歌单 JSON 文件，导入会替换当前全部歌单"
