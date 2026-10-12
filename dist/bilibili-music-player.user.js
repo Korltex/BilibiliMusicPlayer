@@ -1000,6 +1000,7 @@
 		"}",
 		"",
 		".track-list {",
+		"  position: relative;",
 		"  min-height: 110px;",
 		"  overflow-x: hidden;",
 		"  overflow-y: auto;",
@@ -1007,11 +1008,20 @@
 		"}",
 		"",
 		".track-row {",
+		"  position: relative;",
 		"  display: grid;",
 		"  min-height: 54px;",
+		"  /* 歌曲主体 | 编辑 | 删除 */",
 		"  grid-template-columns: minmax(0, 1fr) 32px 32px;",
 		"  align-items: stretch;",
 		"  border-bottom: 1px solid rgb(56 59 68 / 65%);",
+		"  /*",
+		"   * 行内任意位置都可以长按拖动排序，因此整行不能选中文本：否则长按会拖出选区、",
+		"   * 触屏还会弹上下文菜单。触屏的 `touch-action: none` 只加在歌曲主体上（见 `.track-main`），",
+		"   * 行内其它位置仍可正常滚动列表。",
+		"   */",
+		"  user-select: none;",
+		"  cursor: grab;",
 		"}",
 		"",
 		".track-row:hover {",
@@ -1021,6 +1031,49 @@
 		".track-row.active {",
 		"  box-shadow: inset 3px 0 var(--accent);",
 		"  background: #25242a;",
+		"}",
+		"",
+		"/* 键盘排序时行本身可聚焦（每行一个 Tab 停靠点）。 */",
+		".track-row:focus-visible {",
+		"  outline: 1px solid var(--accent);",
+		"  outline-offset: -2px;",
+		"}",
+		"",
+		"/* 拖动中的源行：淡出并去饱和，让落点指示线成为视觉焦点。 */",
+		".track-row.reorder-source {",
+		"  opacity: 0.45;",
+		"  cursor: grabbing;",
+		"}",
+		"",
+		".track-list.reordering {",
+		"  cursor: grabbing;",
+		"}",
+		"",
+		"/* 落点插入线：绝对定位在行内，跨行顶边或（末尾时）跨行底边。 */",
+		".track-drop-indicator {",
+		"  position: absolute;",
+		"  z-index: 1;",
+		"  top: -1px;",
+		"  right: 0;",
+		"  left: 0;",
+		"  height: 3px;",
+		"  border-radius: 2px;",
+		"  background: var(--accent);",
+		"}",
+		"",
+		".track-drop-indicator.tail {",
+		"  top: auto;",
+		"  bottom: 1px;",
+		"}",
+		"",
+		"/* 读屏播报区：只发声不占位（由 useTrackReorder 在拖动排序后写入）。 */",
+		".track-reorder-status {",
+		"  position: absolute;",
+		"  width: 1px;",
+		"  height: 1px;",
+		"  overflow: hidden;",
+		"  clip-path: inset(50%);",
+		"  white-space: nowrap;",
 		"}",
 		"",
 		".track-main {",
@@ -1035,6 +1088,8 @@
 		"  background: transparent;",
 		"  text-align: left;",
 		"  cursor: pointer;",
+		"  /* 歌曲主体也支持长按拖动：触屏上要挡住滚动，否则拖动会被浏览器当成列表滚动。 */",
+		"  touch-action: none;",
 		"}",
 		"",
 		".track-index {",
@@ -4106,6 +4161,336 @@
 			resetPosition
 		};
 	}
+	function clampIndex(index, length) {
+		return Math.min(Math.max(index, 0), length);
+	}
+	function moveTrackToIndex(tracks, trackId, toIndex) {
+		const fromIndex = tracks.findIndex((track) => track.id === trackId);
+		if (fromIndex === -1 || !Number.isFinite(toIndex)) return;
+		const next = [...tracks];
+		const [moved] = next.splice(fromIndex, 1);
+		const insertIndex = clampIndex(toIndex > fromIndex ? toIndex - 1 : toIndex, next.length);
+		next.splice(insertIndex, 0, moved);
+		if (insertIndex === fromIndex) return;
+		return {
+			tracks: next,
+			index: insertIndex
+		};
+	}
+	function resolveKeyboardMove(tracks, trackId, key) {
+		const fromIndex = tracks.findIndex((track) => track.id === trackId);
+		if (fromIndex === -1) return;
+		if (key === "Home") return fromIndex === 0 ? void 0 : {
+			toIndex: 0,
+			index: 0
+		};
+		if (key === "End") return fromIndex === tracks.length - 1 ? void 0 : {
+			toIndex: tracks.length,
+			index: tracks.length - 1
+		};
+		const index = fromIndex + (key === "ArrowDown" ? 1 : -1);
+		if (index < 0 || index >= tracks.length) return;
+		return {
+			toIndex: key === "ArrowDown" ? index + 1 : index,
+			index
+		};
+	}
+	function resolveDropIndex(fromIndex, dropIndex) {
+		if (fromIndex < 0 || dropIndex < 0) return;
+		return dropIndex === fromIndex || dropIndex === fromIndex + 1 ? void 0 : dropIndex;
+	}
+	var LONG_PRESS_SLOP_PX = 8;
+	var CLICK_SLOP_PX = 6;
+	var EDGE_SCROLL_ZONE_PX = 28;
+	var EDGE_SCROLL_MAX_STEP_PX = 14;
+	var ROW_CONTROL_SELECTOR = ".row-action, input, select, textarea, a";
+	function useTrackReorder({ onMove, describePosition }) {
+		const [draggingTrackId, setDraggingTrackId] = (0, preact_hooks.useState)();
+		const [dropIndex, setDropIndex] = (0, preact_hooks.useState)();
+		const longPressTimer = (0, preact_hooks.useRef)();
+		const activeDrag = (0, preact_hooks.useRef)();
+		const pendingDrag = (0, preact_hooks.useRef)();
+		const isDragging = (0, preact_hooks.useRef)(false);
+		const focusFrame = (0, preact_hooks.useRef)();
+		const scrollFrame = (0, preact_hooks.useRef)();
+		const containerListener = (0, preact_hooks.useRef)();
+		const onMoveRef = (0, preact_hooks.useRef)(onMove);
+		onMoveRef.current = onMove;
+		const describeRef = (0, preact_hooks.useRef)(describePosition);
+		describeRef.current = describePosition;
+		const onKeyDownRef = (0, preact_hooks.useRef)(() => {});
+		const readRows = (0, preact_hooks.useCallback)((element) => Array.from(element.querySelectorAll(".track-row")), []);
+		const readTrackIds = (0, preact_hooks.useCallback)((element) => readRows(element).map((row) => row.dataset.trackId ?? ""), [readRows]);
+		const computeDropIndex = (0, preact_hooks.useCallback)((element, clientY) => {
+			const rows = readRows(element);
+			for (let index = 0; index < rows.length; index += 1) {
+				const bounds = rows[index].getBoundingClientRect();
+				if (clientY < bounds.top + bounds.height / 2) return index;
+			}
+			return rows.length;
+		}, [readRows]);
+		const cancelLongPress = (0, preact_hooks.useCallback)(() => {
+			if (longPressTimer.current !== void 0) {
+				window.clearTimeout(longPressTimer.current);
+				longPressTimer.current = void 0;
+			}
+		}, []);
+		const stopFocusRestore = (0, preact_hooks.useCallback)(() => {
+			if (focusFrame.current !== void 0) {
+				cancelAnimationFrame(focusFrame.current);
+				focusFrame.current = void 0;
+			}
+		}, []);
+		const restoreRowFocus = (0, preact_hooks.useCallback)((element, trackId) => {
+			stopFocusRestore();
+			focusFrame.current = requestAnimationFrame(() => {
+				focusFrame.current = void 0;
+				findTrackRow(element, trackId)?.querySelector(".track-main")?.focus();
+			});
+		}, [stopFocusRestore]);
+		const updateDropIndex = (0, preact_hooks.useCallback)((drag) => {
+			const next = resolveDropIndex(readTrackIds(drag.listElement).indexOf(drag.trackId), computeDropIndex(drag.listElement, drag.pointerY));
+			if (drag.dropIndex === next) return;
+			drag.dropIndex = next;
+			setDropIndex(next);
+		}, [computeDropIndex, readTrackIds]);
+		const stopEdgeScroll = (0, preact_hooks.useCallback)(() => {
+			if (scrollFrame.current !== void 0) {
+				cancelAnimationFrame(scrollFrame.current);
+				scrollFrame.current = void 0;
+			}
+		}, []);
+		const edgeScrollStep = (0, preact_hooks.useCallback)((drag) => {
+			const { listElement, pointerY } = drag;
+			const bounds = listElement.getBoundingClientRect();
+			const topDistance = pointerY - bounds.top;
+			const bottomDistance = bounds.bottom - pointerY;
+			if (topDistance < EDGE_SCROLL_ZONE_PX && listElement.scrollTop > 0) {
+				const intensity = 1 - Math.max(topDistance, 0) / EDGE_SCROLL_ZONE_PX;
+				return -Math.ceil(intensity * EDGE_SCROLL_MAX_STEP_PX);
+			}
+			if (bottomDistance < EDGE_SCROLL_ZONE_PX && listElement.scrollTop + listElement.clientHeight < listElement.scrollHeight - 1) {
+				const intensity = 1 - Math.max(bottomDistance, 0) / EDGE_SCROLL_ZONE_PX;
+				return Math.ceil(intensity * EDGE_SCROLL_MAX_STEP_PX);
+			}
+			return 0;
+		}, []);
+		const stepEdgeScroll = (0, preact_hooks.useCallback)(() => {
+			scrollFrame.current = void 0;
+			const drag = activeDrag.current;
+			if (!drag || !drag.started || drag.settled) return;
+			const step = edgeScrollStep(drag);
+			if (step === 0) return;
+			drag.listElement.scrollTop += step;
+			updateDropIndex(drag);
+			scrollFrame.current = requestAnimationFrame(stepEdgeScroll);
+		}, [edgeScrollStep, updateDropIndex]);
+		const ensureEdgeScroll = (0, preact_hooks.useCallback)(() => {
+			if (scrollFrame.current === void 0) scrollFrame.current = requestAnimationFrame(stepEdgeScroll);
+		}, [stepEdgeScroll]);
+		const startDragging = (0, preact_hooks.useCallback)((drag) => {
+			cancelLongPress();
+			if (drag.settled || drag.started) return;
+			drag.started = true;
+			isDragging.current = true;
+			setDraggingTrackId(drag.trackId);
+			capturePointer(drag);
+			updateDropIndex(drag);
+			ensureEdgeScroll();
+		}, [
+			cancelLongPress,
+			ensureEdgeScroll,
+			updateDropIndex
+		]);
+		(0, preact_hooks.useEffect)(() => () => {
+			cancelLongPress();
+			stopFocusRestore();
+			stopEdgeScroll();
+			containerListener.current?.abort();
+			containerListener.current = void 0;
+			activeDrag.current = void 0;
+		}, [
+			cancelLongPress,
+			stopEdgeScroll,
+			stopFocusRestore
+		]);
+		const onPointerDown = (0, preact_hooks.useCallback)((trackId, event) => {
+			if (!event.isPrimary || event.pointerType === "mouse" && event.button !== 0) return;
+			if (event.target instanceof Element && event.target.closest(ROW_CONTROL_SELECTOR)) return;
+			const listElement = event.currentTarget.closest(".track-list");
+			if (!listElement) return;
+			isDragging.current = false;
+			const row = event.currentTarget;
+			cancelLongPress();
+			activeDrag.current = {
+				pointerId: event.pointerId,
+				pointerType: event.pointerType,
+				row,
+				listElement,
+				trackId,
+				originPointerY: event.clientY,
+				pointerY: event.clientY,
+				started: false,
+				settled: false,
+				dragged: false
+			};
+			const drag = activeDrag.current;
+			longPressTimer.current = window.setTimeout(() => {
+				longPressTimer.current = void 0;
+				startDragging(drag);
+			}, 200);
+		}, [cancelLongPress, startDragging]);
+		const onPointerMove = (0, preact_hooks.useCallback)((event) => {
+			const drag = activeDrag.current;
+			if (!drag || drag.pointerId !== event.pointerId) return;
+			drag.pointerY = event.clientY;
+			if (!drag.started) {
+				if (Math.abs(event.clientY - drag.originPointerY) > LONG_PRESS_SLOP_PX) {
+					cancelLongPress();
+					stopEdgeScroll();
+					activeDrag.current = void 0;
+				}
+				return;
+			}
+			event.preventDefault();
+			updateDropIndex(drag);
+			ensureEdgeScroll();
+		}, [
+			cancelLongPress,
+			ensureEdgeScroll,
+			stopEdgeScroll,
+			updateDropIndex
+		]);
+		const finishDrag = (0, preact_hooks.useCallback)((event, commit, moved) => {
+			const drag = activeDrag.current;
+			if (!drag || drag.pointerId !== event.pointerId) return;
+			cancelLongPress();
+			stopEdgeScroll();
+			drag.settled = true;
+			drag.dragged = isDragging.current && (moved || Math.abs(event.clientY - drag.originPointerY) > CLICK_SLOP_PX);
+			isDragging.current = false;
+			pendingDrag.current = drag;
+			activeDrag.current = void 0;
+			releasePointer(drag, event.pointerId);
+			setDraggingTrackId(void 0);
+			setDropIndex(void 0);
+			if (!drag.started) return;
+			drag.started = false;
+			if (commit && drag.dropIndex !== void 0) {
+				const listElement = drag.listElement;
+				const refocus = isFocused(drag.row);
+				onMoveRef.current(drag.trackId, drag.dropIndex);
+				if (refocus) restoreRowFocus(listElement, drag.trackId);
+			}
+		}, [
+			cancelLongPress,
+			restoreRowFocus,
+			stopEdgeScroll
+		]);
+		const onPointerUp = (0, preact_hooks.useCallback)((event) => finishDrag(event, true, false), [finishDrag]);
+		const onPointerCancel = (0, preact_hooks.useCallback)((event) => finishDrag(event, false, true), [finishDrag]);
+		const onClick = (0, preact_hooks.useCallback)((event) => {
+			const dragged = Boolean(pendingDrag.current?.dragged);
+			pendingDrag.current = void 0;
+			if (dragged) {
+				event.preventDefault();
+				event.stopPropagation();
+				return;
+			}
+			const row = event.currentTarget;
+			Promise.resolve().then(() => {
+				if (!rowHasFocusedControl(row) && !isFocused(row)) row.focus();
+			});
+		}, []);
+		const announcePosition = (0, preact_hooks.useCallback)((listElement, index) => {
+			const total = readRows(listElement).length;
+			const region = getAnnounceRegion(listElement);
+			region.textContent = "";
+			region.textContent = describeRef.current?.(index, total) ?? `已移动到第 ${index + 1} 首`;
+		}, [readRows]);
+		onKeyDownRef.current = (0, preact_hooks.useCallback)((event) => {
+			const listElement = event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
+			if (!listElement) return;
+			const key = event.key;
+			if (key !== "ArrowUp" && key !== "ArrowDown" && key !== "Home" && key !== "End") return;
+			const trackId = (event.target instanceof Element ? event.target.closest(".track-row") : null)?.dataset.trackId;
+			if (!trackId) return;
+			event.preventDefault();
+			event.stopPropagation();
+			const move = resolveKeyboardMove(readTrackIds(listElement).map((id) => ({ id })), trackId, key);
+			if (!move) return;
+			onMoveRef.current(trackId, move.toIndex);
+			announcePosition(listElement, move.index);
+			restoreRowFocus(listElement, trackId);
+		}, [
+			announcePosition,
+			readTrackIds,
+			restoreRowFocus
+		]);
+		return {
+			containerRef: (0, preact_hooks.useCallback)((element) => {
+				if (!element || containerListener.current) return;
+				const controller = new AbortController();
+				element.addEventListener("keydown", onKeyDownRef.current, {
+					capture: true,
+					signal: controller.signal
+				});
+				containerListener.current = controller;
+			}, []),
+			draggingTrackId,
+			dropIndex,
+			bindRow: (0, preact_hooks.useCallback)((trackId) => ({
+				class: `track-row ${draggingTrackId === trackId ? "reorder-source" : ""}`.trim(),
+				tabIndex: 0,
+				title: "按住拖动调整顺序，也可用方向键",
+				"aria-label": "调整歌曲顺序（上下方向键）",
+				onPointerDown: (event) => onPointerDown(trackId, event),
+				onPointerMove,
+				onPointerUp,
+				onPointerCancel,
+				onClick
+			}), [
+				draggingTrackId,
+				onClick,
+				onPointerCancel,
+				onPointerDown,
+				onPointerMove,
+				onPointerUp
+			])
+		};
+	}
+	function findTrackRow(element, trackId) {
+		return element?.querySelector(`.track-row[data-track-id="${trackId}"]`) ?? void 0;
+	}
+	function isFocused(element) {
+		const root = element.getRootNode();
+		return root instanceof Document || root instanceof ShadowRoot ? root.activeElement === element : false;
+	}
+	function rowHasFocusedControl(row) {
+		const active = row.getRootNode().activeElement;
+		if (!active || active === row || !row.contains(active)) return false;
+		return active.matches("input, textarea, select, [contenteditable=\"true\"], [contenteditable=\"\"]");
+	}
+	function capturePointer(drag) {
+		try {
+			if (!drag.row.hasPointerCapture(drag.pointerId)) drag.row.setPointerCapture(drag.pointerId);
+		} catch {}
+	}
+	function releasePointer(drag, pointerId) {
+		try {
+			if (drag.row.hasPointerCapture(pointerId)) drag.row.releasePointerCapture(pointerId);
+		} catch {}
+	}
+	function getAnnounceRegion(container) {
+		const existing = container.querySelector(".track-reorder-status");
+		if (existing) return existing;
+		const region = document.createElement("div");
+		region.className = "track-reorder-status";
+		region.setAttribute("role", "status");
+		region.setAttribute("aria-live", "polite");
+		container.append(region);
+		return region;
+	}
 	var SETTINGS_STORAGE_KEY = "bilibili-music-player:settings";
 	var OPEN_MODE_PREFERENCES = [
 		"remember",
@@ -4442,6 +4827,10 @@
 		const [trackPendingDeletion, setTrackPendingDeletion] = (0, preact_hooks.useState)();
 		const launcherDrag = useDraggablePosition("launcher");
 		const panelDrag = useDraggablePosition("panel", { pinDefaultAnchor: true });
+		const reorder = useTrackReorder({
+			onMove: (trackId, toIndex) => store.moveTrack(trackId, toIndex),
+			describePosition: (index) => `已移动到第 ${index + 1} 首`
+		});
 		const data = store.data.value;
 		const session = store.session.value;
 		const runtime = engine.state.value;
@@ -4818,68 +5207,91 @@
 					}
 				}, editorTrack === "new" ? "new" : editorTrack.id),
 				(0, preact_jsx_runtime.jsx)("div", {
-					class: "track-list",
+					class: `track-list ${reorder.draggingTrackId ? "reordering" : ""}`,
 					role: "list",
 					"aria-label": "歌曲列表",
+					ref: reorder.containerRef,
 					children: activePlaylist.tracks.length === 0 ? (0, preact_jsx_runtime.jsxs)("div", {
 						class: "empty-state",
 						children: [(0, preact_jsx_runtime.jsx)(ListMusic, {
 							size: 26,
 							"aria-hidden": "true"
 						}), (0, preact_jsx_runtime.jsx)("span", { children: "歌单还是空的" })]
-					}) : activePlaylist.tracks.map((track, index) => (0, preact_jsx_runtime.jsxs)("div", {
-						class: `track-row ${track.id === nowPlaying.trackId ? "active" : ""}`,
-						role: "listitem",
-						children: [
-							(0, preact_jsx_runtime.jsxs)("button", {
-								class: "track-main",
-								type: "button",
-								title: `播放 ${track.title}`,
-								onClick: () => engine.playTrack(track),
-								children: [
-									(0, preact_jsx_runtime.jsx)("span", {
-										class: "track-index",
-										children: track.id === nowPlaying.trackId && runtime.playing ? (0, preact_jsx_runtime.jsx)(Volume2, {
-											size: 15,
-											"aria-hidden": "true"
-										}) : String(index + 1).padStart(2, "0")
-									}),
-									(0, preact_jsx_runtime.jsxs)("span", {
-										class: "track-copy",
-										children: [(0, preact_jsx_runtime.jsx)("strong", { children: track.title }), (0, preact_jsx_runtime.jsxs)("span", { children: [track.uploader ?? track.bvid, ` · ${formatTime(track.startTime)}–${formatTime(track.endTime ?? track.duration)}`] })]
-									}),
-									(0, preact_jsx_runtime.jsx)("span", {
-										class: "track-duration",
-										children: formatTime((track.endTime ?? track.duration) - track.startTime)
-									})
-								]
-							}),
-							(0, preact_jsx_runtime.jsx)("button", {
-								class: "row-action",
-								type: "button",
-								title: "编辑歌曲",
-								"aria-label": `编辑 ${track.title}`,
-								onClick: () => setEditorTrack(track),
-								children: (0, preact_jsx_runtime.jsx)(Pencil, {
-									size: 15,
-									"aria-hidden": "true"
-								})
-							}),
-							(0, preact_jsx_runtime.jsx)("button", {
-								class: "row-action danger",
-								type: "button",
-								title: "删除歌曲",
-								"aria-label": `删除 ${track.title}`,
-								onClick: () => setTrackPendingDeletion(track),
-								children: (0, preact_jsx_runtime.jsx)(Trash2, {
-									size: 15,
-									"aria-hidden": "true"
-								})
-							})
-						]
+					}) : activePlaylist.tracks.map((track, index) => (0, preact_jsx_runtime.jsx)(TrackRow, {
+						track,
+						index,
+						active: track.id === nowPlaying.trackId,
+						playing: runtime.playing,
+						dropIndex: reorder.dropIndex,
+						trackCount: activePlaylist.tracks.length,
+						row: reorder.bindRow(track.id),
+						onPlay: () => engine.playTrack(track),
+						onEdit: () => setEditorTrack(track),
+						onDelete: () => setTrackPendingDeletion(track)
 					}, track.id))
 				}),
 				overlays
+			]
+		});
+	}
+	function TrackRow({ track, index, active, playing, dropIndex, trackCount, row, onPlay, onEdit, onDelete }) {
+		const showTail = dropIndex === trackCount && index === trackCount - 1;
+		const playIcon = active && playing;
+		return (0, preact_jsx_runtime.jsxs)("div", {
+			...row,
+			role: "listitem",
+			"data-track-id": track.id,
+			class: `${row.class} ${active ? "active" : ""}`.trim(),
+			children: [
+				(dropIndex === index || showTail) && (0, preact_jsx_runtime.jsx)("span", {
+					class: `track-drop-indicator ${dropIndex === index ? "" : "tail"}`.trim(),
+					"aria-hidden": "true"
+				}),
+				(0, preact_jsx_runtime.jsxs)("button", {
+					class: "track-main",
+					type: "button",
+					title: `播放 ${track.title}`,
+					onClick: onPlay,
+					children: [
+						(0, preact_jsx_runtime.jsx)("span", {
+							class: "track-index",
+							children: playIcon ? (0, preact_jsx_runtime.jsx)(Volume2, {
+								size: 15,
+								"aria-hidden": "true"
+							}) : String(index + 1).padStart(2, "0")
+						}),
+						(0, preact_jsx_runtime.jsxs)("span", {
+							class: "track-copy",
+							children: [(0, preact_jsx_runtime.jsx)("strong", { children: track.title }), (0, preact_jsx_runtime.jsxs)("span", { children: [track.uploader ?? track.bvid, ` · ${formatTime(track.startTime)}–${formatTime(track.endTime ?? track.duration)}`] })]
+						}),
+						(0, preact_jsx_runtime.jsx)("span", {
+							class: "track-duration",
+							children: formatTime((track.endTime ?? track.duration) - track.startTime)
+						})
+					]
+				}),
+				(0, preact_jsx_runtime.jsx)("button", {
+					class: "row-action",
+					type: "button",
+					title: "编辑歌曲",
+					"aria-label": `编辑 ${track.title}`,
+					onClick: onEdit,
+					children: (0, preact_jsx_runtime.jsx)(Pencil, {
+						size: 15,
+						"aria-hidden": "true"
+					})
+				}),
+				(0, preact_jsx_runtime.jsx)("button", {
+					class: "row-action danger",
+					type: "button",
+					title: "删除歌曲",
+					"aria-label": `删除 ${track.title}`,
+					onClick: onDelete,
+					children: (0, preact_jsx_runtime.jsx)(Trash2, {
+						size: 15,
+						"aria-hidden": "true"
+					})
+				})
 			]
 		});
 	}
@@ -5396,6 +5808,21 @@
 					tracks: playlist.tracks.filter((track) => track.id !== trackId),
 					updatedAt: Date.now()
 				} : playlist)
+			}));
+		}
+		moveTrack(trackId, toIndex) {
+			const { activePlaylistId } = this.session.peek();
+			const playlist = this.data.peek().playlists.find((item) => item.id === activePlaylistId);
+			if (!playlist) return;
+			const moved = moveTrackToIndex(playlist.tracks, trackId, toIndex);
+			if (!moved) return;
+			this.commitLibrary((data) => ({
+				...data,
+				playlists: data.playlists.map((item) => item.id === activePlaylistId ? {
+					...item,
+					tracks: moved.tracks,
+					updatedAt: Date.now()
+				} : item)
 			}));
 		}
 		setPlayMode(playMode) {

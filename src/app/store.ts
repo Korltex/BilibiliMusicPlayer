@@ -13,6 +13,7 @@ import {
 } from "../storage/playback-session";
 import { AppRepository } from "../storage/repository";
 import { createDefaultData } from "../storage/schema";
+import { moveTrackToIndex } from "./track-order";
 
 export class AppStore {
   readonly data = signal<AppData>(createDefaultData());
@@ -217,6 +218,37 @@ export class AppStore {
               updatedAt: Date.now(),
             }
           : playlist,
+      ),
+    }));
+  }
+
+  /**
+   * 调整当前歌单内的播放顺序：把 `trackId` 移到 `toIndex`（插入位，0..length）之前。
+   *
+   * 顺序就是 `Playlist.tracks` 的数组顺序，因此不需要新字段或迁移。
+   * 播放中的歌曲由稳定的 `trackId` 标识，移动后当前曲目继续播放，
+   * 只影响之后「上一首/下一首」的选择；其它歌单不受影响。
+   */
+  moveTrack(trackId: string, toIndex: number): void {
+    const { activePlaylistId } = this.session.peek();
+    const playlist = this.data
+      .peek()
+      .playlists.find((item) => item.id === activePlaylistId);
+    if (!playlist) {
+      return;
+    }
+
+    const moved = moveTrackToIndex(playlist.tracks, trackId, toIndex);
+    if (!moved) {
+      return;
+    }
+
+    this.commitLibrary((data) => ({
+      ...data,
+      playlists: data.playlists.map((item) =>
+        item.id === activePlaylistId
+          ? { ...item, tracks: moved.tracks, updatedAt: Date.now() }
+          : item,
       ),
     }));
   }

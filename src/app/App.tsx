@@ -39,6 +39,7 @@ import {
 import { formatTime, toEndSecond, toStartSecond } from "../core/time";
 import type { PlayMode, Playlist, Track } from "../core/types";
 import { useDraggablePosition } from "./use-draggable-position";
+import { useTrackReorder, type TrackRowBinding } from "./use-track-reorder";
 import { LayoutRepository } from "../storage/layout";
 import type { OpenPanelMode } from "../storage/layout-schema";
 import { SettingsRepository } from "../storage/settings";
@@ -90,6 +91,11 @@ export function App({ store, engine, audioOnly }: AppProps) {
   const launcherDrag = useDraggablePosition("launcher");
   // 播放器面板顶边固定：歌单内容变少时只收起底边，面板不整体上移/下移。
   const panelDrag = useDraggablePosition("panel", { pinDefaultAnchor: true });
+  // 歌曲行长按拖动排序：顺序直接写当前歌单的 `tracks` 数组（见 store.moveTrack）。
+  const reorder = useTrackReorder({
+    onMove: (trackId, toIndex) => store.moveTrack(trackId, toIndex),
+    describePosition: (index) => `已移动到第 ${index + 1} 首`,
+  });
 
   const data = store.data.value;
   const session = store.session.value;
@@ -539,7 +545,12 @@ export function App({ store, engine, audioOnly }: AppProps) {
         />
       )}
 
-      <div class="track-list" role="list" aria-label="歌曲列表">
+      <div
+        class={`track-list ${reorder.draggingTrackId ? "reordering" : ""}`}
+        role="list"
+        aria-label="歌曲列表"
+        ref={reorder.containerRef}
+      >
         {activePlaylist.tracks.length === 0 ? (
           <div class="empty-state">
             <ListMusic size={26} aria-hidden="true" />
@@ -547,66 +558,124 @@ export function App({ store, engine, audioOnly }: AppProps) {
           </div>
         ) : (
           activePlaylist.tracks.map((track, index) => (
-            <div
-              class={`track-row ${
-                track.id === nowPlaying.trackId ? "active" : ""
-              }`}
-              role="listitem"
+            <TrackRow
               key={track.id}
-            >
-              <button
-                class="track-main"
-                type="button"
-                title={`播放 ${track.title}`}
-                onClick={() => engine.playTrack(track)}
-              >
-                <span class="track-index">
-                  {track.id === nowPlaying.trackId && runtime.playing ? (
-                    <Volume2 size={15} aria-hidden="true" />
-                  ) : (
-                    String(index + 1).padStart(2, "0")
-                  )}
-                </span>
-                <span class="track-copy">
-                  <strong>{track.title}</strong>
-                  <span>
-                    {track.uploader ?? track.bvid}
-                    {` · ${formatTime(track.startTime)}–${formatTime(
-                      track.endTime ?? track.duration,
-                    )}`}
-                  </span>
-                </span>
-                <span class="track-duration">
-                  {formatTime(
-                    (track.endTime ?? track.duration) - track.startTime,
-                  )}
-                </span>
-              </button>
-              <button
-                class="row-action"
-                type="button"
-                title="编辑歌曲"
-                aria-label={`编辑 ${track.title}`}
-                onClick={() => setEditorTrack(track)}
-              >
-                <Pencil size={15} aria-hidden="true" />
-              </button>
-              <button
-                class="row-action danger"
-                type="button"
-                title="删除歌曲"
-                aria-label={`删除 ${track.title}`}
-                onClick={() => setTrackPendingDeletion(track)}
-              >
-                <Trash2 size={15} aria-hidden="true" />
-              </button>
-            </div>
+              track={track}
+              index={index}
+              active={track.id === nowPlaying.trackId}
+              playing={runtime.playing}
+              dropIndex={reorder.dropIndex}
+              trackCount={activePlaylist.tracks.length}
+              row={reorder.bindRow(track.id)}
+              onPlay={() => engine.playTrack(track)}
+              onEdit={() => setEditorTrack(track)}
+              onDelete={() => setTrackPendingDeletion(track)}
+            />
           ))
         )}
       </div>
 
       {overlays}
     </section>
+  );
+}
+
+interface TrackRowProps {
+  track: Track;
+  index: number;
+  active: boolean;
+  playing: boolean;
+  dropIndex?: number;
+  trackCount: number;
+  /** `useTrackReorder().bindRow()` 产出的拖动/键盘排序绑定。 */
+  row: TrackRowBinding;
+  onPlay: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}
+
+/**
+ * 单行歌曲。
+ *
+ * 拆成组件是为了把 `bindRow()` 的输出**只求值一次**：它带有 `onPointerDown` 等回调，
+ * 在 JSX 里重复调用会让每次渲染都产生新函数、并让 class 合并变复杂。
+ */
+function TrackRow({
+  track,
+  index,
+  active,
+  playing,
+  dropIndex,
+  trackCount,
+  row,
+  onPlay,
+  onEdit,
+  onDelete,
+}: TrackRowProps) {
+  const showTail = dropIndex === trackCount && index === trackCount - 1;
+  const playIcon = active && playing;
+
+  return (
+    <div
+      {...row}
+      role="listitem"
+      data-track-id={track.id}
+      class={`${row.class} ${active ? "active" : ""}`.trim()}
+    >
+      {/* 落点插入线：绝对定位，因此不参与 `.track-row` 的网格布局。 */}
+      {(dropIndex === index || showTail) && (
+        <span
+          class={`track-drop-indicator ${
+            dropIndex === index ? "" : "tail"
+          }`.trim()}
+          aria-hidden="true"
+        />
+      )}
+      <button
+        class="track-main"
+        type="button"
+        title={`播放 ${track.title}`}
+        onClick={onPlay}
+      >
+        <span class="track-index">
+          {playIcon ? (
+            <Volume2 size={15} aria-hidden="true" />
+          ) : (
+            String(index + 1).padStart(2, "0")
+          )}
+        </span>
+        <span class="track-copy">
+          <strong>{track.title}</strong>
+          <span>
+            {track.uploader ?? track.bvid}
+            {` · ${formatTime(track.startTime)}–${formatTime(
+              track.endTime ?? track.duration,
+            )}`}
+          </span>
+        </span>
+        <span class="track-duration">
+          {formatTime((track.endTime ?? track.duration) - track.startTime)}
+        </span>
+      </button>
+      <button
+        class="row-action"
+        type="button"
+        title="编辑歌曲"
+        aria-label={`编辑 ${track.title}`}
+        onClick={onEdit}
+      >
+        <Pencil size={15} aria-hidden="true" />
+      </button>
+      <button
+        class="row-action danger"
+        type="button"
+        title="删除歌曲"
+        aria-label={`删除 ${track.title}`}
+        onClick={onDelete}
+      >
+        <Trash2 size={15} aria-hidden="true" />
+      </button>
+    </div>
   );
 }
 
