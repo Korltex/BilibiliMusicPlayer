@@ -1418,7 +1418,7 @@
 		".settings-section-summary {",
 		"  overflow: hidden;",
 		"  min-width: 0;",
-		"  flex: 1 1 auto;",
+		"  flex: 0 1 auto;",
 		"  color: var(--muted-strong);",
 		"  font-size: 11px;",
 		"  font-variant-numeric: tabular-nums;",
@@ -1427,8 +1427,13 @@
 		"  white-space: nowrap;",
 		"}",
 		"",
+		"/*",
+		" * 箭头固定贴右边缘：`margin-left: auto` 吸走标题与箭头之间的剩余空间，",
+		" * 因此有没有右侧摘要（「窗口与外观」没有）箭头都在同一列。",
+		" */",
 		".settings-chevron {",
 		"  flex: 0 0 auto;",
+		"  margin-left: auto;",
 		"  color: var(--muted);",
 		"  transition: transform 120ms ease;",
 		"}",
@@ -3475,11 +3480,16 @@
 		}
 	];
 	function SettingsPanel({ openMode, librarySummary, drag, exportStatus, exportError, onSelectOpenMode, onResetPositions, onExportBackup, onImportBackup, onBack, onClose, children }) {
-		const [openSection, setOpenSection] = (0, preact_hooks.useState)("appearance");
+		const [openSections, setOpenSections] = (0, preact_hooks.useState)(() => new Set());
 		const toggle = (section) => {
-			setOpenSection((current) => current === section ? void 0 : section);
+			setOpenSections((current) => {
+				const next = new Set(current);
+				if (next.has(section)) next.delete(section);
+				else next.add(section);
+				return next;
+			});
 		};
-		const isOpen = (section) => openSection === section;
+		const isOpen = (section) => openSections.has(section);
 		const sectionHeader = (section, title, icon, summary) => (0, preact_jsx_runtime.jsxs)("button", {
 			class: "settings-section-header",
 			type: "button",

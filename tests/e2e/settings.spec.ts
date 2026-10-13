@@ -136,6 +136,17 @@ async function openDataSection(page: Page): Promise<void> {
   await expect(header).toHaveAttribute("aria-expanded", "true");
 }
 
+/** 三个分区默认全部折叠；需要「窗口与外观」里的控件时先展开它。 */
+async function openAppearanceSection(page: Page): Promise<void> {
+  const header = settingsPanel(page).getByRole("button", {
+    name: /窗口与外观/,
+  });
+  if ((await header.getAttribute("aria-expanded")) !== "true") {
+    await header.click();
+  }
+  await expect(header).toHaveAttribute("aria-expanded", "true");
+}
+
 async function readStored(page: Page, key: string): Promise<unknown> {
   return page.evaluate(
     ({ prefix, name }) => {
@@ -237,6 +248,7 @@ test("remembers the open mode preference and applies it to the launcher", async 
   const radio = (name: string) => settings.getByRole("radio", { name });
 
   // 固定极简模式。
+  await openAppearanceSection(page);
   await radio("极简模式").check();
   expect(await readStored(page, SETTINGS_KEY)).toEqual({
     version: 1,
@@ -251,6 +263,7 @@ test("remembers the open mode preference and applies it to the launcher", async 
     .getByRole("button", { name: "展开完整播放器" })
     .click();
   await openSettings(page);
+  await openAppearanceSection(page);
   await settingsPanel(page).getByRole("radio", { name: "完整模式" }).check();
   expect(await readStored(page, SETTINGS_KEY)).toEqual({
     version: 1,
@@ -262,6 +275,7 @@ test("remembers the open mode preference and applies it to the launcher", async 
 
   // 「记住上次」透传布局里记录的形态（这里直接把布局改成极简）。
   await openSettings(page);
+  await openAppearanceSection(page);
   await settingsPanel(page).getByRole("radio", { name: "记住上次" }).check();
   await page.evaluate(
     ({ prefix, key }) =>
@@ -296,6 +310,7 @@ test("resets the launcher and panel positions from the settings view", async ({
   await openSettings(page);
 
   const settings = settingsPanel(page);
+  await openAppearanceSection(page);
   await settings.getByRole("button", { name: "重置位置" }).click();
 
   await expect
@@ -405,12 +420,15 @@ test("toggles the appearance section and keeps playback untouched", async ({
   const dataHeader = settings.getByRole("button", { name: /数据管理/ });
   const aboutHeader = settings.getByRole("button", { name: /关于/ });
 
-  // 默认只展开「窗口与外观」。
-  await expect(appearanceHeader).toHaveAttribute("aria-expanded", "true");
+  // 三个分区默认全部折叠。
+  await expect(appearanceHeader).toHaveAttribute("aria-expanded", "false");
   await expect(dataHeader).toHaveAttribute("aria-expanded", "false");
   await expect(aboutHeader).toHaveAttribute("aria-expanded", "false");
 
-  // 两行控件左边缘对齐：模式选择器与重置按钮从同一列开始；选择器右边缘与分区右边缘对齐。
+  // 展开「窗口与外观」，验证两行控件对齐：模式选择器与重置按钮从同一列开始；
+  // 选择器右边缘与分区右边缘对齐。
+  await appearanceHeader.click();
+  await expect(appearanceHeader).toHaveAttribute("aria-expanded", "true");
   const modeControl = settings.getByRole("radiogroup", { name: "打开时" });
   const resetButton = settings.getByRole("button", { name: "重置位置" });
   const modeBox = (await modeControl.boundingBox())!;
@@ -423,32 +441,79 @@ test("toggles the appearance section and keeps playback untouched", async ({
     ),
   ).toBeLessThanOrEqual(0.5);
 
-  // 一次只展开一个：打开数据管理会收起窗口与外观。
-  await expect(
-    settings.getByRole("radiogroup", { name: "打开时" }),
-  ).toBeVisible();
+  // 分区之间互不影响：再展开数据管理与关于，窗口与外观保持展开。
   await dataHeader.click();
   await expect(dataHeader).toHaveAttribute("aria-expanded", "true");
-  await expect(appearanceHeader).toHaveAttribute("aria-expanded", "false");
-  await expect(
-    settings.getByRole("radiogroup", { name: "打开时" }),
-  ).toHaveCount(0);
-
-  // 再打开关于，数据管理收起。
-  await aboutHeader.click();
-  await expect(aboutHeader).toHaveAttribute("aria-expanded", "true");
-  await expect(dataHeader).toHaveAttribute("aria-expanded", "false");
-
-  // 点已展开的分区标题可以收起它。
-  await aboutHeader.click();
-  await expect(aboutHeader).toHaveAttribute("aria-expanded", "false");
-
-  // 两个备份按钮都是中性色，不把覆盖操作做成首选动作。
-  await appearanceHeader.click();
+  await expect(appearanceHeader).toHaveAttribute("aria-expanded", "true");
   await expect(
     settings.getByRole("radiogroup", { name: "打开时" }),
   ).toBeVisible();
-  await dataHeader.click();
+
+  await aboutHeader.click();
+  await expect(aboutHeader).toHaveAttribute("aria-expanded", "true");
+  await expect(dataHeader).toHaveAttribute("aria-expanded", "true");
+  await expect(appearanceHeader).toHaveAttribute("aria-expanded", "true");
+
+  // 点已展开的分区标题只收起它自己。
+  await aboutHeader.click();
+  await expect(aboutHeader).toHaveAttribute("aria-expanded", "false");
+  await expect(dataHeader).toHaveAttribute("aria-expanded", "true");
+  await expect(appearanceHeader).toHaveAttribute("aria-expanded", "true");
+
+  // 分区标题右侧的下拉箭头贴同一列右边缘（三个分区都没有例外）。
+  //
+  // 量的是**箭头图标的左边缘**：展开态箭头有 `rotate(180deg)` 过渡（`.settings-chevron`
+  // 的 `transition: transform 120ms`），旋转过程中 `getBoundingClientRect()` 会临时变宽变高，
+  // 所以必须先等过渡彻底结束再量；左边缘比右边缘更稳（旋转的留白主要影响右边缘）。
+  const chevronLeft = async (header: typeof appearanceHeader) => {
+    await expect
+      .poll(
+        async () =>
+          header
+            .locator(".settings-chevron")
+            .evaluate((element) => getComputedStyle(element).transform),
+        { timeout: 3_000 },
+      )
+      .toMatch(/^matrix\(-1,\s*(-?0|0),\s*(-?0|0),\s*-1,/);
+    const box = (await header.locator(".settings-chevron").boundingBox())!;
+    return box.x;
+  };
+  for (const header of [appearanceHeader, dataHeader, aboutHeader]) {
+    while ((await header.getAttribute("aria-expanded")) !== "true") {
+      await header.click();
+    }
+  }
+  const appearanceLeft = await chevronLeft(appearanceHeader);
+  const dataLeft = await chevronLeft(dataHeader);
+  const aboutLeft = await chevronLeft(aboutHeader);
+  expect(Math.abs(appearanceLeft - dataLeft)).toBeLessThanOrEqual(0.5);
+  expect(Math.abs(appearanceLeft - aboutLeft)).toBeLessThanOrEqual(0.5);
+
+  // 箭头确实贴在右边缘：静止（未旋转）时与标题行右内边距（10px）的间距吻合。
+  // 两次测量在**同一次求值**里完成，否则页面滚动会让视口坐标对不上。
+  await appearanceHeader.click();
+  await expect(appearanceHeader).toHaveAttribute("aria-expanded", "false");
+  await expect
+    .poll(
+      async () =>
+        appearanceHeader
+          .locator(".settings-chevron")
+          .evaluate((element) => getComputedStyle(element).transform),
+      { timeout: 3_000 },
+    )
+    .toBe("none");
+  const restingGap = await appearanceHeader.evaluate((header) => {
+    const chevron = header.querySelector(".settings-chevron")!;
+    // 标题行 padding-right 是 10px：箭头的**右**边缘应当正好落在内边缘上。
+    return (
+      header.getBoundingClientRect().right -
+      10 -
+      chevron.getBoundingClientRect().right
+    );
+  });
+  expect(Math.abs(restingGap)).toBeLessThanOrEqual(1);
+
+  // 两个备份按钮都是中性色，不把覆盖操作做成首选动作。
   await expect(settings.locator(".settings-action.primary")).toHaveCount(0);
 
   // 打开设置不打断歌单播放。
@@ -471,6 +536,7 @@ test("selects the open mode with the keyboard", async ({ page }) => {
   await openSettings(page);
 
   const settings = settingsPanel(page);
+  await openAppearanceSection(page);
   const minimalRadio = settings.getByRole("radio", { name: "极简模式" });
   await minimalRadio.focus();
   await page.keyboard.press("Space");

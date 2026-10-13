@@ -45,7 +45,7 @@ type SectionId = "appearance" | "data" | "about";
  *
  * 与播放器面板共用同一个容器与拖拽坐标（`drag`），只把内容换成三个分区；
  * 组件本身不写任何存储：偏好与备份都由 App 提供回调，展开状态只是本地 UI 状态。
- * 一次只展开一个分区，避免设置页被拉得过长。
+ * 三个分区各自独立折叠，可以同时展开（默认全部折叠）。
  */
 export function SettingsPanel({
   openMode,
@@ -61,15 +61,24 @@ export function SettingsPanel({
   onClose,
   children,
 }: SettingsPanelProps) {
-  const [openSection, setOpenSection] = useState<SectionId | undefined>(
-    "appearance",
+  const [openSections, setOpenSections] = useState<ReadonlySet<SectionId>>(
+    () => new Set(),
   );
 
   const toggle = (section: SectionId) => {
-    setOpenSection((current) => (current === section ? undefined : section));
+    setOpenSections((current) => {
+      const next = new Set(current);
+      if (next.has(section)) {
+        next.delete(section);
+      } else {
+        next.add(section);
+      }
+
+      return next;
+    });
   };
 
-  const isOpen = (section: SectionId) => openSection === section;
+  const isOpen = (section: SectionId) => openSections.has(section);
 
   const sectionHeader = (
     section: SectionId,

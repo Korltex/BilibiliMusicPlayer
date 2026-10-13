@@ -1925,6 +1925,13 @@ test("drags and persists the launcher and player panel", async ({ page }) => {
     name: "Bilibili 音乐播放器（设置）",
   });
   await expect(settingsPanel).toBeVisible();
+  // 设置里的三个分区默认全部折叠，「重置位置」在「窗口与外观」里，先展开它。
+  const appearanceHeader = settingsPanel.getByRole("button", {
+    name: /窗口与外观/,
+  });
+  if ((await appearanceHeader.getAttribute("aria-expanded")) !== "true") {
+    await appearanceHeader.click();
+  }
   await settingsPanel.getByRole("button", { name: "重置位置" }).click();
   await expect
     .poll(async () => {
