@@ -1159,13 +1159,27 @@ select:focus-visible {
   overflow-wrap: anywhere;
 }
 
-.import-fav-form {
+.import-fav-form,
+.import-fav-confirm {
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
 
-.import-fav-form input {
+.import-fav-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.import-fav-field > span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.import-fav-form input,
+.import-fav-field input {
   min-width: 0;
   height: 34px;
   border: 1px solid var(--border);
@@ -1176,8 +1190,13 @@ select:focus-visible {
   background: var(--surface);
 }
 
-.import-fav-form input:focus {
+.import-fav-form input:focus,
+.import-fav-field input:focus {
   border-color: var(--accent);
+}
+
+.import-fav-field input[aria-invalid="true"] {
+  border-color: var(--danger);
 }
 
 .import-fav-actions,

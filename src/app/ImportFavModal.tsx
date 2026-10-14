@@ -54,6 +54,8 @@ interface ImportFavModalProps {
   onClose: () => void;
 }
 
+const NAME_ERROR_ID = "bilibili-music-import-name-error";
+
 export function ImportFavModal({ store, onClose }: ImportFavModalProps) {
   const [phase, setPhase] = useState<Phase>("input");
   const [url, setUrl] = useState("");
@@ -63,6 +65,8 @@ export function ImportFavModal({ store, onClose }: ImportFavModalProps) {
   const [progress, setProgress] = useState<ImportProgress>();
   const [summary, setSummary] = useState("");
   const [error, setError] = useState("");
+  /** 用户可编辑的歌单名称；与来源元数据 `info.name` 分开保存。 */
+  const [playlistName, setPlaylistName] = useState("");
   const controller = useRef<AbortController | null>(null);
 
   const videoSource = source?.kind === "video" ? source : undefined;
@@ -81,6 +85,10 @@ export function ImportFavModal({ store, onClose }: ImportFavModalProps) {
     ? (detail?.pages.length ?? 0)
     : (info?.count ?? 0);
 
+  // 落库前统一 trim；空/纯空白视为非法，禁止开始导入。
+  const trimmedName = playlistName.trim();
+  const nameMissing = trimmedName.length === 0;
+
   const resetController = () => {
     controller.current?.abort();
     controller.current = null;
@@ -98,7 +106,17 @@ export function ImportFavModal({ store, onClose }: ImportFavModalProps) {
     setDetail(undefined);
     setProgress(undefined);
     setError("");
+    setPlaylistName("");
     setPhase("input");
+  };
+
+  /**
+   * 记录来源元数据，并把名称输入框重置为该来源的默认名称。
+   * 只写 `info` 与输入框，用户后续的编辑不会再回写 `info`。
+   */
+  const applySourceInfo = (name: string, count: number) => {
+    setInfo({ name, count });
+    setPlaylistName(name);
   };
 
   const loadSeason = async (
@@ -110,7 +128,7 @@ export function ImportFavModal({ store, onClose }: ImportFavModalProps) {
       signal,
       mid: target.mid,
     });
-    setInfo({ name: result.name, count: result.total });
+    applySourceInfo(result.name, result.total);
   };
 
   /** 视频入口：先嗅探合集；有合集就当合集导入，没有就按分P 全部导入。 */
@@ -133,7 +151,7 @@ export function ImportFavModal({ store, onClose }: ImportFavModalProps) {
     }
 
     setSource({ kind: "video", target });
-    setInfo({ name: video.title || target.bvid, count: video.pages.length });
+    applySourceInfo(video.title || target.bvid, video.pages.length);
   };
 
   const parse = async (event: SubmitEvent) => {
@@ -166,7 +184,7 @@ export function ImportFavModal({ store, onClose }: ImportFavModalProps) {
           signal: next.signal,
           expectedOwnerMid: parsed.target.ownerMid,
         });
-        setInfo({ name: result.name, count: result.mediaCount });
+        applySourceInfo(result.name, result.mediaCount);
       } else if (parsed.kind === "season") {
         await loadSeason(parsed.target, next.signal);
       } else {
@@ -186,6 +204,12 @@ export function ImportFavModal({ store, onClose }: ImportFavModalProps) {
 
   const runImport = async () => {
     if (!source || !info || !playlistId) {
+      return;
+    }
+
+    // 名称为空 / 纯空白时不进入导入阶段，也不触碰歌单库。
+    const name = playlistName.trim();
+    if (!name) {
       return;
     }
 
@@ -250,7 +274,7 @@ export function ImportFavModal({ store, onClose }: ImportFavModalProps) {
 
       const playlist: Playlist = {
         id: playlistId,
-        name: info.name,
+        name,
         tracks,
         createdAt: existingPlaylist?.createdAt ?? Date.now(),
         updatedAt: Date.now(),
@@ -339,7 +363,13 @@ export function ImportFavModal({ store, onClose }: ImportFavModalProps) {
         )}
 
         {phase === "confirm" && info && (
-          <div class="import-fav-confirm">
+          <form
+            class="import-fav-confirm"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void runImport();
+            }}
+          >
             {videoSource ? (
               <div class="import-fav-video">
                 <p>该视频没有合集，是否导入为歌单？</p>
@@ -350,7 +380,22 @@ export function ImportFavModal({ store, onClose }: ImportFavModalProps) {
               </div>
             ) : (
               <p>
-                即将导入歌单「{info.name}」，共 {info.count} 条内容
+                即将导入歌单，共 {info.count} 条内容
+              </p>
+            )}
+            <label class="import-fav-field">
+              <span>歌单名称</span>
+              <input
+                value={playlistName}
+                aria-label="歌单名称"
+                aria-invalid={nameMissing}
+                aria-describedby={nameMissing ? NAME_ERROR_ID : undefined}
+                onInput={(event) => setPlaylistName(event.currentTarget.value)}
+              />
+            </label>
+            {nameMissing && (
+              <p class="import-fav-warning" id={NAME_ERROR_ID}>
+                歌单名称不能为空
               </p>
             )}
             {existingPlaylist && (
@@ -368,13 +413,13 @@ export function ImportFavModal({ store, onClose }: ImportFavModalProps) {
               </button>
               <button
                 class="import-fav-button primary"
-                type="button"
-                onClick={() => void runImport()}
+                type="submit"
+                disabled={nameMissing}
               >
                 {existingPlaylist ? "覆盖导入" : "导入"}
               </button>
             </div>
-          </div>
+          </form>
         )}
 
         {phase === "importing" && (

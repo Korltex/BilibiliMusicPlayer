@@ -1286,13 +1286,27 @@
 		"  overflow-wrap: anywhere;",
 		"}",
 		"",
-		".import-fav-form {",
+		".import-fav-form,",
+		".import-fav-confirm {",
 		"  display: flex;",
 		"  flex-direction: column;",
 		"  gap: 10px;",
 		"}",
 		"",
-		".import-fav-form input {",
+		".import-fav-field {",
+		"  display: flex;",
+		"  min-width: 0;",
+		"  flex-direction: column;",
+		"  gap: 4px;",
+		"}",
+		"",
+		".import-fav-field > span {",
+		"  color: var(--muted);",
+		"  font-size: 12px;",
+		"}",
+		"",
+		".import-fav-form input,",
+		".import-fav-field input {",
 		"  min-width: 0;",
 		"  height: 34px;",
 		"  border: 1px solid var(--border);",
@@ -1303,8 +1317,13 @@
 		"  background: var(--surface);",
 		"}",
 		"",
-		".import-fav-form input:focus {",
+		".import-fav-form input:focus,",
+		".import-fav-field input:focus {",
 		"  border-color: var(--accent);",
+		"}",
+		"",
+		".import-fav-field input[aria-invalid=\"true\"] {",
+		"  border-color: var(--danger);",
 		"}",
 		"",
 		".import-fav-actions,",
@@ -2738,6 +2757,7 @@
 		const host = hostname.toLowerCase();
 		return host === "bilibili.com" || host.endsWith(".bilibili.com");
 	}
+	var NAME_ERROR_ID = "bilibili-music-import-name-error";
 	function ImportFavModal({ store, onClose }) {
 		const [phase, setPhase] = (0, preact_hooks.useState)("input");
 		const [url, setUrl] = (0, preact_hooks.useState)("");
@@ -2747,11 +2767,13 @@
 		const [progress, setProgress] = (0, preact_hooks.useState)();
 		const [summary, setSummary] = (0, preact_hooks.useState)("");
 		const [error, setError] = (0, preact_hooks.useState)("");
+		const [playlistName, setPlaylistName] = (0, preact_hooks.useState)("");
 		const controller = (0, preact_hooks.useRef)(null);
 		const videoSource = source?.kind === "video" ? source : void 0;
 		const playlistId = source ? source.kind === "folder" ? favoritePlaylistId(source.target.fid) : source.kind === "season" ? seasonPlaylistId(source.target.seasonId) : videoPlaylistId(source.target.bvid) : void 0;
 		const existingPlaylist = playlistId ? store.data.value.playlists.find((item) => item.id === playlistId) : void 0;
 		const plannedCount = videoSource ? detail?.pages.length ?? 0 : info?.count ?? 0;
+		const nameMissing = playlistName.trim().length === 0;
 		const resetController = () => {
 			controller.current?.abort();
 			controller.current = null;
@@ -2767,7 +2789,15 @@
 			setDetail(void 0);
 			setProgress(void 0);
 			setError("");
+			setPlaylistName("");
 			setPhase("input");
+		};
+		const applySourceInfo = (name, count) => {
+			setInfo({
+				name,
+				count
+			});
+			setPlaylistName(name);
 		};
 		const loadSeason = async (target, signal) => {
 			setSource({
@@ -2778,10 +2808,7 @@
 				signal,
 				mid: target.mid
 			});
-			setInfo({
-				name: result.name,
-				count: result.total
-			});
+			applySourceInfo(result.name, result.total);
 		};
 		const loadVideo = async (target, signal) => {
 			const video = await fetchVideoDetail(target.bvid, { signal });
@@ -2797,10 +2824,7 @@
 				kind: "video",
 				target
 			});
-			setInfo({
-				name: video.title || target.bvid,
-				count: video.pages.length
-			});
+			applySourceInfo(video.title || target.bvid, video.pages.length);
 		};
 		const parse = async (event) => {
 			event.preventDefault();
@@ -2830,10 +2854,7 @@
 						signal: next.signal,
 						expectedOwnerMid: parsed.target.ownerMid
 					});
-					setInfo({
-						name: result.name,
-						count: result.mediaCount
-					});
+					applySourceInfo(result.name, result.mediaCount);
 				} else if (parsed.kind === "season") await loadSeason(parsed.target, next.signal);
 				else await loadVideo(parsed.target, next.signal);
 				setPhase("confirm");
@@ -2845,6 +2866,8 @@
 		};
 		const runImport = async () => {
 			if (!source || !info || !playlistId) return;
+			const name = playlistName.trim();
+			if (!name) return;
 			resetController();
 			const next = new AbortController();
 			controller.current = next;
@@ -2890,7 +2913,7 @@
 				}
 				const playlist = {
 					id: playlistId,
-					name: info.name,
+					name,
 					tracks,
 					createdAt: existingPlaylist?.createdAt ?? Date.now(),
 					updatedAt: Date.now()
@@ -2961,8 +2984,12 @@
 						class: "import-fav-status",
 						children: "正在获取信息…"
 					}),
-					phase === "confirm" && info && (0, preact_jsx_runtime.jsxs)("div", {
+					phase === "confirm" && info && (0, preact_jsx_runtime.jsxs)("form", {
 						class: "import-fav-confirm",
+						onSubmit: (event) => {
+							event.preventDefault();
+							runImport();
+						},
 						children: [
 							videoSource ? (0, preact_jsx_runtime.jsxs)("div", {
 								class: "import-fav-video",
@@ -2986,12 +3013,25 @@
 									})
 								]
 							}) : (0, preact_jsx_runtime.jsxs)("p", { children: [
-								"即将导入歌单「",
-								info.name,
-								"」，共 ",
+								"即将导入歌单，共 ",
 								info.count,
 								" 条内容"
 							] }),
+							(0, preact_jsx_runtime.jsxs)("label", {
+								class: "import-fav-field",
+								children: [(0, preact_jsx_runtime.jsx)("span", { children: "歌单名称" }), (0, preact_jsx_runtime.jsx)("input", {
+									value: playlistName,
+									"aria-label": "歌单名称",
+									"aria-invalid": nameMissing,
+									"aria-describedby": nameMissing ? NAME_ERROR_ID : void 0,
+									onInput: (event) => setPlaylistName(event.currentTarget.value)
+								})]
+							}),
+							nameMissing && (0, preact_jsx_runtime.jsx)("p", {
+								class: "import-fav-warning",
+								id: NAME_ERROR_ID,
+								children: "歌单名称不能为空"
+							}),
 							existingPlaylist && (0, preact_jsx_runtime.jsx)("p", {
 								class: "import-fav-warning",
 								children: "本地已存在该歌单，覆盖导入将替换其中的歌曲"
@@ -3005,8 +3045,8 @@
 									children: "取消"
 								}), (0, preact_jsx_runtime.jsx)("button", {
 									class: "import-fav-button primary",
-									type: "button",
-									onClick: () => void runImport(),
+									type: "submit",
+									disabled: nameMissing,
 									children: existingPlaylist ? "覆盖导入" : "导入"
 								})]
 							})
