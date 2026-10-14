@@ -29,7 +29,7 @@ import {
   readCurrentVideoMetadata,
 } from "../bili/metadata";
 import { fetchVideoChapters, type VideoChapter } from "../bili/chapters";
-import { isVideoPage } from "../bili/page-route";
+import { isPlaybackPage } from "../bili/page-route";
 import {
   backupFileName,
   createPlaylistBackup,
@@ -310,7 +310,7 @@ export function App({ store, engine, audioOnly }: AppProps) {
             return;
           }
 
-          if (!isVideoPage()) {
+          if (!isPlaybackPage()) {
             // 收藏页等没有播放器的页面：直接进入完整面板并打开导入弹窗，
             // 且不覆盖用户记住的面板形态。
             setDisplayMode("full");

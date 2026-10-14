@@ -12,6 +12,7 @@
 // @description:zh-TW  將喜歡的 Bilibili 影片整理成可播放的音樂歌單。
 // @license            MIT
 // @match              https://www.bilibili.com/video/*
+// @match              https://www.bilibili.com/list/*
 // @match              https://space.bilibili.com/*
 // @require            https://cdn.jsdelivr.net/npm/preact@10.29.7/dist/preact.min.umd.js#sha256=vWCK8okVrPZcOCL+DYDSHpswNp61X5Ab29I+Khh2Erk=
 // @require            https://cdn.jsdelivr.net/npm/preact@10.29.7/hooks/dist/hooks.umd.js#sha256=XCkjjl3JnfMG1/f/8DhZGjl8/Pq7Wfgfve9D1nCqBWY=
@@ -3833,8 +3834,47 @@
 			]
 		});
 	}
+	var VIDEO_PATH = /^\/video\//i;
+	var PLAYLIST_PATH = /^\/list\//i;
+	var FAVLIST_PATH = /^\/\d+\/favlist\/?$/i;
+	function getPageRoute(url = location.href) {
+		const parsed = safeUrl(url);
+		if (!parsed) return "other";
+		const host = parsed.hostname.toLowerCase();
+		if (isBilibiliHost(host) && VIDEO_PATH.test(parsed.pathname)) return "video";
+		if (host === "www.bilibili.com" && PLAYLIST_PATH.test(parsed.pathname)) return "playlist";
+		if (host === "space.bilibili.com" && isFavlistPath(parsed)) return "favlist";
+		return "other";
+	}
+	function isPlaybackPage(url = location.href) {
+		const route = getPageRoute(url);
+		return route === "video" || route === "playlist";
+	}
+	function supportsPlayerUi(url = location.href) {
+		return getPageRoute(url) !== "other";
+	}
+	function isFavlistPath(parsed) {
+		return FAVLIST_PATH.test(parsed.pathname) || parsed.hash.includes("favlist");
+	}
+	function isBilibiliHost(host) {
+		return host === "bilibili.com" || host.endsWith(".bilibili.com");
+	}
+	function safeUrl(url) {
+		try {
+			return new URL(url);
+		} catch {
+			return;
+		}
+	}
+	var VIDEO_PATH_BVID = /\/video\/(BV[\w]+)/i;
+	var QUERY_BVID = /^BV[0-9A-Za-z]+$/;
 	function getBvid(url = location.href) {
-		return new URL(url).pathname.match(/\/video\/(BV[\w]+)/i)?.[1];
+		const parsed = new URL(url);
+		const fromPath = parsed.pathname.match(VIDEO_PATH_BVID)?.[1];
+		if (fromPath) return fromPath;
+		if (getPageRoute(url) !== "playlist") return;
+		const fromQuery = parsed.searchParams.get("bvid")?.trim();
+		return fromQuery && QUERY_BVID.test(fromQuery) ? fromQuery : void 0;
 	}
 	function getPageNumber(url = location.href) {
 		const page = Number(new URL(url).searchParams.get("p"));
@@ -4090,35 +4130,6 @@
 	}
 	function validPositiveInteger(value) {
 		return typeof value === "number" && Number.isInteger(value) && value > 0;
-	}
-	var VIDEO_PATH = /^\/video\//i;
-	var FAVLIST_PATH = /^\/\d+\/favlist\/?$/i;
-	function getPageRoute(url = location.href) {
-		const parsed = safeUrl(url);
-		if (!parsed) return "other";
-		const host = parsed.hostname.toLowerCase();
-		if (isBilibiliHost(host) && VIDEO_PATH.test(parsed.pathname)) return "video";
-		if (host === "space.bilibili.com" && isFavlistPath(parsed)) return "favlist";
-		return "other";
-	}
-	function isVideoPage(url = location.href) {
-		return getPageRoute(url) === "video";
-	}
-	function supportsPlayerUi(url = location.href) {
-		return getPageRoute(url) !== "other";
-	}
-	function isFavlistPath(parsed) {
-		return FAVLIST_PATH.test(parsed.pathname) || parsed.hash.includes("favlist");
-	}
-	function isBilibiliHost(host) {
-		return host === "bilibili.com" || host.endsWith(".bilibili.com");
-	}
-	function safeUrl(url) {
-		try {
-			return new URL(url);
-		} catch {
-			return;
-		}
 	}
 	var _GM_addValueChangeListener = (() => typeof GM_addValueChangeListener != "undefined" ? GM_addValueChangeListener : void 0)();
 	var _GM_getValue = (() => typeof GM_getValue != "undefined" ? GM_getValue : void 0)();
@@ -5148,7 +5159,7 @@
 					event.preventDefault();
 					return;
 				}
-				if (!isVideoPage()) {
+				if (!isPlaybackPage()) {
 					setDisplayMode("full");
 					setImportOpen(true);
 					return;
@@ -7060,7 +7071,7 @@ html[${ROOT_ATTRIBUTE}="active"] video.bpx-player-video {
 	var BILIBILI_PLAYER_SELECTOR = ".bpx-player-container";
 	var BILIBILI_WEB_FULLSCREEN_SELECTOR = `${BILIBILI_PLAYER_SELECTOR}[data-screen="web"]`;
 	var ROUTE_POLL_INTERVAL = 300;
-	if (getPageRoute() === "video") audioOnlyController.start();
+	if (isPlaybackPage()) audioOnlyController.start();
 	function containsBilibiliPlayer(node) {
 		return node instanceof Element && (node.matches(BILIBILI_PLAYER_SELECTOR) || node.querySelector(BILIBILI_PLAYER_SELECTOR) !== null);
 	}

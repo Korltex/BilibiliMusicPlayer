@@ -1,5 +1,6 @@
 import type { Track } from "../core/types";
 import { createId } from "../core/id";
+import { getPageRoute } from "./page-route";
 
 export interface CurrentVideoMetadata {
   bvid: string;
@@ -9,8 +10,32 @@ export interface CurrentVideoMetadata {
   cover?: string;
 }
 
+const VIDEO_PATH_BVID = /\/video\/(BV[\w]+)/i;
+/** 列表播放页的 BV 来自查询串，必须校验格式：`oid` 之类的参数不是 BV 号。 */
+const QUERY_BVID = /^BV[0-9A-Za-z]+$/;
+
+/**
+ * 解析当前页面对应的 BV 号。
+ *
+ * - 视频页：取路径里的 `/video/BV…`（保持既有行为）。
+ * - 列表播放页（`www.bilibili.com/list/ml…`）：当前视频由查询串的 `bvid` 指定，
+ *   路径里没有 BV；参数缺失或格式非法时安全返回 `undefined`。
+ * - 其它页面：返回 `undefined`。
+ */
 export function getBvid(url = location.href): string | undefined {
-  return new URL(url).pathname.match(/\/video\/(BV[\w]+)/i)?.[1];
+  const parsed = new URL(url);
+  const fromPath = parsed.pathname.match(VIDEO_PATH_BVID)?.[1];
+  if (fromPath) {
+    return fromPath;
+  }
+
+  // 只有路由认可的列表播放页才读查询串，避免在任意页面上把 `?bvid=` 当成视频。
+  if (getPageRoute(url) !== "playlist") {
+    return undefined;
+  }
+
+  const fromQuery = parsed.searchParams.get("bvid")?.trim();
+  return fromQuery && QUERY_BVID.test(fromQuery) ? fromQuery : undefined;
 }
 
 export function getPageNumber(url = location.href): number | undefined {

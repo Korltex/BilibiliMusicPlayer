@@ -54,6 +54,7 @@ assert(
 
 const requiredMatches = [
   "https://www.bilibili.com/video/*",
+  "https://www.bilibili.com/list/*",
   "https://space.bilibili.com/*",
 ];
 
@@ -66,7 +67,7 @@ for (const source of [userscript, metadata]) {
   assert(
     JSON.stringify(metadataValues(source, "match")) ===
       JSON.stringify(requiredMatches),
-    "@match entries must be exactly the Bilibili video page and the space pages",
+    "@match entries must be exactly the Bilibili video page, the list playback pages, and the space pages",
   );
   assert(
     metadataValues(source, "version").join() === packageJson.version,

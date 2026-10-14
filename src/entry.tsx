@@ -3,7 +3,7 @@ import style from "./styles.css?style";
 import { App } from "./app/App";
 import { appStore } from "./app/store";
 import { audioOnlyController } from "./bili/audio-only-controller";
-import { getPageRoute, supportsPlayerUi } from "./bili/page-route";
+import { isPlaybackPage, supportsPlayerUi } from "./bili/page-route";
 import { PlayerEngine } from "./playback/player-engine";
 
 const HOST_ID = "bilibili-music-player-host";
@@ -11,8 +11,9 @@ const BILIBILI_PLAYER_SELECTOR = ".bpx-player-container";
 const BILIBILI_WEB_FULLSCREEN_SELECTOR = `${BILIBILI_PLAYER_SELECTOR}[data-screen="web"]`;
 const ROUTE_POLL_INTERVAL = 300;
 
-// 纯音频模式必须在页面脚本运行前决定是否安装拦截器，因此只在视频页启动。
-if (getPageRoute() === "video") {
+// 纯音频模式必须在页面脚本运行前决定是否安装拦截器，因此只在带播放器的路由启动
+// （视频页与 `/list/*` 列表播放页）；收藏页等其它页面一律不安装。
+if (isPlaybackPage()) {
   audioOnlyController.start();
 }
 

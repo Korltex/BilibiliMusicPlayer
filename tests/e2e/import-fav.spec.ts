@@ -209,7 +209,7 @@ test("imports a favorite folder and splits its multi-part videos", async ({
   await modal.getByRole("button", { name: "解析" }).click();
 
   await expect(
-    modal.getByText(/即将导入歌单「我的收藏」，共 3 条内容/),
+    modal.getByText(/即将导入歌单，共 3 条内容/),
   ).toBeVisible();
   await modal.getByRole("button", { name: "导入" }).click();
 
@@ -447,7 +447,7 @@ test("imports a collection (season) as a new playlist", async ({ page }) => {
   await modal.getByRole("button", { name: "解析" }).click();
 
   await expect(
-    modal.getByText(/即将导入歌单「我的合集」，共 2 条内容/),
+    modal.getByText(/即将导入歌单，共 2 条内容/),
   ).toBeVisible();
   await modal.getByRole("button", { name: "导入" }).click();
   await expect(modal.getByText(/成功导入 2 个视频，已跳过 0 个/)).toBeVisible();
@@ -579,7 +579,7 @@ test("imports a collection sniffed from a video link", async ({ page }) => {
   await modal.getByRole("button", { name: "解析" }).click();
 
   await expect(
-    modal.getByText(/即将导入歌单「我的合集」，共 2 条内容/),
+    modal.getByText(/即将导入歌单，共 2 条内容/),
   ).toBeVisible();
   await modal.getByRole("button", { name: "导入" }).click();
   await expect(modal.getByText(/成功导入 2 个视频/)).toBeVisible();

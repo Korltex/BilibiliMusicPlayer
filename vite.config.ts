@@ -108,6 +108,7 @@ ${thirdPartyNotices}
         license: "MIT",
         match: [
           "https://www.bilibili.com/video/*",
+          "https://www.bilibili.com/list/*",
           "https://space.bilibili.com/*",
         ],
         require: requireUrls,
