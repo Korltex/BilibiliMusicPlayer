@@ -77,10 +77,11 @@ export interface TrackReorderResult {
 /**
  * 行内这些元素自己处理指针/键盘语义，长按排序不介入。
  *
- * 只排除编辑/删除这类行内动作按钮，**不排除**歌曲主体（`.track-main`）：
+ * 只排除多选框与编辑/删除这类行内控件，**不排除**歌曲主体（`.track-main`）：
  * 全局长按的意义就是按住歌名也能拖。
  */
-const ROW_CONTROL_SELECTOR = ".row-action, input, select, textarea, a";
+const ROW_CONTROL_SELECTOR =
+  ".row-action, .row-select, input, select, textarea, a";
 
 /**
  * 歌曲行「全局长按拖动排序」——按住行内任意位置（除了行内按钮）约 200ms 即可拖动，

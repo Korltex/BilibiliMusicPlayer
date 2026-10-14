@@ -1011,8 +1011,8 @@
 		"  position: relative;",
 		"  display: grid;",
 		"  min-height: 54px;",
-		"  /* 歌曲主体 | 编辑 | 删除 */",
-		"  grid-template-columns: minmax(0, 1fr) 32px 32px;",
+		"  /* 多选 | 歌曲主体 | 编辑 | 删除 */",
+		"  grid-template-columns: 30px minmax(0, 1fr) 32px 32px;",
 		"  align-items: stretch;",
 		"  border-bottom: 1px solid rgb(56 59 68 / 65%);",
 		"  /*",
@@ -1031,6 +1031,127 @@
 		".track-row.active {",
 		"  box-shadow: inset 3px 0 var(--accent);",
 		"  background: #25242a;",
+		"}",
+		"",
+		"/* 勾选态：浅粉色行背景。写在 `.active` 之后，二者同时成立时底色以选中态为准，",
+		"   播放中的左侧强调条仍由 `.active` 的 inset 阴影提供。 */",
+		".track-row.selected,",
+		".track-row.selected:hover {",
+		"  background: rgb(251 114 153 / 12%);",
+		"}",
+		"",
+		"/*",
+		" * 常驻复选框。",
+		" *",
+		" * 原生 `<input type=\"checkbox\">` 被透明化后铺满热区，可见方块由 `.row-select-box` 自绘，",
+		" * 这样勾选态（粉色底 + 白色对勾）与设计稿一致，同时保留原生键盘/读屏语义。",
+		" */",
+		".row-select {",
+		"  position: relative;",
+		"  display: grid;",
+		"  place-items: center;",
+		"  cursor: pointer;",
+		"}",
+		"",
+		".row-select input {",
+		"  position: absolute;",
+		"  inset: 0;",
+		"  width: 100%;",
+		"  height: 100%;",
+		"  margin: 0;",
+		"  opacity: 0;",
+		"  cursor: pointer;",
+		"}",
+		"",
+		".row-select-box {",
+		"  display: grid;",
+		"  width: 16px;",
+		"  height: 16px;",
+		"  place-items: center;",
+		"  border: 1.5px solid var(--border);",
+		"  border-radius: 4px;",
+		"  color: transparent;",
+		"  background: transparent;",
+		"  /* 纯装饰：命中测试必须落到下面那个真实 `input` 上，否则自动化/读屏定位会打架。 */",
+		"  pointer-events: none;",
+		"}",
+		"",
+		".row-select:hover .row-select-box {",
+		"  border-color: var(--muted);",
+		"}",
+		"",
+		".row-select input:checked + .row-select-box {",
+		"  border-color: var(--accent);",
+		"  color: #fff;",
+		"  background: var(--accent);",
+		"}",
+		"",
+		"/* 键盘可见性：真实 input 被透明化，焦点环要画在自绘方块上。 */",
+		".row-select input:focus-visible + .row-select-box {",
+		"  outline: 2px solid var(--accent);",
+		"  outline-offset: 2px;",
+		"}",
+		"",
+		"/* 批量操作栏：列表的兄弟节点，只占内容高度，不覆盖歌曲也不产生横向溢出。 */",
+		".batch-bar {",
+		"  display: flex;",
+		"  min-width: 0;",
+		"  align-items: center;",
+		"  gap: 8px;",
+		"  border-top: 1px solid var(--border);",
+		"  padding: 7px 10px 7px 14px;",
+		"  background: #1c1e23;",
+		"}",
+		"",
+		".batch-count {",
+		"  min-width: 0;",
+		"  flex: 1 1 auto;",
+		"  overflow: hidden;",
+		"  color: var(--muted);",
+		"  font-size: 12px;",
+		"  text-overflow: ellipsis;",
+		"  white-space: nowrap;",
+		"}",
+		"",
+		".batch-actions {",
+		"  display: flex;",
+		"  flex: 0 0 auto;",
+		"  align-items: center;",
+		"  gap: 6px;",
+		"}",
+		"",
+		".batch-button {",
+		"  display: inline-flex;",
+		"  height: 30px;",
+		"  align-items: center;",
+		"  justify-content: center;",
+		"  gap: 4px;",
+		"  border: 0;",
+		"  border-radius: 6px;",
+		"  padding: 0 10px;",
+		"  color: var(--text);",
+		"  background: var(--surface);",
+		"  font-size: 13px;",
+		"  cursor: pointer;",
+		"}",
+		"",
+		".batch-button:hover:not(:disabled) {",
+		"  background: var(--surface-hover);",
+		"}",
+		"",
+		".batch-button:disabled {",
+		"  cursor: not-allowed;",
+		"  opacity: 0.4;",
+		"}",
+		"",
+		"/* 批量删除：危险动作，用强调色填充，与单首删除的图标按钮区分开。 */",
+		".batch-button.danger {",
+		"  color: #fff;",
+		"  background: var(--accent);",
+		"}",
+		"",
+		".batch-button.danger:hover:not(:disabled) {",
+		"  background: var(--accent-hover);",
 		"}",
 		"",
 		"/* 键盘排序时行本身可聚焦（每行一个 Tab 停靠点）。 */",
@@ -1079,7 +1200,7 @@
 		".track-main {",
 		"  display: grid;",
 		"  min-width: 0;",
-		"  grid-template-columns: 32px minmax(0, 1fr) auto;",
+		"  grid-template-columns: minmax(0, 1fr) auto;",
 		"  align-items: center;",
 		"  gap: 7px;",
 		"  border: 0;",
@@ -1090,19 +1211,6 @@
 		"  cursor: pointer;",
 		"  /* 歌曲主体也支持长按拖动：触屏上要挡住滚动，否则拖动会被浏览器当成列表滚动。 */",
 		"  touch-action: none;",
-		"}",
-		"",
-		".track-index {",
-		"  display: grid;",
-		"  width: 28px;",
-		"  place-items: center;",
-		"  color: var(--muted);",
-		"  font-size: 11px;",
-		"  font-variant-numeric: tabular-nums;",
-		"}",
-		"",
-		".track-row.active .track-index {",
-		"  color: var(--accent);",
 		"}",
 		"",
 		".track-copy {",
@@ -1790,6 +1898,12 @@
 		return (0, preact_jsx_runtime.jsxs)(SvgIcon, {
 			...props,
 			children: [(0, preact_jsx_runtime.jsx)("path", { d: "m12 19-7-7 7-7" }), (0, preact_jsx_runtime.jsx)("path", { d: "M19 12H5" })]
+		});
+	}
+	function Check(props) {
+		return (0, preact_jsx_runtime.jsx)(SvgIcon, {
+			...props,
+			children: (0, preact_jsx_runtime.jsx)("path", { d: "M20 6 9 17l-5-5" })
 		});
 	}
 	function ChevronDown(props) {
@@ -4213,7 +4327,7 @@
 	var CLICK_SLOP_PX = 6;
 	var EDGE_SCROLL_ZONE_PX = 28;
 	var EDGE_SCROLL_MAX_STEP_PX = 14;
-	var ROW_CONTROL_SELECTOR = ".row-action, input, select, textarea, a";
+	var ROW_CONTROL_SELECTOR = ".row-action, .row-select, input, select, textarea, a";
 	function useTrackReorder({ onMove, describePosition }) {
 		const [draggingTrackId, setDraggingTrackId] = (0, preact_hooks.useState)();
 		const [dropIndex, setDropIndex] = (0, preact_hooks.useState)();
@@ -4500,6 +4614,36 @@
 		region.setAttribute("aria-live", "polite");
 		container.append(region);
 		return region;
+	}
+	var EMPTY = new Set();
+	function emptyTrackSelection() {
+		return EMPTY;
+	}
+	function toggleTrackSelection(selection, trackId) {
+		const next = new Set(selection);
+		if (!next.delete(trackId)) next.add(trackId);
+		return next;
+	}
+	function selectAllTracks(selection, tracks) {
+		return areAllTracksSelected(selection, tracks) ? selection : new Set(tracks.map((track) => track.id));
+	}
+	function pruneTrackSelection(selection, tracks) {
+		if (selection.size === 0) return selection;
+		const alive = new Set(tracks.map((track) => track.id));
+		const next = new Set();
+		for (const id of selection) if (alive.has(id)) next.add(id);
+		return next.size === selection.size ? selection : next;
+	}
+	function resolveSelectedTrackIds(selection, tracks) {
+		if (selection.size === 0) return [];
+		return tracks.filter((track) => selection.has(track.id)).map((track) => track.id);
+	}
+	function countSelectedTracks(selection, tracks) {
+		if (selection.size === 0) return 0;
+		return tracks.reduce((count, track) => selection.has(track.id) ? count + 1 : count, 0);
+	}
+	function areAllTracksSelected(selection, tracks) {
+		return tracks.length > 0 && tracks.every((track) => selection.has(track.id));
 	}
 	var SETTINGS_STORAGE_KEY = "bilibili-music-player:settings";
 	var OPEN_MODE_PREFERENCES = [
@@ -4835,6 +4979,8 @@
 		const [exportResult, setExportResult] = (0, preact_hooks.useState)({});
 		const [playlistPendingDeletion, setPlaylistPendingDeletion] = (0, preact_hooks.useState)();
 		const [trackPendingDeletion, setTrackPendingDeletion] = (0, preact_hooks.useState)();
+		const [selection, setSelection] = (0, preact_hooks.useState)(emptyTrackSelection);
+		const [batchPendingDeletion, setBatchPendingDeletion] = (0, preact_hooks.useState)();
 		const launcherDrag = useDraggablePosition("launcher");
 		const panelDrag = useDraggablePosition("panel", { pinDefaultAnchor: true });
 		const reorder = useTrackReorder({
@@ -4847,6 +4993,12 @@
 		const audioOnlyState = audioOnly.state.value;
 		const activePlaylist = data.playlists.find((playlist) => playlist.id === session.activePlaylistId) ?? data.playlists[0];
 		const nowPlaying = runtime.nowPlaying;
+		(0, preact_hooks.useEffect)(() => {
+			setSelection((current) => pruneTrackSelection(current, activePlaylist.tracks));
+		}, [activePlaylist.id, activePlaylist.tracks]);
+		const selectedTrackIds = resolveSelectedTrackIds(selection, activePlaylist.tracks);
+		const selectedTrackCount = countSelectedTracks(selection, activePlaylist.tracks);
+		const allTracksSelected = areAllTracksSelected(selection, activePlaylist.tracks);
 		const progressMinimum = nowPlaying.startTime;
 		const progressMaximum = nowPlaying.endTime ?? (runtime.duration > 0 ? runtime.duration : nowPlaying.storedDuration);
 		const audioFallbackNotice = audioOnlyState.status === "fallback" ? `纯音频模式未生效，已回退正常视频：${audioOnlyReasonLabel(audioOnlyState.reason)}` : void 0;
@@ -4926,6 +5078,17 @@
 				onConfirm: () => {
 					store.removeTrack(trackPendingDeletion.id);
 					setTrackPendingDeletion(void 0);
+				}
+			}),
+			batchPendingDeletion && (0, preact_jsx_runtime.jsx)(ConfirmModal, {
+				title: "批量删除歌曲",
+				message: `确定删除“${batchPendingDeletion.playlistName}”中的 ${batchPendingDeletion.trackIds.length} 首歌曲？`,
+				warning: "删除后无法恢复。",
+				onCancel: () => setBatchPendingDeletion(void 0),
+				onConfirm: () => {
+					store.removeTracks(batchPendingDeletion.trackIds);
+					setSelection(emptyTrackSelection());
+					setBatchPendingDeletion(void 0);
 				}
 			})
 		] });
@@ -5231,54 +5394,99 @@
 						track,
 						index,
 						active: track.id === nowPlaying.trackId,
-						playing: runtime.playing,
+						selected: selection.has(track.id),
 						dropIndex: reorder.dropIndex,
 						trackCount: activePlaylist.tracks.length,
 						row: reorder.bindRow(track.id),
 						onPlay: () => engine.playTrack(track),
 						onEdit: () => setEditorTrack(track),
-						onDelete: () => setTrackPendingDeletion(track)
+						onDelete: () => setTrackPendingDeletion(track),
+						onToggleSelect: () => setSelection((current) => toggleTrackSelection(current, track.id))
 					}, track.id))
+				}),
+				selectedTrackCount > 0 && (0, preact_jsx_runtime.jsxs)("div", {
+					class: "batch-bar",
+					role: "group",
+					"aria-label": "批量操作",
+					children: [(0, preact_jsx_runtime.jsxs)("span", {
+						class: "batch-count",
+						children: [
+							"已选 ",
+							selectedTrackCount,
+							" 首"
+						]
+					}), (0, preact_jsx_runtime.jsxs)("div", {
+						class: "batch-actions",
+						children: [
+							(0, preact_jsx_runtime.jsx)("button", {
+								class: "batch-button",
+								type: "button",
+								disabled: allTracksSelected,
+								onClick: () => setSelection(selectAllTracks(selection, activePlaylist.tracks)),
+								children: "全选"
+							}),
+							(0, preact_jsx_runtime.jsx)("button", {
+								class: "batch-button",
+								type: "button",
+								onClick: () => setSelection(emptyTrackSelection()),
+								children: "取消"
+							}),
+							(0, preact_jsx_runtime.jsxs)("button", {
+								class: "batch-button danger",
+								type: "button",
+								onClick: () => setBatchPendingDeletion({
+									playlistName: activePlaylist.name,
+									trackIds: selectedTrackIds
+								}),
+								children: [(0, preact_jsx_runtime.jsx)(Trash2, {
+									size: 14,
+									"aria-hidden": "true"
+								}), "删除"]
+							})
+						]
+					})]
 				}),
 				overlays
 			]
 		});
 	}
-	function TrackRow({ track, index, active, playing, dropIndex, trackCount, row, onPlay, onEdit, onDelete }) {
+	function TrackRow({ track, index, active, selected, dropIndex, trackCount, row, onPlay, onEdit, onDelete, onToggleSelect }) {
 		const showTail = dropIndex === trackCount && index === trackCount - 1;
-		const playIcon = active && playing;
 		return (0, preact_jsx_runtime.jsxs)("div", {
 			...row,
 			role: "listitem",
 			"data-track-id": track.id,
-			class: `${row.class} ${active ? "active" : ""}`.trim(),
+			class: `${row.class} ${active ? "active" : ""} ${selected ? "selected" : ""}`.trim(),
 			children: [
 				(dropIndex === index || showTail) && (0, preact_jsx_runtime.jsx)("span", {
 					class: `track-drop-indicator ${dropIndex === index ? "" : "tail"}`.trim(),
 					"aria-hidden": "true"
+				}),
+				(0, preact_jsx_runtime.jsxs)("label", {
+					class: "row-select",
+					children: [(0, preact_jsx_runtime.jsx)("input", {
+						type: "checkbox",
+						checked: selected,
+						"aria-label": `选择 ${track.title}`,
+						onChange: onToggleSelect
+					}), (0, preact_jsx_runtime.jsx)("span", {
+						class: "row-select-box",
+						"aria-hidden": "true",
+						children: (0, preact_jsx_runtime.jsx)(Check, { size: 12 })
+					})]
 				}),
 				(0, preact_jsx_runtime.jsxs)("button", {
 					class: "track-main",
 					type: "button",
 					title: `播放 ${track.title}`,
 					onClick: onPlay,
-					children: [
-						(0, preact_jsx_runtime.jsx)("span", {
-							class: "track-index",
-							children: playIcon ? (0, preact_jsx_runtime.jsx)(Volume2, {
-								size: 15,
-								"aria-hidden": "true"
-							}) : String(index + 1).padStart(2, "0")
-						}),
-						(0, preact_jsx_runtime.jsxs)("span", {
-							class: "track-copy",
-							children: [(0, preact_jsx_runtime.jsx)("strong", { children: track.title }), (0, preact_jsx_runtime.jsxs)("span", { children: [track.uploader ?? track.bvid, ` · ${formatTime(track.startTime)}–${formatTime(track.endTime ?? track.duration)}`] })]
-						}),
-						(0, preact_jsx_runtime.jsx)("span", {
-							class: "track-duration",
-							children: formatTime((track.endTime ?? track.duration) - track.startTime)
-						})
-					]
+					children: [(0, preact_jsx_runtime.jsxs)("span", {
+						class: "track-copy",
+						children: [(0, preact_jsx_runtime.jsx)("strong", { children: track.title }), (0, preact_jsx_runtime.jsxs)("span", { children: [track.uploader ?? track.bvid, ` · ${formatTime(track.startTime)}–${formatTime(track.endTime ?? track.duration)}`] })]
+					}), (0, preact_jsx_runtime.jsx)("span", {
+						class: "track-duration",
+						children: formatTime((track.endTime ?? track.duration) - track.startTime)
+					})]
 				}),
 				(0, preact_jsx_runtime.jsx)("button", {
 					class: "row-action",
@@ -5810,14 +6018,23 @@
 			}));
 		}
 		removeTrack(trackId) {
+			this.removeTracks([trackId]);
+		}
+		removeTracks(trackIds) {
+			const removing = new Set(trackIds);
+			if (removing.size === 0) return;
 			const { activePlaylistId } = this.session.peek();
+			const playlist = this.data.peek().playlists.find((item) => item.id === activePlaylistId);
+			if (!playlist) return;
+			const tracks = playlist.tracks.filter((track) => !removing.has(track.id));
+			if (tracks.length === playlist.tracks.length) return;
 			this.commitLibrary((data) => ({
 				...data,
-				playlists: data.playlists.map((playlist) => playlist.id === activePlaylistId ? {
-					...playlist,
-					tracks: playlist.tracks.filter((track) => track.id !== trackId),
+				playlists: data.playlists.map((item) => item.id === activePlaylistId ? {
+					...item,
+					tracks,
 					updatedAt: Date.now()
-				} : playlist)
+				} : item)
 			}));
 		}
 		moveTrack(trackId, toIndex) {

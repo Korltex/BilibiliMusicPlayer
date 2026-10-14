@@ -336,7 +336,8 @@ test("a short press on a row only plays instead of reordering", async ({
   await row.dispatchEvent("pointermove", pointerInit(3, startY + 2));
   await row.dispatchEvent("pointerup", pointerInit(3, startY));
   // 未满长按时长就松手：同一次按下仍然是正常点击（播放第一首），不排序。
-  await row.click({ position: { x: 6, y: 10 } });
+  // x 要落在 `.track-main` 上：行首 30px 是多选复选框（点它只改选择状态）。
+  await row.click({ position: { x: 36, y: 10 } });
   await page.waitForTimeout(LONG_PRESS_MS + 150);
 
   expect(await readRenderedTrackIds(page)).toEqual(before);
@@ -489,8 +490,10 @@ test("keeps the new order after a page reload", async ({ page }) => {
     "track-3",
     "track-1",
   ]);
-  await expect(page.locator(".track-index").nth(0)).toHaveText("01");
-  await expect(page.locator(".track-index").nth(2)).toHaveText("03");
+  // 行内不再有序号列，顺序改由标题锚定（第一行是「第二首」、最后一行是「第一首」）。
+  const titles = panel(page).locator(".track-copy strong");
+  await expect(titles.nth(0)).toHaveText("第二首");
+  await expect(titles.nth(2)).toHaveText("第一首");
 });
 
 /**
@@ -525,8 +528,8 @@ test("a focused row reorders with the keyboard", async ({ page }) => {
   await openTestPage(page);
 
   const row = rows(page).nth(0);
-  // 点击行的边缘留白：落在歌曲主体的内边距上，等同点击歌曲（播放第一首），但不排序。
-  await row.click({ position: { x: 10, y: 10 } });
+  // 落在歌曲主体的内边距上（行首 30px 是复选框，不能点），等同点击歌曲（播放第一首），但不排序。
+  await row.click({ position: { x: 36, y: 10 } });
   await expectRowFocused(page, 0);
   await expect(trackRows(page).nth(0)).toHaveClass(/active/);
 
@@ -596,19 +599,23 @@ test("a real mouse drag on a row reorders the playlist", async ({ page }) => {
   ).toBeVisible();
 });
 
-test("a real mouse click on a row gap focuses it without reordering or playing", async ({
+test("a real mouse click on the row checkbox focuses it without reordering or playing", async ({
   page,
 }) => {
   await openTestPage(page);
   const before = await readRenderedTrackIds(page);
 
-  // 点行的边缘留白（在歌曲主体的内边距上，不是行内按钮）。
+  // 行首 30px 现在是常驻复选框：它只改选择状态，既不播放也不排序。
   await rows(page)
     .nth(0)
     .click({ position: { x: 6, y: 10 } });
 
   await expectRowFocused(page, 0);
   await page.waitForTimeout(LONG_PRESS_MS + 150);
+  await expect(trackRows(page).nth(0)).not.toHaveClass(/active/);
+  await expect(
+    panel(page).getByRole("button", { name: "播放", exact: true }),
+  ).toBeVisible();
   expect(await readRenderedTrackIds(page)).toEqual(before);
   expect(await readStoredTrackIds(page)).toEqual(before);
 });
@@ -792,4 +799,102 @@ test("auto-scrolls up and persists the order after release", async ({
   const atRest = await readScrollState(page);
   await page.waitForTimeout(200);
   expect((await readScrollState(page)).scrollTop).toBe(atRest.scrollTop);
+});
+
+/*
+ * 下面三条补的是「循环清理」这一面：真实鼠标全程静止、拖动被取消、以及列表根本没溢出。
+ * 前三条自动滚动用例用的是合成 pointermove 精确控制坐标，这里刻意换成**只有真实鼠标事件**
+ * 的版本——它是「拖到边缘列表不滚动」这个 bug 最直接的回归测试。
+ */
+test("auto-scrolls with a real mouse held still at the bottom edge", async ({
+  page,
+}) => {
+  await longList.openLongListPage(page);
+  const order = Array.from({ length: longList.LONG_LIST_SIZE }, (_, index) =>
+    longList.longListTrackId(index),
+  );
+  const sourceRow = longList.panelRows(page).nth(0);
+  const box = (await sourceRow.boundingBox())!;
+  const startX = box.x + box.width / 2;
+
+  // 全程真实鼠标：按下 → 等长按生效 → 移到边缘，此后**一次都不再移动指针**。
+  await page.mouse.move(startX, box.y + box.height / 2);
+  await page.mouse.down();
+  await expect(sourceRow).toHaveClass(/reorder-source/, { timeout: 3_000 });
+
+  const geometry = await readScrollState(page);
+  expect(geometry.scrollHeight).toBeGreaterThan(geometry.clientHeight + 60);
+  await page.mouse.move(startX, geometry.bottom - 6);
+  await longList.expectScrollPast(page, 40, "down");
+
+  // 指针静止：帧循环必须自己继续推进，而不是只在 pointermove 时才动一下。
+  const first = (await readScrollState(page)).scrollTop;
+  await longList.expectScrollPast(page, first + 40, "down");
+  // 落点也跟着滚动的列表往下走，已经不在原位了。
+  await expect.poll(() => readDropIndex(page), { timeout: 5_000 }).not.toBe(0);
+
+  await page.mouse.up();
+
+  // 松手后落地：被拖的歌不在首位了（说明落点真的跟着滚动更新过）。
+  await expect.poll(() => readStoredTrackIds(page)).not.toEqual(order);
+  const after = await readStoredTrackIds(page);
+  expect(after.indexOf(order[0])).toBeGreaterThan(0);
+
+  const atRest = await readScrollState(page);
+  await page.waitForTimeout(200);
+  expect((await readScrollState(page)).scrollTop).toBe(atRest.scrollTop);
+});
+
+test("a cancelled drag stops auto-scrolling and commits nothing", async ({
+  page,
+}) => {
+  await longList.openLongListPage(page);
+  const order = Array.from({ length: longList.LONG_LIST_SIZE }, (_, index) =>
+    longList.longListTrackId(index),
+  );
+  const sourceRow = longList.panelRows(page).nth(0);
+  const { clientX } = await startDragAtRowCenter(page, sourceRow);
+
+  const geometry = await readScrollState(page);
+  await holdPointerAt(sourceRow, geometry.bottom - 8);
+  await longList.expectScrollPast(page, 40, "down");
+
+  // 取消（例如系统手势/系统弹窗抢走指针）：必须停帧循环、清拖动视觉、且不落库。
+  await sourceRow.dispatchEvent(
+    "pointercancel",
+    pointerInit(DRAG_POINTER_ID, geometry.bottom - 8, 0),
+  );
+
+  await expect(panel(page).locator(".reorder-source")).toHaveCount(0);
+  await expect(panel(page).locator(".track-drop-indicator")).toHaveCount(0);
+  const atRest = await readScrollState(page);
+  await page.waitForTimeout(250);
+  expect((await readScrollState(page)).scrollTop).toBe(atRest.scrollTop);
+  expect(await readStoredTrackIds(page)).toEqual(order);
+
+  // 收尾：真实鼠标按键还按着，松开以免影响后续用例。
+  await page.mouse.up();
+  await page.mouse.move(clientX, geometry.top + 10);
+});
+
+test("never scrolls when the list does not overflow", async ({ page }) => {
+  // 3 首的短列表：`.track-list` 没有溢出，边缘带里 `edgeScrollStep()` 恒为 0。
+  await openTestPage(page);
+  const sourceRow = rows(page).nth(0);
+  const { clientX } = await startDragAtRowCenter(page, sourceRow);
+
+  const geometry = await readScrollState(page);
+  expect(geometry.scrollHeight).toBeLessThanOrEqual(geometry.clientHeight + 1);
+  expect(geometry.scrollTop).toBe(0);
+
+  // 指针压在列表底边内侧并静止：帧循环要立刻退出（不空转），scrollTop 保持不变。
+  await holdPointerAt(sourceRow, geometry.bottom - 4);
+  await page.waitForTimeout(300);
+  expect((await readScrollState(page)).scrollTop).toBe(0);
+
+  // 仍然能正常落点、松手后不改动顺序（原位附近松开等价于不移动）。
+  await releasePointerAt(sourceRow, geometry.top + 8);
+  await page.mouse.move(clientX, geometry.top + 4);
+  await expect(panel(page).locator(".reorder-source")).toHaveCount(0);
+  expect(await readScrollState(page)).toMatchObject({ scrollTop: 0 });
 });

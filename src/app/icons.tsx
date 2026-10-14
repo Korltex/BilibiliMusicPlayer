@@ -126,6 +126,19 @@ export function ArrowLeft(props: IconProps) {
   );
 }
 
+/**
+ * 勾选标记（歌曲多选复选框的选中态）。
+ *
+ * 几何取自 Lucide `check`：起笔 (20,6) 折到 (9,17)，再收到 (4,12)。
+ */
+export function Check(props: IconProps) {
+  return (
+    <SvgIcon {...props}>
+      <path d="M20 6 9 17l-5-5" />
+    </SvgIcon>
+  );
+}
+
 export function ChevronDown(props: IconProps) {
   return (
     <SvgIcon {...props}>

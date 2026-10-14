@@ -207,17 +207,44 @@ export class AppStore {
   }
 
   removeTrack(trackId: string): void {
+    this.removeTracks([trackId]);
+  }
+
+  /**
+   * 批量删除当前歌单里的歌曲：**一次 `commitLibrary` 写一次存储**（也只会向其它标签页
+   * 广播一次），不会为每首歌各写一遍。
+   *
+   * 只影响当前歌单：其它歌单里即使有同 id 的条目也不动。当前正在播放的歌曲被删掉时，
+   * `reconcileSession()` 会把播放上下文退回「完整视频」——与单首删除完全同一条路径，
+   * 因此不会中断页面上的视频播放。
+   *
+   * 没有任何条目被真正删除时直接返回：不写存储、不产生无意义的 `updatedAt` 变更。
+   */
+  removeTracks(trackIds: readonly string[]): void {
+    const removing = new Set(trackIds);
+    if (removing.size === 0) {
+      return;
+    }
+
     const { activePlaylistId } = this.session.peek();
+    const playlist = this.data
+      .peek()
+      .playlists.find((item) => item.id === activePlaylistId);
+    if (!playlist) {
+      return;
+    }
+
+    const tracks = playlist.tracks.filter((track) => !removing.has(track.id));
+    if (tracks.length === playlist.tracks.length) {
+      return;
+    }
+
     this.commitLibrary((data) => ({
       ...data,
-      playlists: data.playlists.map((playlist) =>
-        playlist.id === activePlaylistId
-          ? {
-              ...playlist,
-              tracks: playlist.tracks.filter((track) => track.id !== trackId),
-              updatedAt: Date.now(),
-            }
-          : playlist,
+      playlists: data.playlists.map((item) =>
+        item.id === activePlaylistId
+          ? { ...item, tracks, updatedAt: Date.now() }
+          : item,
       ),
     }));
   }

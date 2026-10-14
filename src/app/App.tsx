@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import { version } from "../../package.json";
 import {
   BrandLogo,
+  Check,
   ChevronDown,
   Clock3,
   ListMusic,
@@ -13,7 +14,6 @@ import {
   Settings,
   StarPlus,
   Trash2,
-  Volume2,
   X,
 } from "./icons";
 import { ImportFavModal } from "./ImportFavModal";
@@ -40,6 +40,16 @@ import { formatTime, toEndSecond, toStartSecond } from "../core/time";
 import type { PlayMode, Playlist, Track } from "../core/types";
 import { useDraggablePosition } from "./use-draggable-position";
 import { useTrackReorder, type TrackRowBinding } from "./use-track-reorder";
+import {
+  areAllTracksSelected,
+  countSelectedTracks,
+  emptyTrackSelection,
+  pruneTrackSelection,
+  resolveSelectedTrackIds,
+  selectAllTracks,
+  toggleTrackSelection,
+  type TrackSelection,
+} from "./track-selection";
 import { LayoutRepository } from "../storage/layout";
 import type { OpenPanelMode } from "../storage/layout-schema";
 import { SettingsRepository } from "../storage/settings";
@@ -88,6 +98,20 @@ export function App({ store, engine, audioOnly }: AppProps) {
   const [playlistPendingDeletion, setPlaylistPendingDeletion] =
     useState<Playlist>();
   const [trackPendingDeletion, setTrackPendingDeletion] = useState<Track>();
+  /**
+   * 多选状态：**只活在界面里**，不写进 `AppData`（持久化结构没有这个字段）。
+   * 一律按 `track.id` 记录，因此长按排序改变数组下标后选中项依然跟着同一首歌。
+   */
+  const [selection, setSelection] =
+    useState<TrackSelection>(emptyTrackSelection);
+  /**
+   * 批量删除的待确认快照：歌单名与要删的 id 在点「删除」那一刻固定下来，
+   * 弹窗期间下游数据再变也不会让文案或删除目标漂移。
+   */
+  const [batchPendingDeletion, setBatchPendingDeletion] = useState<{
+    playlistName: string;
+    trackIds: string[];
+  }>();
   const launcherDrag = useDraggablePosition("launcher");
   // 播放器面板顶边固定：歌单内容变少时只收起底边，面板不整体上移/下移。
   const panelDrag = useDraggablePosition("panel", { pinDefaultAnchor: true });
@@ -106,6 +130,27 @@ export function App({ store, engine, audioOnly }: AppProps) {
       (playlist) => playlist.id === session.activePlaylistId,
     ) ?? data.playlists[0];
   const nowPlaying = runtime.nowPlaying;
+  // 删除歌曲、切换歌单之后清掉失效 id；没有实际变化时 `pruneTrackSelection` 返回原引用，
+  // `setSelection` 会自然短路，不会触发多余重渲染。
+  useEffect(() => {
+    setSelection((current) =>
+      pruneTrackSelection(current, activePlaylist.tracks),
+    );
+  }, [activePlaylist.id, activePlaylist.tracks]);
+
+  // 批量操作栏与复选框都基于「当前歌单里确实存在」的选中项，天然忽略残留 id。
+  const selectedTrackIds = resolveSelectedTrackIds(
+    selection,
+    activePlaylist.tracks,
+  );
+  const selectedTrackCount = countSelectedTracks(
+    selection,
+    activePlaylist.tracks,
+  );
+  const allTracksSelected = areAllTracksSelected(
+    selection,
+    activePlaylist.tracks,
+  );
   const progressMinimum = nowPlaying.startTime;
   const progressMaximum =
     nowPlaying.endTime ??
@@ -225,6 +270,21 @@ export function App({ store, engine, audioOnly }: AppProps) {
           onConfirm={() => {
             store.removeTrack(trackPendingDeletion.id);
             setTrackPendingDeletion(undefined);
+          }}
+        />
+      )}
+
+      {batchPendingDeletion && (
+        <ConfirmModal
+          title="批量删除歌曲"
+          message={`确定删除“${batchPendingDeletion.playlistName}”中的 ${batchPendingDeletion.trackIds.length} 首歌曲？`}
+          warning="删除后无法恢复。"
+          onCancel={() => setBatchPendingDeletion(undefined)}
+          onConfirm={() => {
+            // 一次批量删除 = 一次存储更新；删完清空选择，操作栏随之消失。
+            store.removeTracks(batchPendingDeletion.trackIds);
+            setSelection(emptyTrackSelection());
+            setBatchPendingDeletion(undefined);
           }}
         />
       )}
@@ -563,17 +623,65 @@ export function App({ store, engine, audioOnly }: AppProps) {
               track={track}
               index={index}
               active={track.id === nowPlaying.trackId}
-              playing={runtime.playing}
+              selected={selection.has(track.id)}
               dropIndex={reorder.dropIndex}
               trackCount={activePlaylist.tracks.length}
               row={reorder.bindRow(track.id)}
               onPlay={() => engine.playTrack(track)}
               onEdit={() => setEditorTrack(track)}
               onDelete={() => setTrackPendingDeletion(track)}
+              onToggleSelect={() =>
+                setSelection((current) =>
+                  toggleTrackSelection(current, track.id),
+                )
+              }
             />
           ))
         )}
       </div>
+
+      {/*
+        批量操作栏只在有选中项时出现，并且是列表的**兄弟节点**（不是浮层）：
+        既不遮挡歌曲，也不会把面板撑出横向溢出。
+      */}
+      {selectedTrackCount > 0 && (
+        <div class="batch-bar" role="group" aria-label="批量操作">
+          <span class="batch-count">已选 {selectedTrackCount} 首</span>
+          <div class="batch-actions">
+            <button
+              class="batch-button"
+              type="button"
+              // 已全选时动作含义会变得含糊（点了没有变化），直接禁用。
+              disabled={allTracksSelected}
+              onClick={() =>
+                setSelection(selectAllTracks(selection, activePlaylist.tracks))
+              }
+            >
+              全选
+            </button>
+            <button
+              class="batch-button"
+              type="button"
+              onClick={() => setSelection(emptyTrackSelection())}
+            >
+              取消
+            </button>
+            <button
+              class="batch-button danger"
+              type="button"
+              onClick={() =>
+                setBatchPendingDeletion({
+                  playlistName: activePlaylist.name,
+                  trackIds: selectedTrackIds,
+                })
+              }
+            >
+              <Trash2 size={14} aria-hidden="true" />
+              删除
+            </button>
+          </div>
+        </div>
+      )}
 
       {overlays}
     </section>
@@ -584,7 +692,8 @@ interface TrackRowProps {
   track: Track;
   index: number;
   active: boolean;
-  playing: boolean;
+  /** 该行是否被多选勾中（只影响界面，不写存储）。 */
+  selected: boolean;
   dropIndex?: number;
   trackCount: number;
   /** `useTrackReorder().bindRow()` 产出的拖动/键盘排序绑定。 */
@@ -592,6 +701,7 @@ interface TrackRowProps {
   onPlay: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  onToggleSelect: () => void;
 }
 
 /**
@@ -604,23 +714,25 @@ function TrackRow({
   track,
   index,
   active,
-  playing,
+  selected,
   dropIndex,
   trackCount,
   row,
   onPlay,
   onEdit,
   onDelete,
+  onToggleSelect,
 }: TrackRowProps) {
   const showTail = dropIndex === trackCount && index === trackCount - 1;
-  const playIcon = active && playing;
 
   return (
     <div
       {...row}
       role="listitem"
       data-track-id={track.id}
-      class={`${row.class} ${active ? "active" : ""}`.trim()}
+      class={`${row.class} ${active ? "active" : ""} ${
+        selected ? "selected" : ""
+      }`.trim()}
     >
       {/* 落点插入线：绝对定位，因此不参与 `.track-row` 的网格布局。 */}
       {(dropIndex === index || showTail) && (
@@ -631,19 +743,28 @@ function TrackRow({
           aria-hidden="true"
         />
       )}
+      {/*
+        常驻复选框：外面套 `<label>` 是为了拿到更大的点击热区；
+        `.row-select` 同时在 `useTrackReorder` 的排除名单里，因此点它不会启动长按拖动。
+      */}
+      <label class="row-select">
+        <input
+          type="checkbox"
+          checked={selected}
+          aria-label={`选择 ${track.title}`}
+          onChange={onToggleSelect}
+        />
+        {/* 自绘方块：原生复选框外观无法对齐设计稿的粉色勾选态。 */}
+        <span class="row-select-box" aria-hidden="true">
+          <Check size={12} />
+        </span>
+      </label>
       <button
         class="track-main"
         type="button"
         title={`播放 ${track.title}`}
         onClick={onPlay}
       >
-        <span class="track-index">
-          {playIcon ? (
-            <Volume2 size={15} aria-hidden="true" />
-          ) : (
-            String(index + 1).padStart(2, "0")
-          )}
-        </span>
         <span class="track-copy">
           <strong>{track.title}</strong>
           <span>

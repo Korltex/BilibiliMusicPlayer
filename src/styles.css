@@ -884,8 +884,8 @@ select:focus-visible {
   position: relative;
   display: grid;
   min-height: 54px;
-  /* 歌曲主体 | 编辑 | 删除 */
-  grid-template-columns: minmax(0, 1fr) 32px 32px;
+  /* 多选 | 歌曲主体 | 编辑 | 删除 */
+  grid-template-columns: 30px minmax(0, 1fr) 32px 32px;
   align-items: stretch;
   border-bottom: 1px solid rgb(56 59 68 / 65%);
   /*
@@ -904,6 +904,127 @@ select:focus-visible {
 .track-row.active {
   box-shadow: inset 3px 0 var(--accent);
   background: #25242a;
+}
+
+/* 勾选态：浅粉色行背景。写在 `.active` 之后，二者同时成立时底色以选中态为准，
+   播放中的左侧强调条仍由 `.active` 的 inset 阴影提供。 */
+.track-row.selected,
+.track-row.selected:hover {
+  background: rgb(251 114 153 / 12%);
+}
+
+/*
+ * 常驻复选框。
+ *
+ * 原生 `<input type="checkbox">` 被透明化后铺满热区，可见方块由 `.row-select-box` 自绘，
+ * 这样勾选态（粉色底 + 白色对勾）与设计稿一致，同时保留原生键盘/读屏语义。
+ */
+.row-select {
+  position: relative;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.row-select input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.row-select-box {
+  display: grid;
+  width: 16px;
+  height: 16px;
+  place-items: center;
+  border: 1.5px solid var(--border);
+  border-radius: 4px;
+  color: transparent;
+  background: transparent;
+  /* 纯装饰：命中测试必须落到下面那个真实 `input` 上，否则自动化/读屏定位会打架。 */
+  pointer-events: none;
+}
+
+.row-select:hover .row-select-box {
+  border-color: var(--muted);
+}
+
+.row-select input:checked + .row-select-box {
+  border-color: var(--accent);
+  color: #fff;
+  background: var(--accent);
+}
+
+/* 键盘可见性：真实 input 被透明化，焦点环要画在自绘方块上。 */
+.row-select input:focus-visible + .row-select-box {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* 批量操作栏：列表的兄弟节点，只占内容高度，不覆盖歌曲也不产生横向溢出。 */
+.batch-bar {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  border-top: 1px solid var(--border);
+  padding: 7px 10px 7px 14px;
+  background: #1c1e23;
+}
+
+.batch-count {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.batch-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.batch-button {
+  display: inline-flex;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 0;
+  border-radius: 6px;
+  padding: 0 10px;
+  color: var(--text);
+  background: var(--surface);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.batch-button:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+
+.batch-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+/* 批量删除：危险动作，用强调色填充，与单首删除的图标按钮区分开。 */
+.batch-button.danger {
+  color: #fff;
+  background: var(--accent);
+}
+
+.batch-button.danger:hover:not(:disabled) {
+  background: var(--accent-hover);
 }
 
 /* 键盘排序时行本身可聚焦（每行一个 Tab 停靠点）。 */
@@ -952,7 +1073,7 @@ select:focus-visible {
 .track-main {
   display: grid;
   min-width: 0;
-  grid-template-columns: 32px minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 7px;
   border: 0;
@@ -963,19 +1084,6 @@ select:focus-visible {
   cursor: pointer;
   /* 歌曲主体也支持长按拖动：触屏上要挡住滚动，否则拖动会被浏览器当成列表滚动。 */
   touch-action: none;
-}
-
-.track-index {
-  display: grid;
-  width: 28px;
-  place-items: center;
-  color: var(--muted);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-}
-
-.track-row.active .track-index {
-  color: var(--accent);
 }
 
 .track-copy {
