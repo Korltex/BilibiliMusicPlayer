@@ -1,4 +1,5 @@
 <div align="center">
+  <img src="images/bilibili-music-player-logo-v2.svg" width="60" alt="logo" />
 
   <h1>Bilibili Music Player B站音乐播放器</h1>
 
@@ -6,7 +7,7 @@
 </div>
 
 <div align="center">
-  <img src="images/Snipaste_2026-10-01.png" width="640" alt="截图" />
+  <img src="images/Snipaste_2026-10-01.png" width="640" alt="screenshoot" />
 </div>
 
 ## 主要功能
