@@ -60,9 +60,9 @@ export class PlayerEngine {
 
   start(): void {
     this.store.start();
-    this.setPlaybackContext(
-      this.shouldUsePlaylistContext() ? "playlist" : "page",
-    );
+    // 先定上下文并补回 URL 标记，再启动媒体定位：媒体一出现就会触发续播，
+    // 而续播会消费 `resumeRequested`——标记必须在它被消费之前补上。
+    this.syncPlaylistContext();
     this.previousSession = this.store.session.peek();
     this.stopStoreObservation = effect(() => {
       const data = this.store.data.value;
@@ -442,10 +442,24 @@ export class PlayerEngine {
    * 会被 route 事件、媒体事件与每秒定时器反复调用，因此不能有副作用累积。
    */
   private reconcilePage(): void {
-    this.setPlaybackContext(
-      this.shouldUsePlaylistContext() ? "playlist" : "page",
-    );
+    this.syncPlaylistContext();
     this.refreshNowPlaying();
+  }
+
+  /**
+   * 同步「是否在歌单播放里」并补回 URL 标记。
+   *
+   * 补标记是幂等的：只加 `bili_music=1`，不动路径与 `bvid`。必须有这一步，因为
+   * B 站把 `/video/BV…?bili_music=1` 客户端重定向成 `/festival/…?bvid=…` 时可能丢掉
+   * 查询参数；恢复标记后，刷新页面或下一次 SPA 跳转仍能识别为歌单播放。
+   */
+  private syncPlaylistContext(): void {
+    const inPlaylistContext = this.shouldUsePlaylistContext();
+    this.setPlaybackContext(inPlaylistContext ? "playlist" : "page");
+
+    if (inPlaylistContext) {
+      this.setPlaylistRouteMarker(true);
+    }
   }
 
   /** 读取页面信息并合成面板条目；结果没变就不写状态、不重建 MediaMetadata。 */
@@ -516,14 +530,28 @@ export class PlayerEngine {
   }
 
   private shouldUsePlaylistContext(): boolean {
-    if (!hasPlaylistRouteMarker()) {
-      return false;
-    }
-
     const track = this.store.findTrack(
       this.store.session.peek().playback.trackId,
     );
-    return Boolean(track && this.isCurrentPage(track));
+    if (!track || !this.isCurrentPage(track)) {
+      return false;
+    }
+
+    // 已经在歌单播放里就保持住：续播完成会清掉 `resumeRequested`，而 B 站改 URL 时
+    // 也可能把标记弄丢，两者都不能让上下文在恢复成功的下一秒退回普通播放。
+    // 只有「当前曲目不再匹配本页」或用户主动退出歌单播放才会回到 page。
+    if (this.isPlaylistContext()) {
+      return true;
+    }
+
+    if (hasPlaylistRouteMarker()) {
+      return true;
+    }
+
+    // 没有标记，但会话里还留着「待恢复」请求：说明这次页面加载就是为了播放这首歌
+    // 而跳转过来的。只认「请求还没被消费」的这一瞬间，普通访问（`resumeRequested: false`）
+    // 不会被误劫持成歌单播放。
+    return this.store.session.peek().playback.resumeRequested;
   }
 
   private setPlaybackContext(playbackContext: PlaybackContext): void {

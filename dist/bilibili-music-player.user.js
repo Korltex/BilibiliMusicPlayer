@@ -13,6 +13,7 @@
 // @license            MIT
 // @match              https://www.bilibili.com/video/*
 // @match              https://www.bilibili.com/list/*
+// @match              https://www.bilibili.com/festival/*
 // @match              https://space.bilibili.com/*
 // @require            https://cdn.jsdelivr.net/npm/preact@10.29.7/dist/preact.min.umd.js#sha256=vWCK8okVrPZcOCL+DYDSHpswNp61X5Ab29I+Khh2Erk=
 // @require            https://cdn.jsdelivr.net/npm/preact@10.29.7/hooks/dist/hooks.umd.js#sha256=XCkjjl3JnfMG1/f/8DhZGjl8/Pq7Wfgfve9D1nCqBWY=
@@ -3836,19 +3837,29 @@
 	}
 	var VIDEO_PATH = /^\/video\//i;
 	var PLAYLIST_PATH = /^\/list\//i;
+	var FESTIVAL_PATH = /^\/festival\//i;
 	var FAVLIST_PATH = /^\/\d+\/favlist\/?$/i;
+	var BVID_QUERY = /^BV[0-9A-Za-z]+$/;
+	function isValidBvidQuery(value) {
+		const trimmed = value?.trim();
+		return Boolean(trimmed && BVID_QUERY.test(trimmed));
+	}
 	function getPageRoute(url = location.href) {
 		const parsed = safeUrl(url);
 		if (!parsed) return "other";
 		const host = parsed.hostname.toLowerCase();
 		if (isBilibiliHost(host) && VIDEO_PATH.test(parsed.pathname)) return "video";
 		if (host === "www.bilibili.com" && PLAYLIST_PATH.test(parsed.pathname)) return "playlist";
+		if (host === "www.bilibili.com" && FESTIVAL_PATH.test(parsed.pathname) && isValidBvidQuery(parsed.searchParams.get("bvid"))) return "festival";
 		if (host === "space.bilibili.com" && isFavlistPath(parsed)) return "favlist";
 		return "other";
 	}
+	function isFestivalPage(url = location.href) {
+		return getPageRoute(url) === "festival";
+	}
 	function isPlaybackPage(url = location.href) {
 		const route = getPageRoute(url);
-		return route === "video" || route === "playlist";
+		return route === "video" || route === "playlist" || route === "festival";
 	}
 	function supportsPlayerUi(url = location.href) {
 		return getPageRoute(url) !== "other";
@@ -3867,16 +3878,17 @@
 		}
 	}
 	var VIDEO_PATH_BVID = /\/video\/(BV[\w]+)/i;
-	var QUERY_BVID = /^BV[0-9A-Za-z]+$/;
 	function getBvid(url = location.href) {
 		const parsed = new URL(url);
 		const fromPath = parsed.pathname.match(VIDEO_PATH_BVID)?.[1];
 		if (fromPath) return fromPath;
-		if (getPageRoute(url) !== "playlist") return;
+		const route = getPageRoute(url);
+		if (route !== "playlist" && route !== "festival") return;
 		const fromQuery = parsed.searchParams.get("bvid")?.trim();
-		return fromQuery && QUERY_BVID.test(fromQuery) ? fromQuery : void 0;
+		return fromQuery && isValidBvidQuery(fromQuery) ? fromQuery : void 0;
 	}
 	function getPageNumber(url = location.href) {
+		if (isFestivalPage(url)) return;
 		const page = Number(new URL(url).searchParams.get("p"));
 		return Number.isInteger(page) && page > 1 ? page : void 0;
 	}
@@ -3889,6 +3901,11 @@
 		"h1[title]",
 		".video-title"
 	];
+	var FESTIVAL_TITLE_SELECTORS = [
+		"#videoToolbar .video-toobar_title",
+		"#videoToolbar .video-toolbar-title",
+		".video-toobar_title"
+	];
 	var UPLOADER_SELECTORS = [
 		".up-name",
 		".up-info-container .username",
@@ -3898,7 +3915,7 @@
 	function readCurrentVideoMetadata() {
 		const bvid = getBvid();
 		if (!bvid) return;
-		const titleElement = readFirstElement(TITLE_SELECTORS);
+		const titleElement = readFirstElement(isFestivalPage() ? [...FESTIVAL_TITLE_SELECTORS, ...TITLE_SELECTORS] : TITLE_SELECTORS);
 		const rawTitle = readText(titleElement?.getAttribute("title")) ?? readText(titleElement?.textContent) ?? readText(document.querySelector("meta[property=\"og:title\"]")?.getAttribute("content")) ?? document.title;
 		const uploader = readText(readFirstElement(UPLOADER_SELECTORS)?.textContent);
 		const cover = readShareCover() ?? readMetaCover() ?? readVideoPoster();
@@ -6713,7 +6730,7 @@ html[${ROOT_ATTRIBUTE}="active"] video.bpx-player-video {
 		}
 		start() {
 			this.store.start();
-			this.setPlaybackContext(this.shouldUsePlaylistContext() ? "playlist" : "page");
+			this.syncPlaylistContext();
 			this.previousSession = this.store.session.peek();
 			this.stopStoreObservation = (0, _preact_signals.effect)(() => {
 				const data = this.store.data.value;
@@ -6943,8 +6960,13 @@ html[${ROOT_ATTRIBUTE}="active"] video.bpx-player-video {
 			}
 		}
 		reconcilePage() {
-			this.setPlaybackContext(this.shouldUsePlaylistContext() ? "playlist" : "page");
+			this.syncPlaylistContext();
 			this.refreshNowPlaying();
+		}
+		syncPlaylistContext() {
+			const inPlaylistContext = this.shouldUsePlaylistContext();
+			this.setPlaybackContext(inPlaylistContext ? "playlist" : "page");
+			if (inPlaylistContext) this.setPlaylistRouteMarker(true);
 		}
 		refreshNowPlaying() {
 			const metadata = readCurrentVideoMetadata();
@@ -6982,9 +7004,11 @@ html[${ROOT_ATTRIBUTE}="active"] video.bpx-player-video {
 			return this.state.peek().playbackContext === "playlist";
 		}
 		shouldUsePlaylistContext() {
-			if (!hasPlaylistRouteMarker()) return false;
 			const track = this.store.findTrack(this.store.session.peek().playback.trackId);
-			return Boolean(track && this.isCurrentPage(track));
+			if (!track || !this.isCurrentPage(track)) return false;
+			if (this.isPlaylistContext()) return true;
+			if (hasPlaylistRouteMarker()) return true;
+			return this.store.session.peek().playback.resumeRequested;
 		}
 		setPlaybackContext(playbackContext) {
 			if (this.state.peek().playbackContext === playbackContext) return;

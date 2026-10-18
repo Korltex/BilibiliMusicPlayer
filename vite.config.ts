@@ -100,7 +100,7 @@ ${thirdPartyNotices}
           "": "A music playlist player for Bilibili videos.",
           en: "A music playlist player for Bilibili videos.",
           "zh-CN": "将喜欢的 Bilibili 视频整理成可播放的音乐歌单。",
-          "zh-TW": "將喜歡的 Bilibili 影片整理成可播放的音樂歌單。"
+          "zh-TW": "將喜歡的 Bilibili 影片整理成可播放的音樂歌單。",
         },
 
         namespace: "bilibili-music-player",
@@ -109,6 +109,9 @@ ${thirdPartyNotices}
         match: [
           "https://www.bilibili.com/video/*",
           "https://www.bilibili.com/list/*",
+          // 专题/活动页（拜年纪等）：播放器内联渲染在页面里，当前视频由 `?bvid=` 指定。
+          // 是否真正挂载由 `page-route.ts` 再按「带合法 bvid」判定。
+          "https://www.bilibili.com/festival/*",
           "https://space.bilibili.com/*",
         ],
         require: requireUrls,

@@ -1,6 +1,6 @@
 import type { Track } from "../core/types";
 import { createId } from "../core/id";
-import { getPageRoute } from "./page-route";
+import { getPageRoute, isFestivalPage, isValidBvidQuery } from "./page-route";
 
 export interface CurrentVideoMetadata {
   bvid: string;
@@ -11,15 +11,14 @@ export interface CurrentVideoMetadata {
 }
 
 const VIDEO_PATH_BVID = /\/video\/(BV[\w]+)/i;
-/** 列表播放页的 BV 来自查询串，必须校验格式：`oid` 之类的参数不是 BV 号。 */
-const QUERY_BVID = /^BV[0-9A-Za-z]+$/;
 
 /**
  * 解析当前页面对应的 BV 号。
  *
  * - 视频页：取路径里的 `/video/BV…`（保持既有行为）。
- * - 列表播放页（`www.bilibili.com/list/ml…`）：当前视频由查询串的 `bvid` 指定，
- *   路径里没有 BV；参数缺失或格式非法时安全返回 `undefined`。
+ * - 列表播放页（`www.bilibili.com/list/ml…`）与专题页（`www.bilibili.com/festival/…`）：
+ *   当前视频由查询串的 `bvid` 指定，路径里没有 BV；参数缺失或格式非法时安全返回 `undefined`
+ *   （专题页的 `spm_id_from`、`oid` 等参数都不是 BV 号）。
  * - 其它页面：返回 `undefined`。
  */
 export function getBvid(url = location.href): string | undefined {
@@ -29,16 +28,29 @@ export function getBvid(url = location.href): string | undefined {
     return fromPath;
   }
 
-  // 只有路由认可的列表播放页才读查询串，避免在任意页面上把 `?bvid=` 当成视频。
-  if (getPageRoute(url) !== "playlist") {
+  // 只有路由认可的播放页才读查询串，避免在任意页面上把 `?bvid=` 当成视频。
+  const route = getPageRoute(url);
+  if (route !== "playlist" && route !== "festival") {
     return undefined;
   }
 
   const fromQuery = parsed.searchParams.get("bvid")?.trim();
-  return fromQuery && QUERY_BVID.test(fromQuery) ? fromQuery : undefined;
+  return fromQuery && isValidBvidQuery(fromQuery) ? fromQuery : undefined;
 }
 
+/**
+ * 当前分 P。
+ *
+ * 专题页刻意忽略 `?p=`：B 站的活动页是「一个 bvid 一个视频」，播放哪个 cid 由活动配置决定，
+ * 查询串里的 `p` 既不被播放器采用，也不一定反映正在播放的分 P。若拿它当分 P，
+ * 从 `/video/BV…?p=2` 重定向过来时会把整段视频当成第 2 分 P，续播就会跳到错误的位置。
+ * 因此专题页一律按第 1 分 P 处理（与 `isCurrentPage()` 的 `page ?? 1` 对齐）。
+ */
 export function getPageNumber(url = location.href): number | undefined {
+  if (isFestivalPage(url)) {
+    return undefined;
+  }
+
   const page = Number(new URL(url).searchParams.get("p"));
   return Number.isInteger(page) && page > 1 ? page : undefined;
 }
@@ -51,6 +63,17 @@ const TITLE_SELECTORS = [
   "h1.video-title",
   "h1[title]",
   ".video-title",
+] as const;
+
+/**
+ * 专题页（拜年纪等活动页）没有 `og:title`、也没有 `h1.video-title`：
+ * 当前视频标题只出现在播放器下方工具条里（B 站自己的类名就是 `video-toobar_title`，拼写如此）。
+ * 不读它的话，标题会退化到 `document.title`，也就是活动名而不是视频名。
+ */
+const FESTIVAL_TITLE_SELECTORS = [
+  "#videoToolbar .video-toobar_title",
+  "#videoToolbar .video-toolbar-title",
+  ".video-toobar_title",
 ] as const;
 
 const UPLOADER_SELECTORS = [
@@ -66,7 +89,12 @@ export function readCurrentVideoMetadata(): CurrentVideoMetadata | undefined {
     return undefined;
   }
 
-  const titleElement = readFirstElement(TITLE_SELECTORS);
+  // 专题页的标题只在播放器工具条里，必须先于通用的 h1/og:title 兜底去读。
+  const titleSelectors: readonly string[] = isFestivalPage()
+    ? [...FESTIVAL_TITLE_SELECTORS, ...TITLE_SELECTORS]
+    : TITLE_SELECTORS;
+
+  const titleElement = readFirstElement(titleSelectors);
   const rawTitle =
     readText(titleElement?.getAttribute("title")) ??
     readText(titleElement?.textContent) ??

@@ -13,6 +13,7 @@
 // @license            MIT
 // @match              https://www.bilibili.com/video/*
 // @match              https://www.bilibili.com/list/*
+// @match              https://www.bilibili.com/festival/*
 // @match              https://space.bilibili.com/*
 // @require            https://cdn.jsdelivr.net/npm/preact@10.29.7/dist/preact.min.umd.js#sha256=vWCK8okVrPZcOCL+DYDSHpswNp61X5Ab29I+Khh2Erk=
 // @require            https://cdn.jsdelivr.net/npm/preact@10.29.7/hooks/dist/hooks.umd.js#sha256=XCkjjl3JnfMG1/f/8DhZGjl8/Pq7Wfgfve9D1nCqBWY=

@@ -24,9 +24,13 @@
 
 ## 文档
 
-- `docs/AI-CONTEXT.md`：面向 AI 代理的项目自然语言说明书（是什么、模块地图、数据模型、关键机制、硬约束、改动检查清单）。
-- `docs/architecture.md`：架构设计与运行流程。
-- `docs/testing.md`：单元测试、浏览器测试和发布前手工检查。
+- [项目规则](AGENTS.md)：项目资料读取、写入、验证与交接规则。
+- [项目索引](PROJECT_INDEX.md)：按任务定位相关文件和专题章节。
+- [架构说明](docs/architecture.md)：模块职责与运行流程。
+- [测试说明](docs/testing.md)：单元测试、浏览器测试和发布前手工检查。
+- [AI 项目上下文](docs/AI-CONTEXT.md)：面向 AI 的长参考，按需定位相关标题。
+- [当前状态](docs/context/NOW.md)、[目录与配置映射](docs/context/MAP.md)、[操作入口](docs/context/RUNBOOK.md)。
+- [决策记录](docs/context/DECISIONS.md)、[风险记录](docs/context/RISKS.md)和[历史索引](docs/context/history/README.md)。
 
 ## 注意事项
 
