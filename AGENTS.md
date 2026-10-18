@@ -32,3 +32,7 @@
 - 文档任务核对本次改动及其直接关联链接；代码任务按适用测试和运行说明选择验证范围。
 - 状态有实质变化时更新现有 [docs/context/NOW.md](docs/context/NOW.md) 条目；确认长期决策时更新 [docs/context/DECISIONS.md](docs/context/DECISIONS.md)；仅把有证据的问题写入 [docs/context/RISKS.md](docs/context/RISKS.md)。
 - 汇报改动文件、沿用资料、验证证据和仍待核实的信息，不把文档中的步骤描述为已经执行。
+
+## 补充
+- 不允许主动提交 commit 到 GitHub，需申请授权。
+- 若有任何问题或建议可以提前提出，解决所有分歧和阻塞后再执行任务。
