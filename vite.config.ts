@@ -107,8 +107,11 @@ ${thirdPartyNotices}
         author: "Korltex",
         license: "MIT",
         match: [
-          "https://www.bilibili.com/video/*",
-          "https://www.bilibili.com/list/*",
+          // 首页：只挂悬浮按钮管理歌单（页面没有播放器，点歌单里的歌曲会导航到视频页）。
+          // `@match` 的 path 是「路径 + 查询串」一起匹配（见 MDN Match patterns），
+          // 所以根路径必须同时列出无查询串与 `?*` 两种形式，否则 `/?spm_id_from=...`
+          // 这类带跟踪参数的首页不会被注入；`#` 片段不参与匹配，无需另列。
+          "https://www.bilibili.com/*",
           // 专题/活动页（拜年纪等）：播放器内联渲染在页面里，当前视频由 `?bvid=` 指定。
           // 是否真正挂载由 `page-route.ts` 再按「带合法 bvid」判定。
           "https://www.bilibili.com/festival/*",

@@ -1114,14 +1114,25 @@ test("mounts, controls media, and saves a track", async ({
   });
 
   await page.setViewportSize({ width: 390, height: 844 });
-  const panelBox = await page
-    .getByRole("region", { name: "Bilibili 音乐播放器" })
-    .boundingBox();
-  expect(panelBox).not.toBeNull();
-  expect(panelBox!.x).toBeGreaterThanOrEqual(0);
-  expect(panelBox!.y).toBeGreaterThanOrEqual(0);
-  expect(panelBox!.x + panelBox!.width).toBeLessThanOrEqual(390);
-  expect(panelBox!.y + panelBox!.height).toBeLessThanOrEqual(844);
+  // 视口变化后的钳制是「resize 事件 → Preact 重渲染」的异步过程，直接读一次
+  // boundingBox 会撞上还没重渲染的那一帧（本用例曾因此间歇性失败），所以轮询等它落定。
+  await expect
+    .poll(async () => {
+      const box = await page
+        .getByRole("region", { name: "Bilibili 音乐播放器" })
+        .boundingBox();
+      if (!box) {
+        return false;
+      }
+
+      return (
+        box.x >= 0 &&
+        box.y >= 0 &&
+        box.x + box.width <= 390.5 &&
+        box.y + box.height <= 844.5
+      );
+    })
+    .toBe(true);
   await page.screenshot({
     path: testInfo.outputPath("player-panel-mobile.png"),
     fullPage: true,

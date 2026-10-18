@@ -4,15 +4,14 @@
 // @name:zh-CN         Bilibili 音乐播放器
 // @name:zh-TW         Bilibili 音樂播放器
 // @namespace          bilibili-music-player
-// @version            0.1.9
+// @version            0.1.10
 // @author             Korltex
 // @description        A music playlist player for Bilibili videos.
 // @description:en     A music playlist player for Bilibili videos.
 // @description:zh-CN  将喜欢的 Bilibili 视频整理成可播放的音乐歌单。
 // @description:zh-TW  將喜歡的 Bilibili 影片整理成可播放的音樂歌單。
 // @license            MIT
-// @match              https://www.bilibili.com/video/*
-// @match              https://www.bilibili.com/list/*
+// @match              https://www.bilibili.com/*
 // @match              https://www.bilibili.com/festival/*
 // @match              https://space.bilibili.com/*
 // @require            https://cdn.jsdelivr.net/npm/preact@10.29.7/dist/preact.min.umd.js#sha256=vWCK8okVrPZcOCL+DYDSHpswNp61X5Ab29I+Khh2Erk=
@@ -1801,7 +1800,7 @@
 	].join("\n");
 	var _style = (b, a = document.createElement("style")) => (a.append(b), a);
 	var styles_css_default = _style(styles_default);
-	var version = "0.1.9";
+	var version = "0.1.10";
 	function SvgIcon({ size = 24, strokeWidth = 2, children, ...props }) {
 		return (0, preact_jsx_runtime.jsx)("svg", {
 			xmlns: "http://www.w3.org/2000/svg",
@@ -3820,7 +3819,7 @@
 										(0, preact_jsx_runtime.jsx)("dt", { children: "应用" }),
 										(0, preact_jsx_runtime.jsx)("dd", { children: "Bilibili 音乐播放器" }),
 										(0, preact_jsx_runtime.jsx)("dt", { children: "版本" }),
-										(0, preact_jsx_runtime.jsx)("dd", { children: "0.1.9" }),
+										(0, preact_jsx_runtime.jsx)("dd", { children: "0.1.10" }),
 										(0, preact_jsx_runtime.jsx)("dt", { children: "许可" }),
 										(0, preact_jsx_runtime.jsx)("dd", { children: "MIT License" }),
 										(0, preact_jsx_runtime.jsx)("dt", { children: "存储" }),
@@ -3838,6 +3837,7 @@
 	var VIDEO_PATH = /^\/video\//i;
 	var PLAYLIST_PATH = /^\/list\//i;
 	var FESTIVAL_PATH = /^\/festival\//i;
+	var HOME_PATHS = new Set(["/", "/index.html"]);
 	var FAVLIST_PATH = /^\/\d+\/favlist\/?$/i;
 	var BVID_QUERY = /^BV[0-9A-Za-z]+$/;
 	function isValidBvidQuery(value) {
@@ -3852,6 +3852,7 @@
 		if (host === "www.bilibili.com" && PLAYLIST_PATH.test(parsed.pathname)) return "playlist";
 		if (host === "www.bilibili.com" && FESTIVAL_PATH.test(parsed.pathname) && isValidBvidQuery(parsed.searchParams.get("bvid"))) return "festival";
 		if (host === "space.bilibili.com" && isFavlistPath(parsed)) return "favlist";
+		if (host === "www.bilibili.com" && HOME_PATHS.has(parsed.pathname.toLowerCase())) return "home";
 		return "other";
 	}
 	function isFestivalPage(url = location.href) {
@@ -3860,6 +3861,9 @@
 	function isPlaybackPage(url = location.href) {
 		const route = getPageRoute(url);
 		return route === "video" || route === "playlist" || route === "festival";
+	}
+	function isFavlistPage(url = location.href) {
+		return getPageRoute(url) === "favlist";
 	}
 	function supportsPlayerUi(url = location.href) {
 		return getPageRoute(url) !== "other";
@@ -5176,7 +5180,7 @@
 					event.preventDefault();
 					return;
 				}
-				if (!isPlaybackPage()) {
+				if (isFavlistPage()) {
 					setDisplayMode("full");
 					setImportOpen(true);
 					return;
@@ -6845,6 +6849,11 @@ html[${ROOT_ATTRIBUTE}="active"] video.bpx-player-video {
 			if (track) this.playTrack(track);
 		}
 		handleMediaChange(media, reason) {
+			if (!isPlaybackPage()) {
+				if (this.media) this.bindMedia(null);
+				if (reason === "route") this.reconcilePage();
+				return;
+			}
 			if (media !== this.media) this.bindMedia(media);
 			if (reason === "route") this.reconcilePage();
 			if (media && this.isPlaylistContext() && this.store.session.peek().playback.resumeRequested) this.resumeRequestedTrack();

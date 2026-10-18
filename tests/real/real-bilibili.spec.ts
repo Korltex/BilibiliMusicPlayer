@@ -98,6 +98,44 @@ test("mounts on a real Bilibili festival page and binds its inline player", asyn
   });
 });
 
+test("mounts and opens the player from the real Bilibili homepage", async ({
+  page,
+}, testInfo) => {
+  await installMemoryGm(page);
+
+  await page.goto("https://www.bilibili.com/", {
+    waitUntil: "domcontentloaded",
+    timeout: 45_000,
+  });
+
+  await injectBuiltUserscript(page);
+
+  const openButton = page.getByRole("button", {
+    name: "打开 Bilibili 音乐播放器",
+  });
+  await expect(openButton).toBeVisible({ timeout: 15_000 });
+  await openButton.click();
+  await expect(
+    page.getByRole("region", { name: "Bilibili 音乐播放器" }),
+  ).toBeVisible();
+
+  // 首页没有页面播放器：不能把卡片 hover 预览的 <video> 当成当前视频。
+  await expect(
+    page.getByRole("button", { name: "播放", exact: true }),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: "将当前视频添加到歌单" }),
+  ).toBeDisabled();
+
+  // 歌单区域在首页可用（默认歌单至少存在）。
+  await expect(page.getByLabel("当前歌单", { exact: true })).toBeVisible();
+
+  await page.screenshot({
+    path: testInfo.outputPath("real-home.png"),
+    fullPage: false,
+  });
+});
+
 test("requests audio but not advertised video media in audio-only mode", async ({
   page,
 }) => {

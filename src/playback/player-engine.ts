@@ -6,6 +6,7 @@ import {
   readCurrentVideoMetadata,
 } from "../bili/metadata";
 import { MediaLocator, type MediaChangeReason } from "../bili/media-locator";
+import { isPlaybackPage } from "../bili/page-route";
 import { VideoCoverCache } from "../bili/video-cover";
 import { clamp } from "../core/time";
 import type {
@@ -242,6 +243,22 @@ export class PlayerEngine {
     media: HTMLMediaElement | null,
     reason: MediaChangeReason,
   ): void {
+    // 首页等没有页面播放器的路由不绑定任何媒体：首页卡片鼠标悬停会动态插入一个
+    // **正在播放的预览 <video>**，一旦绑定，进度条、播放键与「将当前视频添加到歌单」
+    // 都会指到这个 248×140 的预览上（它没有 bvid，根本不该被当成"当前视频"）。
+    // 路由切回视频页时 MediaLocator 会带着候选媒体再通知一次，届时常规路径会重新绑定。
+    if (!isPlaybackPage()) {
+      if (this.media) {
+        this.bindMedia(null);
+      }
+
+      if (reason === "route") {
+        this.reconcilePage();
+      }
+
+      return;
+    }
+
     if (media !== this.media) {
       this.bindMedia(media);
     }

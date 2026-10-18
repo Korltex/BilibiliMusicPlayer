@@ -3,6 +3,7 @@ import {
   getPageRoute,
   isFestivalPage,
   isFavlistPage,
+  isHomePage,
   isPlaybackPage,
   isPlaylistPage,
   isVideoPage,
@@ -50,8 +51,7 @@ describe("page route", () => {
     expect(getPageRoute("https://m.bilibili.com/list/ml1")).toBe("other");
     // 其他站点的 /list/ 路径不受影响。
     expect(getPageRoute("https://example.com/list/ml1")).toBe("other");
-    // 其它 www 页面依旧不匹配。
-    expect(getPageRoute("https://www.bilibili.com/")).toBe("other");
+    // 其它 www 页面依旧不匹配（首页单独由 home 路由处理）。
     expect(getPageRoute("https://www.bilibili.com/bangumi/play/ep1")).toBe(
       "other",
     );
@@ -164,7 +164,38 @@ describe("page route", () => {
     // 收藏页没有播放器：不能当作播放页（否则点悬浮按钮会走错分支）。
     expect(isPlaybackPage("https://space.bilibili.com/1/favlist")).toBe(false);
     expect(isPlaybackPage("https://space.bilibili.com/1/video")).toBe(false);
+    // 首页同样没有播放器：它只挂悬浮按钮管理歌单（点歌单里的歌曲会导航到视频页），
+    // 因此不能算播放页——否则会在首页安装纯音频拦截器并绑定卡片 hover 预览的 <video>。
     expect(isPlaybackPage("https://www.bilibili.com/")).toBe(false);
+  });
+
+  it("recognizes the Bilibili homepage", () => {
+    expect(getPageRoute("https://www.bilibili.com/")).toBe("home");
+    // 没有尾斜杠、查询串与 hash 都要归一化到同一个路由。
+    expect(getPageRoute("https://www.bilibili.com")).toBe("home");
+    expect(
+      getPageRoute("https://www.bilibili.com/?spm_id_from=333.1007.0.0"),
+    ).toBe("home");
+    // 跟踪参数不影响路由：这些就是 B 站各入口实际带过来的首页地址。
+    expect(
+      getPageRoute("https://www.bilibili.com/?spm_id_from=333.788.0.0"),
+    ).toBe("home");
+    expect(getPageRoute("https://www.bilibili.com/?msource=1&bbid=2")).toBe(
+      "home",
+    );
+    expect(isHomePage("https://www.bilibili.com/#/")).toBe(true);
+    // 旧版首页入口 `/index.html` 也是首页（查询串同样无关）。
+    expect(getPageRoute("https://www.bilibili.com/index.html")).toBe("home");
+    expect(
+      getPageRoute("https://www.bilibili.com/index.html?from_spmid=1"),
+    ).toBe("home");
+
+    // 只有 www 的根路径与 `/index.html` 算首页：apex 不在 @match 里，子路径也不是首页。
+    expect(getPageRoute("https://bilibili.com/")).toBe("other");
+    expect(getPageRoute("https://m.bilibili.com/")).toBe("other");
+    expect(getPageRoute("https://www.bilibili.com/main/")).toBe("other");
+    expect(getPageRoute("https://www.bilibili.com/anime/")).toBe("other");
+    expect(getPageRoute("https://example.com/")).toBe("other");
   });
 
   it("supports the player UI on every mounted route", () => {
@@ -182,7 +213,12 @@ describe("page route", () => {
       false,
     );
     expect(supportsPlayerUi("https://space.bilibili.com/1/favlist")).toBe(true);
-    expect(supportsPlayerUi("https://www.bilibili.com/")).toBe(false);
+    // 首页也挂 UI（悬浮按钮 + 歌单管理），只是没有页面播放器。
+    expect(supportsPlayerUi("https://www.bilibili.com/")).toBe(true);
     expect(supportsPlayerUi("https://bilibili.com/list/ml1")).toBe(false);
+    expect(supportsPlayerUi("https://www.bilibili.com/index.html")).toBe(true);
+    expect(
+      supportsPlayerUi("https://www.bilibili.com/?spm_id_from=333.788.0.0"),
+    ).toBe(true);
   });
 });
