@@ -97,4 +97,78 @@ describe("playback session", () => {
       updatedAt: 200,
     });
   });
+
+  it("starts a new session on the persisted last used playlist", () => {
+    const data = createDefaultData(100);
+    data.playlists.push({
+      id: "playlist-second",
+      name: "第二张",
+      tracks: [],
+      createdAt: 100,
+      updatedAt: 100,
+    });
+    data.activePlaylistId = "playlist-second";
+
+    const session = createPlaybackSession(data, 200);
+
+    // 新会话（没有 sessionStorage）只能靠共享数据恢复，且不自动播放。
+    expect(session.activePlaylistId).toBe("playlist-second");
+    expect(session.playback).toEqual({
+      playlistId: "playlist-second",
+      currentTime: 0,
+      resumeRequested: false,
+      updatedAt: 200,
+    });
+  });
+
+  it("falls back to the persisted playlist when the session playlist was deleted", () => {
+    const data = createDefaultData(100);
+    data.playlists.push({
+      id: "playlist-second",
+      name: "第二张",
+      tracks: [],
+      createdAt: 100,
+      updatedAt: 100,
+    });
+    data.activePlaylistId = "playlist-second";
+
+    const session = migratePlaybackSession(
+      {
+        activePlaylistId: "playlist-deleted",
+        playMode: "list-loop",
+        playback: {
+          playlistId: "playlist-deleted",
+          currentTime: 0,
+          resumeRequested: false,
+          updatedAt: 100,
+        },
+      },
+      data,
+      200,
+    );
+
+    expect(session.activePlaylistId).toBe("playlist-second");
+  });
+
+  it("falls back to the first available playlist when nothing recorded is valid", () => {
+    const data = createDefaultData(100);
+    data.activePlaylistId = "playlist-deleted";
+
+    const session = migratePlaybackSession(
+      {
+        activePlaylistId: "playlist-deleted-too",
+        playMode: "list-loop",
+        playback: {
+          playlistId: "playlist-deleted-too",
+          currentTime: 0,
+          resumeRequested: false,
+          updatedAt: 100,
+        },
+      },
+      data,
+      200,
+    );
+
+    expect(session.activePlaylistId).toBe(data.playlists[0].id);
+  });
 });

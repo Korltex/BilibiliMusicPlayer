@@ -1,27 +1,27 @@
 # 当前状态
 
-> 记录范围：当前检出工作区；核对日期：2026-10-18。本文不代表安装、用户验收或发布状态。
+> 记录范围：当前检出工作区；核对日期：2026-10-26。本文不代表安装、用户验收或发布状态。
 
 ## 当前目标
 
-最近一轮已确认的产品目标是「B 站首页也能打开播放器」：在 `https://www.bilibili.com/` 显示悬浮按钮，点击后可以查看、切换、新建、删除、编辑歌单与歌曲；点歌单里的歌曲跳转到对应视频页并按既有逻辑播放。视频页、列表播放页、专题页与空间收藏页的既有行为保持不变。任务未授权提交或发布。
+当前已确认的产品目标是「歌单恢复」：刷新、关闭播放器、关闭标签页或重开浏览器后，恢复上次使用的歌单，并在选择器与曲目列表里体现；自然播放结束、切歌失败、关闭页面都不得把歌单重置为默认歌单；恢复只恢复歌单选择，不自动播放，且不得破坏既有的跨页面续播。选择口径为**全局记住**（`AppData.activePlaylistId`），并接受一次写入与跨标签广播。任务未授权提交或发布。
 
 ## 进展
 
-- 路由新增 `home`（`www.bilibili.com` 的根路径与旧版入口 `/index.html`，查询串与 hash 不影响判定）：`supportsPlayerUi(home) === true`（挂 UI）、`isPlaybackPage(home) === false`（不装纯音频拦截器、不绑定媒体）。见 [page-route.ts](../../src/bili/page-route.ts)。
-- `@match` 扩为 8 条：首页 4 条（`/`、`/?*`、`/index.html`、`/index.html?*`）+ 原有的 video / list / festival / space。补 `?*` 是因为 `@match` 的 path 与**查询串整体匹配**（MDN Match patterns），`https://www.bilibili.com/` 不匹配 `/?spm_id_from=333.788.0.0`；构建审计 `scripts/audit-userscript.mjs` 的精确名单已同步，`dist/` 已重新构建，未改版本号、未提交。
-- 首页不绑定页面媒体：`PlayerEngine.handleMediaChange()` 在非播放页直接 `bindMedia(null)`。现场取证（真实首页）显示初始 DOM 没有任何 `<video>`，但鼠标悬停视频卡片会插入一个正在播放的预览 `<video>`（约 248×140、blob 源）；若不拦截，面板进度/播放键与「将当前视频添加到歌单」都会指向该预览。见 [player-engine.ts](../../src/playback/player-engine.ts)。
-- 悬浮按钮分支调整：空间收藏页仍直接进完整面板并打开导入弹窗；首页改走正常的 `showPanel(resolveOpenMode(...))`，按用户偏好打开（偏好为极简时先出极简条，可再展开）。见 [App.tsx](../../src/app/App.tsx)。
-- 新增测试：`tests/page-route.test.ts` 的首页路由用例（含 `/?spm_id_from=…`、`?msource=…`、`/index.html?…`）、[tests/e2e/home-page.spec.ts](../../tests/e2e/home-page.spec.ts) 10 条（新增「带跟踪参数的首页」与「旧版 `/index.html` 首页」挂载用例，`openHome` 改为按 origin + pathname 路由以便覆盖任意首页形态）、真实站点用例（首页 + 专题页）见 [tests/real/real-bilibili.spec.ts](../../tests/real/real-bilibili.spec.ts)。
+- 根因：`selectPlaylist()` 只写 `sessionStorage` 会话，从不写 `AppData.activePlaylistId`，因此新会话（新标签页 / 重开浏览器）只能回落到默认歌单；同标签页刷新本来就正常。
+- 修改 [store.ts](../../src/app/store.ts)：`selectPlaylist()` 在共享值不同时用一次 `commitLibrary()` 写入 `activePlaylistId`（相同则跳过，避免多余写入与广播），随后重置本标签页会话；`createPlaylist()` / `importPlaylist()` 把「歌单写入 + 恢复目标」合并成同一次 `commitLibrary()`；`removePlaylist()` 在删除后修正悬空的 `activePlaylistId`（回退到第一张剩余歌单）。新增私有助手 `applyActivePlaylist()` / `resetSessionPlaylist()`。
+- 未改动存储结构与 userscript 元数据：沿用既有 `AppData.activePlaylistId` 字段，无迁移。恢复取值顺序仍由 `resolvePlaylistId()` 决定：会话 → 共享 `activePlaylistId` → 第一张歌单。
+- 新增 [playlist-restore.spec.ts](../../tests/e2e/playlist-restore.spec.ts) 6 条 e2e（选择持久化、同标签页刷新、新标签页、关闭标签页重开、记录歌单被删的回退、既有 `resumeRequested` 续播不被破坏），并在 [playback-session.test.ts](../../tests/playback-session.test.ts) 增加 3 条单元测试（新会话用共享记录、会话歌单被删时回退、全部无效时回退第一张）。
+- 文档同步：[architecture.md](../architecture.md) 存储与多标签页两节改为「播放状态与媒体控制各标签页独立，当前歌单选择全局共享」；[AI-CONTEXT.md](../AI-CONTEXT.md) §6.6 存储表补 `activePlaylistId` 行与恢复顺序说明。
 
 ## 验证
 
-- `npm run build` 通过（`tsc --noEmit` + vite build + 构建审计）；`dist/bilibili-music-player.user.js` 头部为 8 条 `@match`（首页 4 条在首位）。
-- 单元测试 **200/200**、默认 e2e **143/143**（其中首页用例 10 条）、真实站点测试 **4/4**（`playwright.real.config.ts`：视频页、专题页、首页、纯音频）。
-- 首页「不绑定预览媒体」这条 e2e 做过红→绿验证：临时从构建产物里去掉该判断后，该用例失败（播放键变为可用）。
-- `?spm_id_from=…` 首页的修复依据是 MDN 的 Match patterns 规范（path 含查询串、`#` 片段忽略），并已用单元/e2e 锁住；`@match` 本身只有在 Tampermonkey 里才会真正生效，自动化测试只能验证运行期路由与元数据审计。
-- 回归过程中发现 `player.spec.ts` 的「视口缩到 390px 后面板不越界」断言是**竞态**（读 boundingBox 早于钳制重渲染，隔离重跑 3 次有 2 次失败），已改成 `expect.poll` 等待钳制落定，修后 `--repeat-each=3` 稳定通过；这是测试取样问题，不是本次功能改动引入的行为回归。
-- 上述验证均为本地/真实站点自动化检查，不代表用户验收或发布。
+- `npm run build` 通过（`tsc --noEmit` + vite build + 构建审计）：`[userscript audit] passed: 5 pinned runtimes, 235117 bytes, longest line 730`。
+- 单元测试 **203/203** 通过（新增 3 条）；类型检查 `tsc --noEmit` 通过。
+- 默认 e2e **149/149 全部通过**。
+- 新增的 6 条 e2e 做过红→绿验证：`git stash` 掉 `src/app/store.ts` 后重建，第 1/3/4/5 条失败（4 失败 2 通过），恢复改动后 6/6 通过。
+- 版本号断言做过陈旧构建验证：把 `dist` 里的内联 `var version` 临时改成 `0.1.9` 后，该用例失败；还原后通过。这条断言用于发现「改了版本号但忘记重新构建 dist」。
+- 上述验证均为本地自动化检查，不代表用户验收或发布。
 
 ## 阻塞
 
@@ -29,8 +29,8 @@
 
 ## 下一步
 
-- 等待用户验收首页体验；如需发布，需另行授权（版本号、提交与发布动作都未执行）。
-- 已知边界：专题页若把播放器放在 iframe 里仍不接管；首页不提供播放能力（只能管理歌单并跳转到视频页）。
+- 等待用户验收歌单恢复行为；如需发布（版本号、提交、推送）需另行授权。
+- 已知边界：多标签页共享「上次使用的歌单」为最后写入者生效，其它标签页的选择器在下一次新会话时才跟随。
 
 ## 证据入口
 

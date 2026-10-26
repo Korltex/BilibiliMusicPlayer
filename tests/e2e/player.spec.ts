@@ -264,10 +264,7 @@ async function readPlaybackSession(page: Page): Promise<PlaybackSession> {
   });
 }
 
-test("displays the 0.1.9 package version in the full player", async ({
-  page,
-}) => {
-  expect(packageVersion).toBe("0.1.9");
+test("displays the package version in the full player", async ({ page }) => {
   await openMinimalPlayerTestPage(page);
   await page.getByRole("button", { name: "打开 Bilibili 音乐播放器" }).click();
 

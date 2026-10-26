@@ -75,11 +75,14 @@ export class AppStore {
       updatedAt: now,
     };
 
-    this.commitLibrary((data) => ({
-      ...data,
-      playlists: [...data.playlists, playlist],
-    }));
-    this.selectPlaylist(playlist.id);
+    // 新建即选中：歌单数组与「上次使用的歌单」一次写入，避免同一次操作写两遍存储。
+    this.commitLibrary((data) =>
+      this.applyActivePlaylist(
+        { ...data, playlists: [...data.playlists, playlist] },
+        playlist.id,
+      ),
+    );
+    this.resetSessionPlaylist(playlist.id);
   }
 
   importPlaylist(playlist: Playlist): void {
@@ -87,15 +90,21 @@ export class AppStore {
       .peek()
       .playlists.some((item) => item.id === playlist.id);
 
-    this.commitLibrary((data) => ({
-      ...data,
-      playlists: exists
-        ? data.playlists.map((item) =>
-            item.id === playlist.id ? playlist : item,
-          )
-        : [...data.playlists, playlist],
-    }));
-    this.selectPlaylist(playlist.id);
+    // 导入即选中：与新建同一条路径，歌单写入与恢复目标一次落盘。
+    this.commitLibrary((data) =>
+      this.applyActivePlaylist(
+        {
+          ...data,
+          playlists: exists
+            ? data.playlists.map((item) =>
+                item.id === playlist.id ? playlist : item,
+              )
+            : [...data.playlists, playlist],
+        },
+        playlist.id,
+      ),
+    );
+    this.resetSessionPlaylist(playlist.id);
   }
 
   /**
@@ -141,35 +150,52 @@ export class AppStore {
     }));
   }
 
+  /**
+   * 删除歌单：同时把共享数据里的「上次使用的歌单」修正到仍然存在的歌单上。
+   *
+   * 删除的正是当前记录的那张时，回退到剩下的第一张（与 `reconcileSession()` 的
+   * 会话回退口径一致），避免持久化里留下一个指向已删除歌单的悬空 id。
+   */
   removePlaylist(playlistId: string): void {
     const current = this.data.peek();
     if (current.playlists.length <= 1) {
       return;
     }
 
-    this.commitLibrary((data) => ({
-      ...data,
-      playlists: data.playlists.filter(
+    this.commitLibrary((data) => {
+      const playlists = data.playlists.filter(
         (playlist) => playlist.id !== playlistId,
-      ),
-    }));
+      );
+      const activePlaylistId = playlists.some(
+        (playlist) => playlist.id === data.activePlaylistId,
+      )
+        ? data.activePlaylistId
+        : playlists[0].id;
+
+      return { ...data, playlists, activePlaylistId };
+    });
   }
 
+  /**
+   * 切换当前歌单。
+   *
+   * 除了本标签页会话，还要把「上次使用的歌单」写回共享数据：`sessionStorage`
+   * 只活到标签页关闭，新标签页/重开浏览器只能靠共享数据里的 `activePlaylistId`
+   * 恢复。两者在同一次操作里更新，恢复目标不会比会话慢一拍。
+   */
   selectPlaylist(playlistId: string): void {
-    if (!this.data.peek().playlists.some((item) => item.id === playlistId)) {
+    const data = this.data.peek();
+    if (!data.playlists.some((item) => item.id === playlistId)) {
       return;
     }
 
-    this.commitSession((session) => ({
-      ...session,
-      activePlaylistId: playlistId,
-      playback: {
-        playlistId,
-        currentTime: 0,
-        resumeRequested: false,
-        updatedAt: Date.now(),
-      },
-    }));
+    // 共享数据已经指向这张歌单时不必再写一遍（避免多余的 GM 写入与跨标签广播）。
+    if (data.activePlaylistId !== playlistId) {
+      this.commitLibrary((current) =>
+        this.applyActivePlaylist(current, playlistId),
+      );
+    }
+    this.resetSessionPlaylist(playlistId);
   }
 
   addTrack(track: Track): void {
@@ -327,6 +353,40 @@ export class AppStore {
       playback: {
         ...session.playback,
         currentTime,
+        updatedAt: Date.now(),
+      },
+    }));
+  }
+
+  /**
+   * 把「上次使用的歌单」写进共享数据。
+   *
+   * 这是新会话（新标签页 / 关掉浏览器再打开）唯一的恢复依据：`sessionStorage`
+   * 里的会话随标签页消失，只能靠 `AppData.activePlaylistId` 记住选择。
+   * 只改这一个字段，`playlists`、`volume` 等其它内容原样保留。
+   */
+  private applyActivePlaylist(data: AppData, playlistId: string): AppData {
+    if (data.activePlaylistId === playlistId) {
+      return data;
+    }
+
+    return { ...data, activePlaylistId: playlistId };
+  }
+
+  /**
+   * 把本标签页会话切到指定歌单，并清空当前曲目 / 进度 / 恢复请求。
+   *
+   * 这是「用户主动切歌单」的既有语义（切换后按完整视频继续播放），
+   * 与启动时的「只恢复歌单选择」是两条不同的路径，后者绝不能走这里。
+   */
+  private resetSessionPlaylist(playlistId: string): void {
+    this.commitSession((session) => ({
+      ...session,
+      activePlaylistId: playlistId,
+      playback: {
+        playlistId,
+        currentTime: 0,
+        resumeRequested: false,
         updatedAt: Date.now(),
       },
     }));

@@ -198,11 +198,14 @@ B 站是 SPA，`<video>` 会被替换。`MediaLocator` 用三条互补的路径�
 | 数据                                         | 位置             | 键                                              | 作用域                                |
 | -------------------------------------------- | ---------------- | ----------------------------------------------- | ------------------------------------- |
 | 歌单、歌曲、音量                             | GM 存储          | `bilibili-music-player:data`                    | 所有标签页共享                        |
+| 上次使用的歌单（`activePlaylistId`）         | GM 存储          | `bilibili-music-player:data`                    | 所有标签页共享，新会话的恢复依据      |
 | 当前歌单、播放模式、当前歌曲、进度、恢复请求 | `sessionStorage` | `bilibili-music-player:playback-session`        | **单个标签页**，关闭标签页即消失      |
 | UI 位置、上次打开模式                        | GM 存储          | `bilibili-music-player:layout`                  | 所有标签页共享                        |
 | 界面偏好（播放器打开方式）                   | GM 存储          | `bilibili-music-player:settings`                | 所有标签页共享，**不并入 layout**     |
 | 纯音频开关                                   | GM 存储          | `bilibili-music-player:audio-only`              | 启动期偏好，**不进入歌单数据结构**    |
 | 歌单备份文件                                 | 用户本地磁盘     | `bilibili-music-player-playlists-<时间戳>.json` | 手动导出 / 导入，插件不自动写、不上传 |
+
+「当前歌单」有两份记录：`PlaybackSession.activePlaylistId` 是本标签页当前生效值，`AppData.activePlaylistId` 是共享的「上次使用的歌单」。`resolvePlaylistId()` 的取值顺序是 会话（有效则用）→ 共享 `activePlaylistId`（有效则用）→ `playlists[0].id`，所以刷新走会话、新标签页 / 重开浏览器走共享记录、记录的歌单被删则降级到仍存在的歌单。`selectPlaylist()` / `createPlaylist()` / `importPlaylist()` 写共享值（同一值不重复写），`removePlaylist()` 会把悬空的 `activePlaylistId` 修回第一张剩余歌单。
 
 `AppRepository.subscribe()` 用 `GM_addValueChangeListener` **只处理 `remote === true`** 的变更（避免自己写入触发回环）。收到远端歌单变更后，`PlayerEngine` 里的 `effect()` 会检查：若「活动歌单被切换」或「正在播放的歌曲已在所有歌单中被删除」，就安全退出歌单播放（清掉 `resumeRequested`、把上下文切回 `"page"`、移除 URL 标记）。其它歌单的增删改不影响本标签页播放。
 

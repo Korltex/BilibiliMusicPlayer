@@ -6004,19 +6004,19 @@
 				createdAt: now,
 				updatedAt: now
 			};
-			this.commitLibrary((data) => ({
+			this.commitLibrary((data) => this.applyActivePlaylist({
 				...data,
 				playlists: [...data.playlists, playlist]
-			}));
-			this.selectPlaylist(playlist.id);
+			}, playlist.id));
+			this.resetSessionPlaylist(playlist.id);
 		}
 		importPlaylist(playlist) {
 			const exists = this.data.peek().playlists.some((item) => item.id === playlist.id);
-			this.commitLibrary((data) => ({
+			this.commitLibrary((data) => this.applyActivePlaylist({
 				...data,
 				playlists: exists ? data.playlists.map((item) => item.id === playlist.id ? playlist : item) : [...data.playlists, playlist]
-			}));
-			this.selectPlaylist(playlist.id);
+			}, playlist.id));
+			this.resetSessionPlaylist(playlist.id);
 		}
 		replaceLibrary(playlists) {
 			if (playlists.length === 0) return;
@@ -6049,23 +6049,21 @@
 		}
 		removePlaylist(playlistId) {
 			if (this.data.peek().playlists.length <= 1) return;
-			this.commitLibrary((data) => ({
-				...data,
-				playlists: data.playlists.filter((playlist) => playlist.id !== playlistId)
-			}));
+			this.commitLibrary((data) => {
+				const playlists = data.playlists.filter((playlist) => playlist.id !== playlistId);
+				const activePlaylistId = playlists.some((playlist) => playlist.id === data.activePlaylistId) ? data.activePlaylistId : playlists[0].id;
+				return {
+					...data,
+					playlists,
+					activePlaylistId
+				};
+			});
 		}
 		selectPlaylist(playlistId) {
-			if (!this.data.peek().playlists.some((item) => item.id === playlistId)) return;
-			this.commitSession((session) => ({
-				...session,
-				activePlaylistId: playlistId,
-				playback: {
-					playlistId,
-					currentTime: 0,
-					resumeRequested: false,
-					updatedAt: Date.now()
-				}
-			}));
+			const data = this.data.peek();
+			if (!data.playlists.some((item) => item.id === playlistId)) return;
+			if (data.activePlaylistId !== playlistId) this.commitLibrary((current) => this.applyActivePlaylist(current, playlistId));
+			this.resetSessionPlaylist(playlistId);
 		}
 		addTrack(track) {
 			const { activePlaylistId } = this.session.peek();
@@ -6166,6 +6164,25 @@
 				playback: {
 					...session.playback,
 					currentTime,
+					updatedAt: Date.now()
+				}
+			}));
+		}
+		applyActivePlaylist(data, playlistId) {
+			if (data.activePlaylistId === playlistId) return data;
+			return {
+				...data,
+				activePlaylistId: playlistId
+			};
+		}
+		resetSessionPlaylist(playlistId) {
+			this.commitSession((session) => ({
+				...session,
+				activePlaylistId: playlistId,
+				playback: {
+					playlistId,
+					currentTime: 0,
+					resumeRequested: false,
 					updatedAt: Date.now()
 				}
 			}));
