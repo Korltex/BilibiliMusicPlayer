@@ -85,6 +85,38 @@ export class AppStore {
     this.resetSessionPlaylist(playlist.id);
   }
 
+  /**
+   * 重命名歌单：只改 `name` 与 `updatedAt`。
+   *
+   * `id`、歌曲数组、`createdAt` 与「当前选中的歌单」都不动，也不碰本标签页会话：
+   * 重命名不是「切换歌单」，`reconcileSession()` 会走早退分支，因此正在播放的
+   * 歌曲与进度保持原样。名称沿用 `createPlaylist()` 的既有口径（`trim()` 后使用），
+   * 重名不做额外限制。空名称或名称没有实际变化时直接返回——不写存储、不产生
+   * 无意义的 `updatedAt` 变更与跨标签页广播。
+   */
+  renamePlaylist(playlistId: string, name: string): void {
+    const normalizedName = name.trim();
+    if (!normalizedName) {
+      return;
+    }
+
+    const playlist = this.data
+      .peek()
+      .playlists.find((item) => item.id === playlistId);
+    if (!playlist || playlist.name === normalizedName) {
+      return;
+    }
+
+    this.commitLibrary((data) => ({
+      ...data,
+      playlists: data.playlists.map((item) =>
+        item.id === playlistId
+          ? { ...item, name: normalizedName, updatedAt: Date.now() }
+          : item,
+      ),
+    }));
+  }
+
   importPlaylist(playlist: Playlist): void {
     const exists = this.data
       .peek()

@@ -100,6 +100,8 @@ GM_removeValueChangeListener
 
 **「当前选中的歌单」是例外：它同时写两份。** `AppData.activePlaylistId`（共享 GM 存储）是「上次使用的歌单」，用于新标签页 / 关闭浏览器后重新打开时的恢复；`PlaybackSession.activePlaylistId`（`sessionStorage`）是本标签页当前生效值。恢复时的取值顺序是：会话里的歌单（有效则用）→ 共享数据里的 `activePlaylistId`（有效则用）→ 第一个可用歌单，见 `resolvePlaylistId()`。因此刷新仍按本标签页会话恢复，新会话则回落到共享记录；记录的歌单被删除时自动降级到仍存在的歌单。
 
+歌单重命名只改共享数据里的 `name` 与 `updatedAt`（`AppStore.renamePlaylist()`）：不新增字段、不需要迁移，`id`、歌曲数组、`createdAt` 与「上次使用的歌单」都不动，也不写本标签页会话，所以正在播放的歌曲与进度不受影响。
+
 播放进度最多每十秒保存一次，并在 `pagehide` 时补充保存，避免高频持久化写入。
 
 ## 跨视频与多标签页

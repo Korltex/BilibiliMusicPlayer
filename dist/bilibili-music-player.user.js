@@ -674,6 +674,8 @@
 		".playlist-toolbar {",
 		"  min-height: 44px;",
 		"  gap: 5px;",
+		"  /* 重命名时这里是 <form>：清掉 UA 默认外边距，切换编辑态时工具栏不位移。 */",
+		"  margin: 0;",
 		"  padding: 6px 10px 6px 14px;",
 		"  border-top: 1px solid var(--border);",
 		"  border-bottom: 1px solid var(--border);",
@@ -688,6 +690,23 @@
 		"  padding: 0 30px 0 9px;",
 		"  color: var(--text);",
 		"  background: var(--surface);",
+		"}",
+		"",
+		"/* 重命名时的原地编辑框：与选择器同高同宽，切换时工具栏不跳动。 */",
+		".playlist-toolbar input {",
+		"  min-width: 0;",
+		"  height: 32px;",
+		"  flex: 1;",
+		"  border: 1px solid var(--border);",
+		"  border-radius: 6px;",
+		"  padding: 0 9px;",
+		"  color: var(--text);",
+		"  outline: none;",
+		"  background: var(--surface);",
+		"}",
+		"",
+		".playlist-toolbar input:focus {",
+		"  border-color: var(--accent);",
 		"}",
 		"",
 		".inline-form {",
@@ -5043,6 +5062,9 @@
 		const [displayMode, setDisplayMode] = (0, preact_hooks.useState)("launcher");
 		const [creatingPlaylist, setCreatingPlaylist] = (0, preact_hooks.useState)(false);
 		const [newPlaylistName, setNewPlaylistName] = (0, preact_hooks.useState)("");
+		const [renamingPlaylistId, setRenamingPlaylistId] = (0, preact_hooks.useState)();
+		const [playlistNameDraft, setPlaylistNameDraft] = (0, preact_hooks.useState)("");
+		const renameInput = (0, preact_hooks.useRef)(null);
 		const [editorTrack, setEditorTrack] = (0, preact_hooks.useState)();
 		const [importOpen, setImportOpen] = (0, preact_hooks.useState)(false);
 		const [backupOpen, setBackupOpen] = (0, preact_hooks.useState)(false);
@@ -5068,6 +5090,20 @@
 		(0, preact_hooks.useEffect)(() => {
 			setSelection((current) => pruneTrackSelection(current, activePlaylist.tracks));
 		}, [activePlaylist.id, activePlaylist.tracks]);
+		(0, preact_hooks.useEffect)(() => {
+			if (renamingPlaylistId === void 0) return;
+			const input = renameInput.current;
+			if (!input) return;
+			input.focus();
+			input.select();
+		}, [renamingPlaylistId]);
+		(0, preact_hooks.useEffect)(() => {
+			if (renamingPlaylistId === void 0) return;
+			if (activePlaylist.id !== renamingPlaylistId) {
+				setRenamingPlaylistId(void 0);
+				setPlaylistNameDraft("");
+			}
+		}, [activePlaylist.id, renamingPlaylistId]);
 		const selectedTrackIds = resolveSelectedTrackIds(selection, activePlaylist.tracks);
 		const selectedTrackCount = countSelectedTracks(selection, activePlaylist.tracks);
 		const allTracksSelected = areAllTracksSelected(selection, activePlaylist.tracks);
@@ -5082,6 +5118,26 @@
 			store.createPlaylist(newPlaylistName);
 			setNewPlaylistName("");
 			setCreatingPlaylist(false);
+		};
+		const savePlaylistRename = (event) => {
+			event.preventDefault();
+			if (!playlistNameDraft.trim()) return;
+			store.renamePlaylist(activePlaylist.id, playlistNameDraft);
+			setRenamingPlaylistId(void 0);
+			setPlaylistNameDraft("");
+		};
+		const cancelPlaylistRename = () => {
+			setRenamingPlaylistId(void 0);
+			setPlaylistNameDraft("");
+		};
+		const startPlaylistRename = () => {
+			setCreatingPlaylist(false);
+			setPlaylistNameDraft(activePlaylist.name);
+			setRenamingPlaylistId(activePlaylist.id);
+		};
+		const toggleCreatePlaylist = () => {
+			cancelPlaylistRename();
+			setCreatingPlaylist((value) => !value);
 		};
 		const cyclePlayMode = () => {
 			const currentIndex = PLAY_MODES$1.indexOf(session.playMode);
@@ -5375,7 +5431,7 @@
 					title: primaryNotice,
 					children: primaryNotice
 				})),
-				(0, preact_jsx_runtime.jsxs)("div", {
+				renamingPlaylistId === void 0 ? (0, preact_jsx_runtime.jsxs)("div", {
 					class: "playlist-toolbar",
 					children: [
 						(0, preact_jsx_runtime.jsx)("select", {
@@ -5392,9 +5448,20 @@
 							type: "button",
 							title: "新建歌单",
 							"aria-label": "新建歌单",
-							onClick: () => setCreatingPlaylist((value) => !value),
+							onClick: toggleCreatePlaylist,
 							children: (0, preact_jsx_runtime.jsx)(Plus, {
 								size: 18,
+								"aria-hidden": "true"
+							})
+						}),
+						(0, preact_jsx_runtime.jsx)("button", {
+							class: "icon-button",
+							type: "button",
+							title: "重命名当前歌单",
+							"aria-label": "重命名当前歌单",
+							onClick: startPlaylistRename,
+							children: (0, preact_jsx_runtime.jsx)(Pencil, {
+								size: 15,
 								"aria-hidden": "true"
 							})
 						}),
@@ -5407,6 +5474,46 @@
 							onClick: () => setPlaylistPendingDeletion(activePlaylist),
 							children: (0, preact_jsx_runtime.jsx)(Trash2, {
 								size: 17,
+								"aria-hidden": "true"
+							})
+						})
+					]
+				}) : (0, preact_jsx_runtime.jsxs)("form", {
+					class: "playlist-toolbar",
+					onSubmit: savePlaylistRename,
+					children: [
+						(0, preact_jsx_runtime.jsx)("input", {
+							ref: renameInput,
+							value: playlistNameDraft,
+							placeholder: "歌单名称",
+							"aria-label": "重命名歌单",
+							onInput: (event) => setPlaylistNameDraft(event.currentTarget.value),
+							onKeyDown: (event) => {
+								if (event.key === "Escape") {
+									event.preventDefault();
+									cancelPlaylistRename();
+								}
+							}
+						}),
+						(0, preact_jsx_runtime.jsx)("button", {
+							class: "icon-button accent",
+							type: "submit",
+							title: "保存歌单名称",
+							"aria-label": "保存歌单名称",
+							disabled: !playlistNameDraft.trim(),
+							children: (0, preact_jsx_runtime.jsx)(Save, {
+								size: 17,
+								"aria-hidden": "true"
+							})
+						}),
+						(0, preact_jsx_runtime.jsx)("button", {
+							class: "icon-button",
+							type: "button",
+							title: "取消重命名",
+							"aria-label": "取消重命名",
+							onClick: cancelPlaylistRename,
+							children: (0, preact_jsx_runtime.jsx)(X, {
+								size: 16,
 								"aria-hidden": "true"
 							})
 						})
@@ -6009,6 +6116,20 @@
 				playlists: [...data.playlists, playlist]
 			}, playlist.id));
 			this.resetSessionPlaylist(playlist.id);
+		}
+		renamePlaylist(playlistId, name) {
+			const normalizedName = name.trim();
+			if (!normalizedName) return;
+			const playlist = this.data.peek().playlists.find((item) => item.id === playlistId);
+			if (!playlist || playlist.name === normalizedName) return;
+			this.commitLibrary((data) => ({
+				...data,
+				playlists: data.playlists.map((item) => item.id === playlistId ? {
+					...item,
+					name: normalizedName,
+					updatedAt: Date.now()
+				} : item)
+			}));
 		}
 		importPlaylist(playlist) {
 			const exists = this.data.peek().playlists.some((item) => item.id === playlist.id);

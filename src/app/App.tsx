@@ -81,6 +81,16 @@ export function App({ store, engine, audioOnly }: AppProps) {
   const [displayMode, setDisplayMode] = useState<DisplayMode>("launcher");
   const [creatingPlaylist, setCreatingPlaylist] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState("");
+  /**
+   * 歌单重命名的原地编辑状态：`renamingPlaylistId` 为 `undefined` 表示不在编辑。
+   *
+   * 编辑时选择器被替换成预填当前名称的输入框，草稿放在 `playlistNameDraft`；
+   * 两者分开是为了让「进入编辑」只发生一次——自动聚焦 + 全选的副作用只依赖
+   * `renamingPlaylistId`，不会在每次敲键时把已选中的文本重新全选一遍。
+   */
+  const [renamingPlaylistId, setRenamingPlaylistId] = useState<string>();
+  const [playlistNameDraft, setPlaylistNameDraft] = useState("");
+  const renameInput = useRef<HTMLInputElement>(null);
   const [editorTrack, setEditorTrack] = useState<Track | "new">();
   const [importOpen, setImportOpen] = useState(false);
   const [backupOpen, setBackupOpen] = useState(false);
@@ -138,6 +148,36 @@ export function App({ store, engine, audioOnly }: AppProps) {
     );
   }, [activePlaylist.id, activePlaylist.tracks]);
 
+  /**
+   * 进入重命名时自动聚焦并全选文本。
+   *
+   * 只在 `renamingPlaylistId` 变化时跑一次（依赖里不放草稿），因此用户敲键不会
+   * 反复触发全选。`autoFocus` 只在首次挂载生效，用它做「每次进入编辑都聚焦」并不可靠。
+   */
+  useEffect(() => {
+    if (renamingPlaylistId === undefined) {
+      return;
+    }
+    const input = renameInput.current;
+    if (!input) {
+      return;
+    }
+    input.focus();
+    input.select();
+  }, [renamingPlaylistId]);
+
+  // 编辑期间歌单被切走或被删除（含其它标签页的远端变更）时退出编辑，
+  // 否则输入框会指向一张已经不在当前上下文里的歌单。
+  useEffect(() => {
+    if (renamingPlaylistId === undefined) {
+      return;
+    }
+    if (activePlaylist.id !== renamingPlaylistId) {
+      setRenamingPlaylistId(undefined);
+      setPlaylistNameDraft("");
+    }
+  }, [activePlaylist.id, renamingPlaylistId]);
+
   // 批量操作栏与复选框都基于「当前歌单里确实存在」的选中项，天然忽略残留 id。
   const selectedTrackIds = resolveSelectedTrackIds(
     selection,
@@ -172,6 +212,38 @@ export function App({ store, engine, audioOnly }: AppProps) {
     store.createPlaylist(newPlaylistName);
     setNewPlaylistName("");
     setCreatingPlaylist(false);
+  };
+
+  /**
+   * 重命名保存：空名称（`trim()` 后）不写存储，直接保留编辑态让用户继续改。
+   *
+   * 名称没有实际变化时同样只是退出编辑，`store.renamePlaylist()` 会自行跳过写入。
+   */
+  const savePlaylistRename = (event: SubmitEvent) => {
+    event.preventDefault();
+    if (!playlistNameDraft.trim()) {
+      return;
+    }
+    store.renamePlaylist(activePlaylist.id, playlistNameDraft);
+    setRenamingPlaylistId(undefined);
+    setPlaylistNameDraft("");
+  };
+
+  const cancelPlaylistRename = () => {
+    setRenamingPlaylistId(undefined);
+    setPlaylistNameDraft("");
+  };
+
+  const startPlaylistRename = () => {
+    // 与「新建歌单」的输入行互斥：两行输入框同时出现会让「保存」语义含糊。
+    setCreatingPlaylist(false);
+    setPlaylistNameDraft(activePlaylist.name);
+    setRenamingPlaylistId(activePlaylist.id);
+  };
+
+  const toggleCreatePlaylist = () => {
+    cancelPlaylistRename();
+    setCreatingPlaylist((value) => !value);
   };
 
   const cyclePlayMode = () => {
@@ -531,38 +603,87 @@ export function App({ store, engine, audioOnly }: AppProps) {
           </div>
         ))}
 
-      <div class="playlist-toolbar">
-        <select
-          value={activePlaylist.id}
-          aria-label="当前歌单"
-          onChange={(event) => store.selectPlaylist(event.currentTarget.value)}
-        >
-          {data.playlists.map((playlist) => (
-            <option value={playlist.id} key={playlist.id}>
-              {playlist.name}
-            </option>
-          ))}
-        </select>
-        <button
-          class="icon-button"
-          type="button"
-          title="新建歌单"
-          aria-label="新建歌单"
-          onClick={() => setCreatingPlaylist((value) => !value)}
-        >
-          <Plus size={18} aria-hidden="true" />
-        </button>
-        <button
-          class="icon-button danger"
-          type="button"
-          title="删除当前歌单"
-          aria-label="删除当前歌单"
-          disabled={data.playlists.length <= 1}
-          onClick={() => setPlaylistPendingDeletion(activePlaylist)}
-        >
-          <Trash2 size={17} aria-hidden="true" />
-        </button>
-      </div>
+      {renamingPlaylistId === undefined ? (
+        <div class="playlist-toolbar">
+          <select
+            value={activePlaylist.id}
+            aria-label="当前歌单"
+            onChange={(event) =>
+              store.selectPlaylist(event.currentTarget.value)
+            }
+          >
+            {data.playlists.map((playlist) => (
+              <option value={playlist.id} key={playlist.id}>
+                {playlist.name}
+              </option>
+            ))}
+          </select>
+          <button
+            class="icon-button"
+            type="button"
+            title="新建歌单"
+            aria-label="新建歌单"
+            onClick={toggleCreatePlaylist}
+          >
+            <Plus size={18} aria-hidden="true" />
+          </button>
+          <button
+            class="icon-button"
+            type="button"
+            title="重命名当前歌单"
+            aria-label="重命名当前歌单"
+            onClick={startPlaylistRename}
+          >
+            <Pencil size={15} aria-hidden="true" />
+          </button>
+          <button
+            class="icon-button danger"
+            type="button"
+            title="删除当前歌单"
+            aria-label="删除当前歌单"
+            disabled={data.playlists.length <= 1}
+            onClick={() => setPlaylistPendingDeletion(activePlaylist)}
+          >
+            <Trash2 size={17} aria-hidden="true" />
+          </button>
+        </div>
+      ) : (
+        // 原地编辑：选择器临时换成预填当前名称的输入框，保存 / 取消都在同一行内，
+        // 因此不需要第二个弹窗，也不会因为弹出原生 prompt 而打断播放。
+        <form class="playlist-toolbar" onSubmit={savePlaylistRename}>
+          <input
+            ref={renameInput}
+            value={playlistNameDraft}
+            placeholder="歌单名称"
+            aria-label="重命名歌单"
+            onInput={(event) => setPlaylistNameDraft(event.currentTarget.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                event.preventDefault();
+                cancelPlaylistRename();
+              }
+            }}
+          />
+          <button
+            class="icon-button accent"
+            type="submit"
+            title="保存歌单名称"
+            aria-label="保存歌单名称"
+            disabled={!playlistNameDraft.trim()}
+          >
+            <Save size={17} aria-hidden="true" />
+          </button>
+          <button
+            class="icon-button"
+            type="button"
+            title="取消重命名"
+            aria-label="取消重命名"
+            onClick={cancelPlaylistRename}
+          >
+            <X size={16} aria-hidden="true" />
+          </button>
+        </form>
+      )}
 
       {creatingPlaylist && (
         <form class="inline-form" onSubmit={createPlaylist}>
